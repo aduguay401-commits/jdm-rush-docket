@@ -121,9 +121,10 @@ export async function POST(request: Request) {
     const fullName = `${payload.customer_first_name ?? ''} ${payload.customer_last_name ?? ''}`.trim()
     const vehicle = `${payload.vehicle_make ?? ''} ${payload.vehicle_model ?? ''}`.trim()
 
+    // Email 1: Customer Welcome (delivered to admin in test mode)
     await resend.emails.send({
       from: fromEmail,
-      to: moltyEmail ?? 'support@jdmrushimports.ca',
+      to: adminEmail ?? 'adam@jdmrushimports.ca',
       subject: 'Welcome to JDM Rush Imports',
       text: `Hi ${payload.customer_first_name ?? 'there'},
 
@@ -137,10 +138,10 @@ Best,
 JDM Rush Imports`,
     })
 
+    // Email 2: Marcus Notification (delivered to admin in test mode)
     await resend.emails.send({
       from: fromEmail,
-      to: marcusEmail ?? 'marcus@gemmytrading.com',
-      cc: marcusCcEmail ?? 'trade@gemmytrading.com',
+      to: adminEmail ?? 'adam@jdmrushimports.ca',
       subject: `New Lead: ${fullName || 'Intake Submission'}`,
       text: `New intake submitted.
 
@@ -154,6 +155,7 @@ Timeline: ${payload.timeline ?? 'N/A'}
 Please review and begin follow-up.`,
     })
 
+    // Email 3: Admin Notification
     await resend.emails.send({
       from: fromEmail,
       to: adminEmail ?? 'adam@jdmrushimports.ca',
