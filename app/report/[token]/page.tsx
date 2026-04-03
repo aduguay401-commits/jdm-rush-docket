@@ -18,20 +18,27 @@ type FeeBreakdown = NonNullable<PrivateDealerOptionRecord["calculated_fees"]>;
 type JsonRecord = Record<string, unknown>;
 
 function parseJsonIfString(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
+  let parsed: unknown = value;
+
+  // Some rows arrive as an object, some as a JSON string, and some as a double-encoded JSON string.
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (typeof parsed !== "string") {
+      return parsed;
+    }
+
+    const trimmed = parsed.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      return parsed;
+    }
   }
 
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    return value;
-  }
+  return parsed;
 }
 
 function toNumber(value: unknown): number | undefined {
@@ -183,14 +190,14 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
 
   console.log("[report] raw private_dealer_options", privateDealerOptions);
   console.log(
-    "[report] private_dealer_options.calculated_fees",
+    "[report] raw private_dealer_options.calculated_fees",
     (privateDealerOptions ?? []).map((option) => ({
       option_number: option.option_number,
       calculated_fees: option.calculated_fees,
       calculated_fees_type: typeof option.calculated_fees,
     }))
   );
-  console.log("[report] auction_estimate.calculated_fees", {
+  console.log("[report] raw auction_estimate.calculated_fees", {
     calculated_fees: auctionEstimate?.calculated_fees ?? null,
     calculated_fees_type: typeof auctionEstimate?.calculated_fees,
   });
@@ -241,6 +248,8 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
 
         return {
           ...auctionEstimate,
+          midpoint_hammer_jpy: toNumber(auctionEstimate.midpoint_hammer_jpy) ?? null,
+          midpoint_hammer_cad: toNumber(auctionEstimate.midpoint_hammer_cad) ?? null,
           calculated_fees: normalizedFees,
           total_delivered_cad: normalizedTotalDelivered,
           total_delivered_estimate_cad:

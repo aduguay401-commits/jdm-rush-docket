@@ -142,6 +142,10 @@ function renderText(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value : "N/A";
 }
 
+function hasDisplayNotes(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0 && value.trim().toLowerCase() !== "n/a";
+}
+
 function formatExchangeDate(dateValue: string | null | undefined) {
   if (!dateValue) {
     return "latest available date";
@@ -445,7 +449,7 @@ export function ReportClient({
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
                       <h3 className="text-lg font-semibold text-white">{renderText(listing.lot_title)}</h3>
-                      <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/75">{renderText(listing.specs)}</p>
+                      <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-white">{renderText(listing.specs)}</p>
                     </div>
                     {listing.auction_lot_link ? (
                       <a
@@ -489,9 +493,13 @@ export function ReportClient({
             <div className="mt-5 space-y-5">
               {privateDealerOptions.map((option) => (
                 <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={option.option_number}>
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-                    <h3 className="text-lg font-semibold text-white">Option {option.option_number}</h3>
-                    <p className="text-sm text-white/60">Private dealer listing</p>
+                  <div className="flex flex-col gap-2">
+                    <h3 className="text-lg font-semibold text-white">
+                      Option {option.option_number} —{" "}
+                      {[option.year, option.make, option.model]
+                        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                        .join(" ") || "N/A"}
+                    </h3>
                   </div>
 
                   {Array.isArray(option.photos) && option.photos.length > 0 ? (
@@ -537,10 +545,14 @@ export function ReportClient({
                     </p>
                   </div>
 
-                  <p className="mt-5 text-sm text-white/65">Marcus Notes</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                    {renderText(option.marcus_notes)}
-                  </p>
+                  {hasDisplayNotes(option.marcus_notes) ? (
+                    <>
+                      <p className="mt-5 text-sm text-white/65">Marcus Notes</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                        {option.marcus_notes?.trim()}
+                      </p>
+                    </>
+                  ) : null}
 
                   <FeeBreakdownTable
                     breakdown={option.calculated_fees}
@@ -641,7 +653,7 @@ export function ReportClient({
           {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
 
           <button
-            className="mt-5 rounded-2xl border border-[#E55125] px-5 py-3 text-sm font-semibold text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+            className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
             disabled={isSendingQuestion}
             onClick={submitQuestion}
             type="button"
