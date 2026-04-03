@@ -1,0 +1,79 @@
+import { Resend } from "resend";
+
+import { createServerClient } from "@/lib/supabase/server";
+
+type QuestionPayload = {
+  questionText?: string;
+};
+
+export async function POST(
+  request: Request,
+  context: { params: Promise<{ token: string }> }
+) {
+  try {
+    const { token } = await context.params;
+    const payload = (await request.json()) as QuestionPayload;
+    const questionText = typeof payload.questionText === "string" ? payload.questionText.trim() : "";
+
+    if (!questionText) {
+      return Response.json({ success: false, error: "questionText is required" }, { status: 400 });
+    }
+
+    const supabase = createServerClient();
+
+    const { data: docket, error: docketError } = await supabase
+      .from("dockets")
+      .select("id, customer_first_name, customer_last_name, customer_email")
+      .eq("report_url_token", token)
+      .maybeSingle();
+
+    if (docketError) {
+      return Response.json({ success: false, error: docketError.message }, { status: 500 });
+    }
+
+    if (!docket) {
+      return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
+    }
+
+    const { error: insertError } = await supabase.from("customer_questions").insert({
+      docket_id: docket.id,
+      question_text: questionText,
+    });
+
+    if (insertError) {
+      return Response.json({ success: false, error: insertError.message }, { status: 500 });
+    }
+
+    const resendApiKey = process.env.RESEND_API_KEY;
+    const fromEmail = process.env.FROM_EMAIL;
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const devMode = process.env.DEV_MODE === "true";
+
+    if (!resendApiKey || !fromEmail) {
+      return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
+    }
+
+    const resend = new Resend(resendApiKey);
+    const customerName = [docket.customer_first_name, docket.customer_last_name]
+      .filter((value) => typeof value === "string" && value.trim().length > 0)
+      .join(" ");
+    const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
+
+    await resend.emails.send({
+      from: fromEmail,
+      to: adminEmail ?? "adam@jdmrushimports.ca",
+      subject: `New customer question on report docket ${docket.id}`,
+      text: `${devPrefix}A customer sent a question from the report page.
+
+Docket: ${docket.id}
+Customer: ${customerName || "Unknown Customer"}
+Customer Email: ${docket.customer_email ?? "Unknown"}
+
+Question:\n${questionText}`,
+    });
+
+    return Response.json({ success: true });
+  } catch {
+    return Response.json({ success: false, error: "Invalid request body" }, { status: 400 });
+  }
+}
