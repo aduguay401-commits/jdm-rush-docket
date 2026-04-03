@@ -499,6 +499,58 @@ export function ReportClient({
         </section>
 
         <section className="border-t border-white/10 pt-10">
+          <h2 className="text-2xl font-semibold text-white">Auction Option</h2>
+          <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+            <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
+              <p>
+                <span className="text-white/45">Hammer Range:</span>{" "}
+                {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+              </p>
+              <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
+                Estimated hammer price is based on the midpoint of the 3-month sales range (
+                {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
+                {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
+                actual winning hammer price at auction.
+              </p>
+              <p>
+                <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
+              </p>
+              <p>
+                <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
+              </p>
+              <p>
+                <span className="text-white/45">Total Delivered Estimate:</span>{" "}
+                {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
+              </p>
+            </div>
+
+            <FeeBreakdownTable
+              breakdown={auctionEstimate?.calculated_fees ?? null}
+              destination={destination}
+              exchangeRateAtReport={docket.exchange_rate_at_report}
+              exchangeRateDate={docket.exchange_rate_date}
+              networkFeeLabel="JPY Auction Fee"
+            />
+
+            <p className="mt-4 text-xs leading-5 text-white/55">
+              Auction pricing is an estimate and final landed cost can change based on the final hammer result,
+              exchange movement, and auction-side conditions.
+            </p>
+
+            {!hasDecision ? (
+              <button
+                className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={isDeciding}
+                onClick={() => submitDecision("auction")}
+                type="button"
+              >
+                {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
+              </button>
+            ) : null}
+          </div>
+        </section>
+
+        <section className="border-t border-white/10 pt-10">
           <h2 className="text-2xl font-semibold text-white">Private Dealer Options</h2>
           {privateDealerOptions.length === 0 ? (
             <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
@@ -598,58 +650,6 @@ export function ReportClient({
               ))}
             </div>
           )}
-        </section>
-
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Auction Option</h2>
-          <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-            <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
-              <p>
-                <span className="text-white/45">Hammer Range:</span>{" "}
-                {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
-              </p>
-              <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
-                Estimated hammer price is based on the midpoint of the 3-month sales range (
-                {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
-                {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
-                actual winning hammer price at auction.
-              </p>
-              <p>
-                <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
-              </p>
-              <p>
-                <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
-              </p>
-              <p>
-                <span className="text-white/45">Total Delivered Estimate:</span>{" "}
-                {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
-              </p>
-            </div>
-
-            <FeeBreakdownTable
-              breakdown={auctionEstimate?.calculated_fees ?? null}
-              destination={destination}
-              exchangeRateAtReport={docket.exchange_rate_at_report}
-              exchangeRateDate={docket.exchange_rate_date}
-              networkFeeLabel="JPY Auction Fee"
-            />
-
-            <p className="mt-4 text-xs leading-5 text-white/55">
-              Auction pricing is an estimate and final landed cost can change based on the final hammer result,
-              exchange movement, and auction-side conditions.
-            </p>
-
-            {!hasDecision ? (
-              <button
-                className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isDeciding}
-                onClick={() => submitDecision("auction")}
-                type="button"
-              >
-                {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
-              </button>
-            ) : null}
-          </div>
         </section>
 
         <section className="border-t border-white/10 pt-10">
