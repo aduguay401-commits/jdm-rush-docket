@@ -33,7 +33,6 @@ type CustomerAnswer = {
 type AuctionListingForm = {
   lotTitle: string;
   specs: string;
-  auctionLotLink: string;
   photos: string[];
 };
 
@@ -61,7 +60,6 @@ const MAX_QUESTIONS = 10;
 const INITIAL_AUCTION_LISTING: AuctionListingForm = {
   lotTitle: "",
   specs: "",
-  auctionLotLink: "",
   photos: [],
 };
 
@@ -138,15 +136,6 @@ async function getUserRole(userId: string, supabase: ReturnType<typeof createBro
   }
 
   return null;
-}
-
-function isValidUrl(value: string) {
-  try {
-    const parsed = new URL(value);
-    return parsed.protocol === "http:" || parsed.protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 function cleanFileName(value: string) {
@@ -525,12 +514,8 @@ export default function AgentDocketDetailPage({
     for (let index = 0; index < auctionListings.length; index += 1) {
       const listing = auctionListings[index];
 
-      if (!listing.lotTitle.trim() || !listing.specs.trim() || !listing.auctionLotLink.trim()) {
-        return `Auction Listing ${index + 1} requires Lot Title, Specs, and Auction Lot Link.`;
-      }
-
-      if (!isValidUrl(listing.auctionLotLink.trim())) {
-        return `Auction Listing ${index + 1} has an invalid Auction Lot Link.`;
+      if (!listing.lotTitle.trim() || !listing.specs.trim()) {
+        return `Auction Listing ${index + 1} requires Lot Title and Specs.`;
       }
     }
 
@@ -589,7 +574,6 @@ export default function AgentDocketDetailPage({
       auctionListings: auctionListings.map((listing) => ({
         lotTitle: listing.lotTitle.trim(),
         specs: listing.specs.trim(),
-        auctionLotLink: listing.auctionLotLink.trim(),
         photos: listing.photos,
       })),
       privateDealerOptions: dealerOptions
@@ -695,12 +679,30 @@ export default function AgentDocketDetailPage({
               </div>
             </section>
 
+            {isAnswersReceived ? (
+              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+                <h2 className="mb-4 text-xl font-semibold">Customer Answers</h2>
+                {customerAnswers.length === 0 ? (
+                  <p className="text-sm text-white/70">No customer answers found.</p>
+                ) : (
+                  <div className="divide-y divide-white/10">
+                    {customerAnswers.map((item) => (
+                      <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
+                        <p className="text-sm text-white">{item.question_text}</p>
+                        <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
             {shouldShowResearchForm ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
                 <h2 className="text-xl font-semibold">Marcus Research Input Form</h2>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-lg font-medium">Section 1 - Auction Research</h3>
+                  <h3 className="text-lg font-medium">Auction Sales History</h3>
                   <div className="grid gap-4 sm:grid-cols-3">
                     <label className="text-sm text-white/85">
                       Hammer Price Low (JPY)
@@ -753,7 +755,7 @@ export default function AgentDocketDetailPage({
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-lg font-medium">Section 2 - Current Auction Listings</h3>
+                    <h3 className="text-lg font-medium">Current Weekly Auction Listings</h3>
                     <button
                       className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isFormDisabled}
@@ -800,17 +802,6 @@ export default function AgentDocketDetailPage({
                           />
                         </label>
                         <label className="block text-sm text-white/85">
-                          Auction Lot Link (URL)
-                          <input
-                            className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                            disabled={isFormDisabled}
-                            onChange={(event) => updateAuctionListing(listingIndex, { auctionLotLink: event.target.value })}
-                            placeholder="https://..."
-                            type="url"
-                            value={listing.auctionLotLink}
-                          />
-                        </label>
-                        <label className="block text-sm text-white/85">
                           Photos
                           <input
                             accept="image/*"
@@ -830,7 +821,7 @@ export default function AgentDocketDetailPage({
                 </div>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-lg font-medium">Section 3 - Private Dealer Options</h3>
+                  <h3 className="text-lg font-medium">Private Dealer Options</h3>
                   <div className="space-y-3">
                     {dealerOptions.map((option) => (
                       <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>
@@ -1018,7 +1009,7 @@ export default function AgentDocketDetailPage({
                 </div>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-lg font-medium">Section 4 - General Recommendation</h3>
+                  <h3 className="text-lg font-medium">Your Recommendation</h3>
                   <label className="block text-sm text-white/85">
                     Overall Notes
                     <textarea
@@ -1030,10 +1021,7 @@ export default function AgentDocketDetailPage({
                   </label>
                 </div>
 
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-xs text-white/65">
-                    Upload destination: Supabase Storage bucket <span className="text-white">docket-files</span>
-                  </p>
+                <div className="flex items-center justify-end gap-4">
                   <button
                     className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={isFormDisabled || uploadingTarget !== null}
@@ -1043,24 +1031,6 @@ export default function AgentDocketDetailPage({
                     {submittingResearch ? "Sending..." : "Send to Customer"}
                   </button>
                 </div>
-              </section>
-            ) : null}
-
-            {isAnswersReceived ? (
-              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="mb-4 text-xl font-semibold">Customer Answers</h2>
-                {customerAnswers.length === 0 ? (
-                  <p className="text-sm text-white/70">No customer answers found.</p>
-                ) : (
-                  <div className="divide-y divide-white/10">
-                    {customerAnswers.map((item) => (
-                      <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
-                        <p className="text-sm text-white">{item.question_text}</p>
-                        <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
               </section>
             ) : null}
 
