@@ -180,7 +180,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
       supabase
         .from("auction_estimate")
         .select(
-          "midpoint_hammer_jpy, midpoint_hammer_cad, calculated_fees, total_delivered_cad, total_delivered_estimate_cad"
+          "docket_id, midpoint_hammer_jpy, midpoint_hammer_cad, calculated_fees, total_delivered_estimate_cad"
         )
         .eq("docket_id", docket.id)
         .order("created_at", { ascending: false })
@@ -188,6 +188,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
         .maybeSingle<AuctionEstimateRecord>(),
     ]);
 
+  console.log("[report] fetched auction_estimate", auctionEstimate ?? null);
   console.log("[report] raw private_dealer_options", privateDealerOptions);
   console.log(
     "[report] raw private_dealer_options.calculated_fees",
@@ -233,10 +234,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
   const normalizedAuctionEstimate = auctionEstimate
     ? (() => {
         const normalizedFees = normalizeFeeBreakdown(auctionEstimate.calculated_fees);
-        const normalizedTotalDelivered =
-          toNumber(auctionEstimate.total_delivered_cad) ??
-          toNumber(auctionEstimate.total_delivered_estimate_cad) ??
-          null;
+        const normalizedTotalDelivered = toNumber(auctionEstimate.total_delivered_estimate_cad) ?? null;
 
         if (
           normalizedFees &&

@@ -79,6 +79,7 @@ export type PrivateDealerOptionRecord = {
 };
 
 export type AuctionEstimateRecord = {
+  docket_id?: string | null;
   midpoint_hammer_jpy: number | null;
   midpoint_hammer_cad: number | null;
   calculated_fees: FeeBreakdown | null;
@@ -105,6 +106,9 @@ const JPY_FORMATTER = new Intl.NumberFormat("ja-JP", {
   currency: "JPY",
   maximumFractionDigits: 0,
 });
+const JPY_NUMBER_FORMATTER = new Intl.NumberFormat("ja-JP", {
+  maximumFractionDigits: 0,
+});
 
 function formatCad(value: number | null | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -119,6 +123,13 @@ function formatJpy(value: number | null | undefined) {
     return "N/A";
   }
   return JPY_FORMATTER.format(value);
+}
+
+function formatJpyWithYenSign(value: number | null | undefined) {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "N/A";
+  }
+  return `¥${JPY_NUMBER_FORMATTER.format(value)}`;
 }
 
 function cityLabel(city: string | null | undefined) {
@@ -199,6 +210,8 @@ function FeeBreakdownTable({
     typeof exchangeRateAtReport === "number"
       ? exchangeRateAtReport
       : breakdown?.input?.exchangeRate;
+  const hasPstValue = typeof breakdown?.pstCAD === "number";
+  const shouldShowPstLine = !hasPstValue || (breakdown?.pstCAD ?? 0) > 0;
 
   return (
     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
@@ -221,18 +234,20 @@ function FeeBreakdownTable({
         </table>
       </div>
 
-      <p className="mt-4 text-xs leading-5 text-white/55">
-        PST is paid separately at registration in your province and is not included in the total.
-        {typeof breakdown?.pstCAD === "number"
-          ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
-              breakdown.pstCAD
-            )}${
-              typeof breakdown?.pstRate === "number"
-                ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
-                : ""
-            }.`
-          : ""}
-      </p>
+      {shouldShowPstLine ? (
+        <p className="mt-4 text-xs leading-5 text-white/55">
+          PST is paid separately at registration in your province and is not included in the total.
+          {hasPstValue
+            ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
+                breakdown.pstCAD
+              )}${
+                typeof breakdown?.pstRate === "number"
+                  ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
+                  : ""
+              }.`
+            : ""}
+        </p>
+      ) : null}
       <p className="mt-2 text-xs leading-5 text-white/55">
         Exchange-rate disclaimer: CAD values are based on JPY/CAD rate
         {typeof computedExchangeRate === "number" ? ` ${computedExchangeRate.toFixed(4)}` : " used in report"}
@@ -593,6 +608,12 @@ export function ReportClient({
                 <span className="text-white/45">Hammer Range:</span>{" "}
                 {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
               </p>
+              <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
+                Estimated hammer price is based on the midpoint of the 3-month sales range (
+                {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
+                {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
+                actual winning hammer price at auction.
+              </p>
               <p>
                 <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
               </p>
@@ -601,9 +622,7 @@ export function ReportClient({
               </p>
               <p>
                 <span className="text-white/45">Total Delivered Estimate:</span>{" "}
-                {formatCad(
-                  auctionEstimate?.total_delivered_cad ?? auctionEstimate?.total_delivered_estimate_cad
-                )}
+                {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
               </p>
             </div>
 
