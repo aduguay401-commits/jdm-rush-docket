@@ -171,6 +171,7 @@ export default function AgentDocketDetailPage({
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [submittingResearch, setSubmittingResearch] = useState(false);
   const [researchConfirmation, setResearchConfirmation] = useState<string | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
 
   const isResearchInProgress = docket?.status === "research_in_progress";
@@ -232,6 +233,25 @@ export default function AgentDocketDetailPage({
 
     void loadDocket();
   }, [id, router, supabase]);
+
+  useEffect(() => {
+    if (redirectCountdown === null) {
+      return;
+    }
+
+    if (redirectCountdown <= 0) {
+      router.replace("/agent/dashboard");
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setRedirectCountdown((prev) => (prev === null ? null : prev - 1));
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [redirectCountdown, router]);
 
   function updateQuestion(index: number, value: string) {
     setQuestions((prev) => {
@@ -718,7 +738,8 @@ export default function AgentDocketDetailPage({
 
     setDocket((prev) => (prev ? { ...prev, status: "report_sent" } : prev));
     setResearchLocked(true);
-    setResearchConfirmation("Research report sent successfully. The form is now locked.");
+    setRedirectCountdown(3);
+    setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
     setSubmittingResearch(false);
   }
 
@@ -735,8 +756,6 @@ export default function AgentDocketDetailPage({
         {questionsConfirmation ? (
           <p className="whitespace-pre-line text-emerald-400">{questionsConfirmation}</p>
         ) : null}
-        {researchConfirmation ? <p className="text-emerald-400">{researchConfirmation}</p> : null}
-
         {!loading && docket ? (
           <>
             <div>
@@ -1135,6 +1154,12 @@ export default function AgentDocketDetailPage({
                     {submittingResearch ? "Sending..." : "Send to Customer"}
                   </button>
                 </div>
+                {researchConfirmation && redirectCountdown !== null && redirectCountdown > 0 ? (
+                  <p className="text-right text-sm text-emerald-400">
+                    ✅ Research submitted successfully. Returning to your dockets in {redirectCountdown} second
+                    {redirectCountdown === 1 ? "" : "s"}...
+                  </p>
+                ) : null}
               </section>
             ) : null}
 
