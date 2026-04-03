@@ -4,7 +4,7 @@ import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 
 type Docket = {
   id: string;
@@ -359,12 +359,10 @@ export default function AgentDocketDetailPage({
 
   async function uploadFiles({
     files,
-    folder,
     fileType,
     target,
   }: {
     files: FileList;
-    folder: string;
     fileType: "images" | "pdf";
     target: string;
   }) {
@@ -376,8 +374,39 @@ export default function AgentDocketDetailPage({
     setUploadingTarget(target);
 
     const uploadedPaths: string[] = [];
+    console.error("[Research Upload] START", {
+      docketId: id,
+      target,
+      fileCount: files.length,
+      fileType,
+      at: new Date().toISOString(),
+    });
+
+    const {
+      data: { session },
+      error: sessionError,
+    } = await supabase.auth.getSession();
+
+    if (sessionError || !session?.access_token) {
+      setUploadingTarget(null);
+      const sessionMessage = sessionError?.message ?? "Missing authenticated session token for storage upload.";
+      console.error("[Research Upload] SESSION_FAILED", { sessionError });
+      throw new Error(`Authentication required for file upload: ${sessionMessage}`);
+    }
+
+    const storageClient = createBrowserSupabaseClientWithAuth(session.access_token);
 
     for (const file of Array.from(files)) {
+      if (!(file instanceof File)) {
+        setUploadingTarget(null);
+        throw new Error("Upload payload must contain File objects.");
+      }
+
+      if (file.size <= 0) {
+        setUploadingTarget(null);
+        throw new Error(`File "${file.name}" is empty and cannot be uploaded.`);
+      }
+
       if (fileType === "images" && !file.type.startsWith("image/")) {
         setUploadingTarget(null);
         throw new Error("Only image files are allowed for photo uploads.");
@@ -388,18 +417,39 @@ export default function AgentDocketDetailPage({
         throw new Error("Only PDF files are allowed for sales sheets.");
       }
 
-      const storagePath = `${id}/${folder}/${crypto.randomUUID()}-${cleanFileName(file.name)}`;
-      const { error: uploadError } = await supabase.storage.from("docket-files").upload(storagePath, file);
+      const storagePath = `${id}/${crypto.randomUUID()}-${cleanFileName(file.name)}`;
+      console.error("[Research Upload] FILE_UPLOAD_ATTEMPT", {
+        bucketPath: `docket-files/${storagePath}`,
+        fileName: file.name,
+        mimeType: file.type,
+        bytes: file.size,
+      });
+      const { error: uploadError } = await storageClient.storage
+        .from("docket-files")
+        .upload(storagePath, file, { upsert: false });
 
       if (uploadError) {
+        console.error("[Research Upload] FILE_UPLOAD_FAILED", {
+          bucketPath: `docket-files/${storagePath}`,
+          uploadError,
+        });
         setUploadingTarget(null);
-        throw new Error(uploadError.message);
+        throw new Error(
+          `Upload failed for "${file.name}" at docket-files/${storagePath}: ${uploadError.message}`
+        );
       }
 
       uploadedPaths.push(storagePath);
+      console.error("[Research Upload] FILE_UPLOAD_SUCCESS", {
+        bucketPath: `docket-files/${storagePath}`,
+      });
     }
 
     setUploadingTarget(null);
+    console.error("[Research Upload] COMPLETE", {
+      docketId: id,
+      uploadedCount: uploadedPaths.length,
+    });
     return uploadedPaths;
   }
 
@@ -411,7 +461,6 @@ export default function AgentDocketDetailPage({
     try {
       const uploaded = await uploadFiles({
         files,
-        folder: `auction-listings/listing-${index + 1}`,
         fileType: "images",
         target: `auction-listing-${index + 1}`,
       });
@@ -439,7 +488,6 @@ export default function AgentDocketDetailPage({
     try {
       const uploaded = await uploadFiles({
         files,
-        folder: `private-dealer/option-${optionNumber}/photos`,
         fileType: "images",
         target: `dealer-option-${optionNumber}-photos`,
       });
@@ -461,7 +509,6 @@ export default function AgentDocketDetailPage({
     try {
       const uploaded = await uploadFiles({
         files,
-        folder: `private-dealer/option-${optionNumber}/sales-sheet`,
         fileType: "pdf",
         target: `dealer-option-${optionNumber}-sales-sheet`,
       });
