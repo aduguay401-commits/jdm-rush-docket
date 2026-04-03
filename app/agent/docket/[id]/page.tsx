@@ -8,6 +8,7 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Docket = {
   id: string;
+  questions_url_token: string | null;
   status: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
@@ -90,7 +91,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, budget_bracket, destination_city, destination_province, timeline, additional_notes"
+          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, budget_bracket, destination_city, destination_province, timeline, additional_notes"
         )
         .eq("id", id)
         .maybeSingle();
@@ -166,7 +167,15 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
-    setQuestionsConfirmation("Questions sent successfully. Docket status updated to questions_sent.");
+    const customerQuestionsLink = docket?.questions_url_token
+      ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
+      : null;
+
+    setQuestionsConfirmation(
+      customerQuestionsLink
+        ? `Questions sent successfully. Docket status updated to questions_sent.\nCustomer Questions Link: ${customerQuestionsLink}`
+        : "Questions sent successfully. Docket status updated to questions_sent."
+    );
     setSavingQuestions(false);
   }
 
@@ -212,7 +221,9 @@ export default function AgentDocketDetailPage({
 
         {loading ? <p className="text-white/75">Loading docket...</p> : null}
         {error ? <p className="text-red-400">{error}</p> : null}
-        {questionsConfirmation ? <p className="text-emerald-400">{questionsConfirmation}</p> : null}
+        {questionsConfirmation ? (
+          <p className="whitespace-pre-line text-emerald-400">{questionsConfirmation}</p>
+        ) : null}
 
         {!loading && docket ? (
           <>
