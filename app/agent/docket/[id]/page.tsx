@@ -24,6 +24,12 @@ type Docket = {
   additional_notes: string | null;
 };
 
+type CustomerAnswer = {
+  id: string;
+  question_text: string;
+  answer_text: string | null;
+};
+
 const MAX_QUESTIONS = 10;
 
 async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
@@ -67,8 +73,10 @@ export default function AgentDocketDetailPage({
   const [proceeding, setProceeding] = useState(false);
   const [questionsConfirmation, setQuestionsConfirmation] = useState<string | null>(null);
   const [proceedConfirmation, setProceedConfirmation] = useState<string | null>(null);
+  const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
 
   const isResearchInProgress = docket?.status === "research_in_progress";
+  const isAnswersReceived = docket?.status === "answers_received";
 
   useEffect(() => {
     async function loadDocket() {
@@ -103,6 +111,21 @@ export default function AgentDocketDetailPage({
       }
 
       setDocket(data as Docket);
+
+      const { data: answersData, error: answersError } = await supabase
+        .from("marcus_questions")
+        .select("id, question_text, answer_text")
+        .eq("docket_id", id)
+        .not("answered_at", "is", null)
+        .order("created_at", { ascending: true });
+
+      if (answersError) {
+        setError(answersError.message);
+        setLoading(false);
+        return;
+      }
+
+      setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setLoading(false);
     }
 
@@ -271,6 +294,24 @@ export default function AgentDocketDetailPage({
               </div>
             </section>
 
+            {isAnswersReceived ? (
+              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+                <h2 className="mb-4 text-xl font-semibold">Customer Answers</h2>
+                {customerAnswers.length === 0 ? (
+                  <p className="text-sm text-white/70">No customer answers found.</p>
+                ) : (
+                  <div className="divide-y divide-white/10">
+                    {customerAnswers.map((item) => (
+                      <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
+                        <p className="text-sm text-white">{item.question_text}</p>
+                        <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
+
             <section
               className={`rounded-xl border border-white/12 bg-[#171717] p-5 ${isResearchInProgress ? "opacity-70" : ""}`}
             >
@@ -312,14 +353,20 @@ export default function AgentDocketDetailPage({
             </section>
 
             <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-              <h2 className="mb-4 text-xl font-semibold">Proceed Without Questions</h2>
+              <h2 className="mb-4 text-xl font-semibold">
+                {isAnswersReceived ? "Ready to Proceed?" : "Proceed Without Questions"}
+              </h2>
               <button
                 className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isResearchInProgress || proceeding}
                 onClick={proceedWithoutQuestions}
                 type="button"
               >
-                {proceeding ? "Confirming..." : "I have all the information I need"}
+                {proceeding
+                  ? "Confirming..."
+                  : isAnswersReceived
+                    ? "I've reviewed the answers — Proceed to Research"
+                    : "I have all the information I need"}
               </button>
               {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
             </section>

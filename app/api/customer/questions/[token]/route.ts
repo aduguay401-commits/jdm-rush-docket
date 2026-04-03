@@ -41,7 +41,9 @@ export async function POST(
 
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
-      .select("id, customer_first_name, customer_last_name")
+      .select(
+        "id, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model"
+      )
       .eq("questions_url_token", token)
       .maybeSingle();
 
@@ -57,7 +59,7 @@ export async function POST(
 
     const { data: matchingQuestions, error: questionsError } = await supabase
       .from("marcus_questions")
-      .select("id, question_text")
+      .select("id")
       .eq("docket_id", docket.id)
       .in("id", questionIds)
       .is("answered_at", null);
@@ -73,7 +75,6 @@ export async function POST(
       );
     }
 
-    const questionMap = new Map(matchingQuestions.map((question) => [question.id, question.question_text]));
     const answeredAt = new Date().toISOString();
 
     for (const item of payload) {
@@ -103,8 +104,6 @@ export async function POST(
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
-    const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL;
-    const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL;
 
     if (!resendApiKey || !fromEmail) {
@@ -118,26 +117,33 @@ export async function POST(
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
-    const marcusOriginalEmail = process.env.MARCUS_EMAIL ?? null;
-    const marcusDevPrefix =
-      devMode && marcusOriginalEmail
-        ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
-        : "";
+    const customerFirstName = docket.customer_first_name?.trim() || "Unknown";
+    const customerLastName = docket.customer_last_name?.trim() || "Customer";
+    const vehicle = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
+      .map((value) => (typeof value === "string" ? value.trim() : ""))
+      .filter(Boolean)
+      .join(" ");
+
+    const notificationRecipients = devMode
+      ? [adminEmail ?? "adam@jdmrushimports.ca"]
+      : ["marcus@gemmytrading.com", ...(adminEmail ? [adminEmail] : [])];
 
     await resend.emails.send({
       from: fromEmail,
-      to: marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
-      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
-      subject: `Customer answered Marcus questions for docket ${docket.id}`,
-      text: `${marcusDevPrefix}Customer ${customerName || "Unknown Customer"} submitted answers for docket ${docket.id}.
+      to: notificationRecipients,
+      ...(!devMode ? { cc: "trade@gemmytrading.com" } : {}),
+      subject: `Customer Answers Received — ${customerFirstName} ${customerLastName} — ${vehicle || "Unknown Vehicle"}`,
+      text: `Hi Marcus,
 
-Answers:
-${payload
-  .map((item, index) => {
-    const questionText = questionMap.get(item.questionId) ?? "Unknown question";
-    return `${index + 1}. ${questionText}\nAnswer: ${item.answerText}`;
-  })
-  .join("\n\n")}`,
+Great news — the customer has answered your clarifying questions. Please log in to the docket system to review their answers and proceed with your research.
+
+Customer: ${customerName || `${customerFirstName} ${customerLastName}`}
+Vehicle: ${vehicle || "Unknown Vehicle"}
+
+Log in here → https://jdm-rush-docket.vercel.app/agent/login
+
+Thanks,
+JDM Rush System`,
     });
 
     return Response.json({ success: true });
