@@ -105,10 +105,12 @@ export async function POST(request: Request) {
 
     const resendApiKey = process.env.RESEND_API_KEY
     const fromEmail = process.env.FROM_EMAIL
-    const moltyEmail = process.env.MOLTY_EMAIL
-    const marcusEmail = process.env.MARCUS_EMAIL
-    const marcusCcEmail = process.env.MARCUS_CC_EMAIL
+    const devMode = process.env.DEV_MODE === 'true'
+    const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL
+    const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL
     const adminEmail = process.env.ADMIN_EMAIL
+    const customerOriginalEmail = payload.customer_email ?? null
+    const customerEmail = devMode ? adminEmail : customerOriginalEmail
 
     if (!resendApiKey || !fromEmail) {
       return Response.json(
@@ -120,13 +122,22 @@ export async function POST(request: Request) {
     const resend = new Resend(resendApiKey)
     const fullName = `${payload.customer_first_name ?? ''} ${payload.customer_last_name ?? ''}`.trim()
     const vehicle = `${payload.vehicle_make ?? ''} ${payload.vehicle_model ?? ''}`.trim()
+    const customerDevPrefix =
+      devMode && customerOriginalEmail
+        ? `[DEV MODE — This email would normally go to: ${customerOriginalEmail}]\n\n`
+        : ''
+    const marcusOriginalEmail = process.env.MARCUS_EMAIL ?? null
+    const marcusDevPrefix =
+      devMode && marcusOriginalEmail
+        ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
+        : ''
 
-    // Email 1: Customer Welcome (delivered to admin in test mode)
+    // Email 1: Customer Welcome
     await resend.emails.send({
       from: fromEmail,
-      to: adminEmail ?? 'adam@jdmrushimports.ca',
+      to: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
       subject: 'Welcome to JDM Rush Imports',
-      text: `Hi ${payload.customer_first_name ?? 'there'},
+      text: `${customerDevPrefix}Hi ${payload.customer_first_name ?? 'there'},
 
 Thanks for submitting your intake form with JDM Rush Imports.
 
@@ -138,12 +149,13 @@ Best,
 JDM Rush Imports`,
     })
 
-    // Email 2: Marcus Notification (delivered to admin in test mode)
+    // Email 2: Marcus Notification
     await resend.emails.send({
       from: fromEmail,
-      to: adminEmail ?? 'adam@jdmrushimports.ca',
+      to: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
       subject: `New Lead: ${fullName || 'Intake Submission'}`,
-      text: `New intake submitted.
+      text: `${marcusDevPrefix}New intake submitted.
 
 Docket ID: ${docket.id}
 Customer: ${fullName}

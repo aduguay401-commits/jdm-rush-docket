@@ -102,6 +102,10 @@ export async function POST(
 
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
+    const devMode = process.env.DEV_MODE === "true";
+    const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL;
+    const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL;
+    const adminEmail = process.env.ADMIN_EMAIL;
 
     if (!resendApiKey || !fromEmail) {
       return Response.json(
@@ -114,12 +118,18 @@ export async function POST(
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
+    const marcusOriginalEmail = process.env.MARCUS_EMAIL ?? null;
+    const marcusDevPrefix =
+      devMode && marcusOriginalEmail
+        ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
+        : "";
 
     await resend.emails.send({
       from: fromEmail,
-      to: "adam@jdmrushimports.ca",
+      to: marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
       subject: `Customer answered Marcus questions for docket ${docket.id}`,
-      text: `Customer ${customerName || "Unknown Customer"} submitted answers for docket ${docket.id}.
+      text: `${marcusDevPrefix}Customer ${customerName || "Unknown Customer"} submitted answers for docket ${docket.id}.
 
 Answers:
 ${payload

@@ -54,6 +54,10 @@ export async function POST(request: Request) {
 
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
+    const devMode = process.env.DEV_MODE === "true";
+    const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL;
+    const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL;
+    const adminEmail = process.env.ADMIN_EMAIL;
 
     if (!resendApiKey || !fromEmail) {
       return Response.json(
@@ -63,12 +67,18 @@ export async function POST(request: Request) {
     }
 
     const resend = new Resend(resendApiKey);
+    const marcusOriginalEmail = process.env.MARCUS_EMAIL ?? null;
+    const marcusDevPrefix =
+      devMode && marcusOriginalEmail
+        ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
+        : "";
 
     await resend.emails.send({
       from: fromEmail,
-      to: "adam@jdmrushimports.ca",
+      to: marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
       subject: `Marcus submitted questions for docket ${docketId}`,
-      text: `Marcus submitted clarifying questions for docket ${docketId}.\n\nQuestions:\n${questions
+      text: `${marcusDevPrefix}Marcus submitted clarifying questions for docket ${docketId}.\n\nQuestions:\n${questions
         .map((question, index) => `${index + 1}. ${question}`)
         .join("\n")}\n\nMolty needs to email the customer with these questions.`,
     });
