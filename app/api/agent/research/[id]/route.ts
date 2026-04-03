@@ -1,6 +1,12 @@
 import { Resend } from "resend";
 
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
+import {
+  calculateImportCost,
+  type DestinationCity,
+  type DutyType,
+  type VehicleType,
+} from "@/lib/importCalculator";
 import { createServerClient } from "@/lib/supabase/server";
 
 type AuctionListingPayload = {
@@ -55,6 +61,34 @@ type SupabaseErrorLike = {
   hint?: string | null;
   code?: string | null;
 };
+
+const DESTINATION_CITIES: DestinationCity[] = [
+  "victoria-bc",
+  "duncan-bc",
+  "richmond-bc",
+  "kamloops-bc",
+  "kelowna-bc",
+  "okanagan-bc",
+  "regina-sk",
+  "saskatoon-sk",
+  "winnipeg-mb",
+  "toronto-on",
+  "calgary-ab",
+  "edmonton-ab",
+  "montreal-qc",
+];
+
+function isDestinationCity(value: string): value is DestinationCity {
+  return DESTINATION_CITIES.includes(value as DestinationCity);
+}
+
+function isVehicleType(value: string): value is VehicleType {
+  return value === "regular" || value === "suv";
+}
+
+function isDutyType(value: string): value is DutyType {
+  return value === "duty-free" || value === "full-duty";
+}
 
 function logStep(step: string, details?: unknown) {
   console.error("[Research API]", {
@@ -479,7 +513,9 @@ export async function POST(
 
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
-      .select("id, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model")
+      .select(
+        "id, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, vehicle_type, duty_type"
+      )
       .eq("id", id)
       .maybeSingle();
     logStep("supabase.dockets.select.result", {
@@ -499,14 +535,48 @@ export async function POST(
       return errorResponse(400, "Docket not found.", { docketId: id });
     }
 
+    const destinationCity = toNonEmptyString(docket.destination_city);
+    if (!destinationCity || !isDestinationCity(destinationCity)) {
+      return errorResponse(400, "Docket destination city is missing or invalid for fee calculation.", {
+        docketId: id,
+        destinationCity: docket.destination_city,
+      });
+    }
+
+    const vehicleTypeRaw = toNonEmptyString(docket.vehicle_type) || "regular";
+    if (!isVehicleType(vehicleTypeRaw)) {
+      return errorResponse(400, "Docket vehicle type is invalid for fee calculation.", {
+        docketId: id,
+        vehicleType: docket.vehicle_type,
+      });
+    }
+
+    const dutyTypeRaw = toNonEmptyString(docket.duty_type) || "duty-free";
+    if (!isDutyType(dutyTypeRaw)) {
+      return errorResponse(400, "Docket duty type is invalid for fee calculation.", {
+        docketId: id,
+        dutyType: docket.duty_type,
+      });
+    }
+
     const midpointHammerJpy = Math.round((validHammerPriceLowJpy + validHammerPriceHighJpy) / 2);
     const exchange = await fetchJPYtoCAD();
-    const midpointHammerCad = Number((midpointHammerJpy * exchange.rate).toFixed(2));
+    const auctionEstimateFees = calculateImportCost({
+      vehiclePriceJPY: midpointHammerJpy,
+      destinationCity,
+      vehicleType: vehicleTypeRaw,
+      dutyType: dutyTypeRaw,
+      exchangeRate: exchange.rate,
+    });
+    const midpointHammerCad = auctionEstimateFees.dealerPriceCAD;
     logStep("exchange.rate_fetched", {
       docketId: id,
       exchange,
       midpointHammerJpy,
       midpointHammerCad,
+      destinationCity,
+      vehicleType: vehicleTypeRaw,
+      dutyType: dutyTypeRaw,
     });
 
     const { data: clearedAuctionRows, error: clearAuctionResearchError } = await supabase
@@ -569,23 +639,35 @@ export async function POST(
       });
     }
 
-    const dealerRows = privateDealerOptions.map((item) => ({
-      docket_id: id,
-      option_number: item.option_number,
-      year: item.year,
-      make: item.make,
-      model: item.model,
-      grade: item.grade,
-      mileage: item.mileage,
-      colour: item.colour,
-      transmission: item.transmission,
-      trim: item.trim,
-      dealer_price_jpy: item.dealer_price_jpy,
-      dealer_price_cad: Number((item.dealer_price_jpy * exchange.rate).toFixed(2)),
-      photos: item.photos,
-      sales_sheet_url: item.sales_sheet_url || null,
-      marcus_notes: item.marcus_notes || null,
-    }));
+    const dealerRows = privateDealerOptions.map((item) => {
+      const feeBreakdown = calculateImportCost({
+        vehiclePriceJPY: item.dealer_price_jpy,
+        destinationCity,
+        vehicleType: vehicleTypeRaw,
+        dutyType: dutyTypeRaw,
+        exchangeRate: exchange.rate,
+      });
+
+      return {
+        docket_id: id,
+        option_number: item.option_number,
+        year: item.year,
+        make: item.make,
+        model: item.model,
+        grade: item.grade,
+        mileage: item.mileage,
+        colour: item.colour,
+        transmission: item.transmission,
+        trim: item.trim,
+        dealer_price_jpy: item.dealer_price_jpy,
+        dealer_price_cad: feeBreakdown.dealerPriceCAD,
+        photos: item.photos,
+        sales_sheet_url: item.sales_sheet_url || null,
+        marcus_notes: item.marcus_notes || null,
+        calculated_fees: feeBreakdown,
+        total_delivered_cad: feeBreakdown.totalDeliveredCAD,
+      };
+    });
     logStep("supabase.private_dealer_options.insert.payload", {
       docketId: id,
       rowCount: dealerRows.length,
@@ -633,7 +715,11 @@ export async function POST(
         docket_id: id,
         midpoint_hammer_jpy: midpointHammerJpy,
         midpoint_hammer_cad: midpointHammerCad,
-        calculated_fees: { overall_notes: overallNotes },
+        calculated_fees: {
+          ...auctionEstimateFees,
+          overall_notes: overallNotes,
+        },
+        total_delivered_estimate_cad: auctionEstimateFees.totalDeliveredCAD,
       })
       .select("id");
     logStep("supabase.auction_estimate.insert.result", {
