@@ -3,11 +3,10 @@
 import { useMemo, useState } from "react";
 
 type FeeBreakdown = {
-  dealerPriceCAD?: number;
-  vehicleValueCAD?: number;
+  vehiclePriceCAD?: number;
   exportAgentFeeCAD?: number;
   shippingInsuranceCAD?: number;
-  dutyCAD?: number;
+  importDutyCAD?: number;
   exciseTaxCAD?: number;
   gstCAD?: number;
   wwsTerminalFeeCAD?: number;
@@ -15,13 +14,16 @@ type FeeBreakdown = {
   networkFeeCAD?: number;
   financeAdminFeeCAD?: number;
   jdmRushFeeCAD?: number;
-  transportCostCAD?: number;
+  inlandTransportCAD?: number;
   totalDeliveredCAD?: number;
-  pstRate?: number;
   pstCAD?: number;
-  input?: {
-    exchangeRate?: number;
-  };
+  pstProvince?: string;
+  input?: { exchangeRate?: number };
+  dealerPriceCAD?: number;
+  vehicleValueCAD?: number;
+  dutyCAD?: number;
+  transportCostCAD?: number;
+  pstRate?: number;
 };
 
 type AuctionListing = {
@@ -80,6 +82,7 @@ export type AuctionEstimateRecord = {
   midpoint_hammer_jpy: number | null;
   midpoint_hammer_cad: number | null;
   calculated_fees: FeeBreakdown | null;
+  total_delivered_cad: number | null;
   total_delivered_estimate_cad: number | null;
 };
 
@@ -93,8 +96,6 @@ type ReportClientProps = {
 };
 
 const CAD_FORMATTER = new Intl.NumberFormat("en-CA", {
-  style: "currency",
-  currency: "CAD",
   maximumFractionDigits: 2,
   minimumFractionDigits: 2,
 });
@@ -109,7 +110,8 @@ function formatCad(value: number | null | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return "N/A";
   }
-  return CAD_FORMATTER.format(value);
+  const absolute = CAD_FORMATTER.format(Math.abs(value));
+  return value < 0 ? `-$${absolute}` : `$${absolute}`;
 }
 
 function formatJpy(value: number | null | undefined) {
@@ -171,10 +173,13 @@ function FeeBreakdownTable({
   exchangeRateDate: string | null;
 }) {
   const rows = [
-    ["Vehicle Price", breakdown?.dealerPriceCAD ?? breakdown?.vehicleValueCAD],
+    [
+      "Vehicle Price",
+      breakdown?.vehiclePriceCAD ?? breakdown?.dealerPriceCAD ?? breakdown?.vehicleValueCAD,
+    ],
     ["Export Agent Fee", breakdown?.exportAgentFeeCAD],
     ["Shipping & Marine Insurance", breakdown?.shippingInsuranceCAD],
-    ["Import Duty", breakdown?.dutyCAD],
+    ["Import Duty", breakdown?.importDutyCAD ?? breakdown?.dutyCAD],
     ["Excise Tax", breakdown?.exciseTaxCAD],
     ["GST (5%)", breakdown?.gstCAD],
     ["WWS Terminal Fee", breakdown?.wwsTerminalFeeCAD],
@@ -182,7 +187,7 @@ function FeeBreakdownTable({
     [networkFeeLabel, breakdown?.networkFeeCAD],
     ["Finance & Admin Fee", breakdown?.financeAdminFeeCAD],
     ["JDM Rush Import Fee", breakdown?.jdmRushFeeCAD],
-    [`Delivery to ${destination}`, breakdown?.transportCostCAD],
+    [`Delivery to ${destination}`, breakdown?.inlandTransportCAD ?? breakdown?.transportCostCAD],
     ["Total Delivered Price", breakdown?.totalDeliveredCAD],
   ] as const;
 
@@ -215,7 +220,9 @@ function FeeBreakdownTable({
       <p className="mt-4 text-xs leading-5 text-white/55">
         PST is paid separately at registration in your province and is not included in the total.
         {typeof breakdown?.pstCAD === "number"
-          ? ` Estimated PST: ${formatCad(breakdown.pstCAD)}${
+          ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
+              breakdown.pstCAD
+            )}${
               typeof breakdown?.pstRate === "number"
                 ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
                 : ""
@@ -582,7 +589,9 @@ export function ReportClient({
               </p>
               <p>
                 <span className="text-white/45">Total Delivered Estimate:</span>{" "}
-                {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
+                {formatCad(
+                  auctionEstimate?.total_delivered_cad ?? auctionEstimate?.total_delivered_estimate_cad
+                )}
               </p>
             </div>
 
@@ -601,7 +610,7 @@ export function ReportClient({
 
             {!hasDecision ? (
               <button
-                className="mt-5 w-full rounded-2xl border border-[#E55125] px-5 py-3 text-sm font-semibold text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                 disabled={isDeciding}
                 onClick={() => submitDecision("auction")}
                 type="button"
