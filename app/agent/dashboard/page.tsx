@@ -119,18 +119,20 @@ export default function AgentDashboardPage() {
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <div className="mx-auto w-full max-w-6xl">
-        <header className="mb-8 flex flex-col gap-4 border-b border-white/10 pb-5 sm:flex-row sm:items-center sm:justify-between">
-          <div>
+        <header className="relative mb-8 border-b border-white/10 pb-5">
+          <div className="text-center">
             <p className="text-sm font-medium uppercase tracking-[0.3em] text-[#E55125]">JDM Rush</p>
             <h1 className="mt-2 text-3xl font-semibold">Export Agent Dashboard</h1>
           </div>
-          <button
-            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white"
-            onClick={handleSignOut}
-            type="button"
-          >
-            Sign Out
-          </button>
+          <div className="mt-4 flex justify-center sm:absolute sm:right-0 sm:top-0 sm:mt-0">
+            <button
+              className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white"
+              onClick={handleSignOut}
+              type="button"
+            >
+              Sign Out
+            </button>
+          </div>
         </header>
 
         {loading ? <p className="text-white/75">Loading dockets...</p> : null}
@@ -143,8 +145,16 @@ export default function AgentDashboardPage() {
         ) : null}
 
         {!loading && !error && dockets.length > 0 ? (
-          <div className="grid gap-4">
-            {dockets.map((docket) => {
+          <>
+            <section className="pb-6">
+              <h2 className="text-2xl font-semibold text-white">Your pipeline is live, Marcus.</h2>
+              <p className="mt-2 text-base text-[#888]">
+                Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
+                pull your research, and let&apos;s get these deals moving. 🇯🇵
+              </p>
+            </section>
+            <div className="grid gap-4">
+              {dockets.map((docket) => {
               const status = docket.status ?? "new";
               const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-white/10 text-white ring-1 ring-white/25";
               const badgeLabel = STATUS_LABELS[status] ?? status;
@@ -157,39 +167,40 @@ export default function AgentDashboardPage() {
                 .filter(Boolean)
                 .join(", ");
 
-              return (
-                <article
-                  className="rounded-xl border border-white/12 bg-[#171717] p-5 shadow-lg"
-                  key={docket.id}
-                >
-                  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="space-y-2">
-                      <h2 className="text-xl font-semibold text-white">{customerName}</h2>
-                      <p className="text-sm text-white/80">Vehicle: {vehicle || "N/A"}</p>
-                      <p className="text-sm text-white/80">Destination: {destination || "N/A"}</p>
-                      <p className="text-sm text-white/80">Budget: {docket.budget_bracket || "N/A"}</p>
-                      <p className="text-sm text-white/80">Timeline: {docket.timeline || "N/A"}</p>
-                      <p className="text-sm text-white/70">
-                        Created: {new Date(docket.created_at).toLocaleDateString()}
-                      </p>
-                    </div>
+                return (
+                  <article
+                    className="rounded-xl border border-white/12 bg-[#171717] p-5 shadow-lg"
+                    key={docket.id}
+                  >
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="space-y-2">
+                        <h2 className="text-xl font-semibold text-white">{customerName}</h2>
+                        <p className="text-sm text-white/80">Vehicle: {vehicle || "N/A"}</p>
+                        <p className="text-sm text-white/80">Destination: {destination || "N/A"}</p>
+                        <p className="text-sm text-white/80">Budget: {docket.budget_bracket || "N/A"}</p>
+                        <p className="text-sm text-white/80">Timeline: {docket.timeline || "N/A"}</p>
+                        <p className="text-sm text-white/70">
+                          Created: {new Date(docket.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
 
-                    <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
-                      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
-                        {badgeLabel}
-                      </span>
-                      <Link
-                        className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-                        href={`/agent/docket/${docket.id}`}
-                      >
-                        Open Docket
-                      </Link>
+                      <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+                          {badgeLabel}
+                        </span>
+                        <Link
+                          className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                          href={`/agent/docket/${docket.id}`}
+                        >
+                          Open Docket
+                        </Link>
+                      </div>
                     </div>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  </article>
+                );
+              })}
+            </div>
+          </>
         ) : null}
       </div>
     </main>
