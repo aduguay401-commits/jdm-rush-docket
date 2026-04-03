@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
@@ -63,7 +64,10 @@ export default function AgentDocketDetailPage({
   const [questions, setQuestions] = useState(["", "", ""]);
   const [savingQuestions, setSavingQuestions] = useState(false);
   const [proceeding, setProceeding] = useState(false);
-  const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [questionsConfirmation, setQuestionsConfirmation] = useState<string | null>(null);
+  const [proceedConfirmation, setProceedConfirmation] = useState<string | null>(null);
+
+  const isResearchInProgress = docket?.status === "research_in_progress";
 
   useEffect(() => {
     async function loadDocket() {
@@ -113,6 +117,10 @@ export default function AgentDocketDetailPage({
   }
 
   function addQuestionField() {
+    if (isResearchInProgress) {
+      return;
+    }
+
     setQuestions((prev) => {
       if (prev.length >= MAX_QUESTIONS) {
         return prev;
@@ -123,6 +131,10 @@ export default function AgentDocketDetailPage({
   }
 
   async function sendQuestions() {
+    if (isResearchInProgress) {
+      return;
+    }
+
     const cleanedQuestions = questions.map((question) => question.trim()).filter(Boolean);
 
     if (cleanedQuestions.length === 0) {
@@ -132,7 +144,7 @@ export default function AgentDocketDetailPage({
 
     setSavingQuestions(true);
     setError(null);
-    setConfirmation(null);
+    setQuestionsConfirmation(null);
 
     const response = await fetch("/api/agent/send-questions", {
       method: "POST",
@@ -154,14 +166,18 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
-    setConfirmation("Questions sent successfully. Docket status updated to questions_sent.");
+    setQuestionsConfirmation("Questions sent successfully. Docket status updated to questions_sent.");
     setSavingQuestions(false);
   }
 
   async function proceedWithoutQuestions() {
+    if (isResearchInProgress || proceeding) {
+      return;
+    }
+
     setProceeding(true);
     setError(null);
-    setConfirmation(null);
+    setProceedConfirmation(null);
 
     const response = await fetch("/api/agent/proceed", {
       method: "POST",
@@ -180,7 +196,9 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "research_in_progress" } : prev));
-    setConfirmation("Status updated to research_in_progress. Proceeding to research.");
+    setProceedConfirmation(
+      "✅ Confirmed — you're ready to proceed to research. The research input form will appear here in the next update."
+    );
     setProceeding(false);
   }
 
@@ -194,12 +212,21 @@ export default function AgentDocketDetailPage({
 
         {loading ? <p className="text-white/75">Loading docket...</p> : null}
         {error ? <p className="text-red-400">{error}</p> : null}
-        {confirmation ? <p className="text-emerald-400">{confirmation}</p> : null}
+        {questionsConfirmation ? <p className="text-emerald-400">{questionsConfirmation}</p> : null}
 
         {!loading && docket ? (
           <>
+            <div>
+              <Link
+                className="inline-flex items-center rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
+                href="/agent/dashboard"
+              >
+                ← Back to Dockets
+              </Link>
+            </div>
+
             <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-              <h2 className="mb-4 text-xl font-semibold">Customer Information</h2>
+              <h2 className="mb-4 text-xl font-semibold">Sales Lead Information</h2>
               <div className="grid gap-2 text-sm text-white/85 sm:grid-cols-2">
                 <p>
                   <span className="text-white">Name:</span> {docket.customer_first_name || ""} {docket.customer_last_name || ""}
@@ -233,7 +260,9 @@ export default function AgentDocketDetailPage({
               </div>
             </section>
 
-            <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+            <section
+              className={`rounded-xl border border-white/12 bg-[#171717] p-5 ${isResearchInProgress ? "opacity-70" : ""}`}
+            >
               <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
               <div className="space-y-3">
                 {questions.map((question, index) => (
@@ -241,6 +270,7 @@ export default function AgentDocketDetailPage({
                     Question {index + 1}
                     <input
                       className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                      disabled={isResearchInProgress}
                       onChange={(event) => updateQuestion(index, event.target.value)}
                       placeholder={`Question ${index + 1}`}
                       type="text"
@@ -253,7 +283,7 @@ export default function AgentDocketDetailPage({
               <div className="mt-4 flex flex-wrap gap-3">
                 <button
                   className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={questions.length >= MAX_QUESTIONS}
+                  disabled={isResearchInProgress || questions.length >= MAX_QUESTIONS}
                   onClick={addQuestionField}
                   type="button"
                 >
@@ -261,7 +291,7 @@ export default function AgentDocketDetailPage({
                 </button>
                 <button
                   className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={savingQuestions}
+                  disabled={isResearchInProgress || savingQuestions}
                   onClick={sendQuestions}
                   type="button"
                 >
@@ -274,12 +304,13 @@ export default function AgentDocketDetailPage({
               <h2 className="mb-4 text-xl font-semibold">Proceed Without Questions</h2>
               <button
                 className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={proceeding}
+                disabled={isResearchInProgress || proceeding}
                 onClick={proceedWithoutQuestions}
                 type="button"
               >
-                {proceeding ? "Updating..." : "I have all the information I need"}
+                {proceeding ? "Confirming..." : "I have all the information I need"}
               </button>
+              {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
             </section>
           </>
         ) : null}
