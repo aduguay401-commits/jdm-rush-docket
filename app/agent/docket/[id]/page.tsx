@@ -491,42 +491,49 @@ export default function AgentDocketDetailPage({
   }
 
   function validateResearchForm() {
+    const validationErrors: string[] = [];
     const low = Number(hammerPriceLowJpy);
     const high = Number(hammerPriceHighJpy);
     const maxBid = Number(recommendedMaxBidJpy);
 
     if (!Number.isFinite(low) || low <= 0) {
-      return "Hammer Price Low (JPY) is required and must be greater than 0.";
+      validationErrors.push("Hammer Price Low (JPY) is required and must be greater than 0.");
     }
 
     if (!Number.isFinite(high) || high <= 0) {
-      return "Hammer Price High (JPY) is required and must be greater than 0.";
+      validationErrors.push("Hammer Price High (JPY) is required and must be greater than 0.");
     }
 
-    if (high < low) {
-      return "Hammer Price High (JPY) must be greater than or equal to Hammer Price Low (JPY).";
+    if (Number.isFinite(low) && Number.isFinite(high) && high < low) {
+      validationErrors.push(
+        "Hammer Price High (JPY) must be greater than or equal to Hammer Price Low (JPY)."
+      );
     }
 
     if (!Number.isFinite(maxBid) || maxBid <= 0) {
-      return "Recommended Max Bid (JPY) is required and must be greater than 0.";
+      validationErrors.push("Recommended Max Bid (JPY) is required and must be greater than 0.");
     }
 
     for (let index = 0; index < auctionListings.length; index += 1) {
       const listing = auctionListings[index];
 
       if (!listing.lotTitle.trim() || !listing.specs.trim()) {
-        return `Auction Listing ${index + 1} requires Lot Title and Specs.`;
+        validationErrors.push(`Auction Listing ${index + 1} requires Lot Title and Specs.`);
       }
     }
 
     const primaryOption = dealerOptions.find((option) => option.optionNumber === 1);
 
     if (!primaryOption || !primaryOption.year.trim() || !primaryOption.make.trim() || !primaryOption.model.trim()) {
-      return "Private Dealer Option 1 requires Year, Make, and Model.";
+      validationErrors.push("Private Dealer Option 1 requires Year, Make, and Model.");
     }
 
-    if (!Number.isFinite(Number(primaryOption.dealerPriceJpy)) || Number(primaryOption.dealerPriceJpy) <= 0) {
-      return "Private Dealer Option 1 requires a valid Dealer Price (JPY).";
+    if (
+      !primaryOption ||
+      !Number.isFinite(Number(primaryOption.dealerPriceJpy)) ||
+      Number(primaryOption.dealerPriceJpy) <= 0
+    ) {
+      validationErrors.push("Private Dealer Option 1 requires a valid Dealer Price (JPY).");
     }
 
     for (const option of dealerOptions.filter((item) => item.optionNumber !== 1)) {
@@ -535,30 +542,48 @@ export default function AgentDocketDetailPage({
       }
 
       if (!option.year.trim() || !option.make.trim() || !option.model.trim()) {
-        return `Private Dealer Option ${option.optionNumber} must include Year, Make, and Model when used.`;
+        validationErrors.push(
+          `Private Dealer Option ${option.optionNumber} must include Year, Make, and Model when used.`
+        );
       }
 
       if (!Number.isFinite(Number(option.dealerPriceJpy)) || Number(option.dealerPriceJpy) <= 0) {
-        return `Private Dealer Option ${option.optionNumber} must include a valid Dealer Price (JPY) when used.`;
+        validationErrors.push(
+          `Private Dealer Option ${option.optionNumber} must include a valid Dealer Price (JPY) when used.`
+        );
       }
     }
 
     if (!overallNotes.trim()) {
-      return "Overall Notes are required before sending to the customer.";
+      validationErrors.push("Overall Notes are required before sending to the customer.");
     }
 
-    return null;
+    return validationErrors;
   }
 
   async function submitResearchReport() {
+    console.log("[Research Submit] START", {
+      docketId: id,
+      submittingResearch,
+      researchLocked,
+      at: new Date().toISOString(),
+    });
+
     if (isFormDisabled) {
+      console.log("[Research Submit] BLOCKED", {
+        reason: researchLocked ? "research_locked" : "submit_in_progress",
+      });
       return;
     }
 
-    const validationError = validateResearchForm();
+    const validationErrors = validateResearchForm();
 
-    if (validationError) {
-      setError(validationError);
+    if (validationErrors.length > 0) {
+      const message = `Validation failed. Fix the following fields:\n${validationErrors
+        .map((item) => `- ${item}`)
+        .join("\n")}`;
+      console.error("[Research Submit] VALIDATION_FAILED", { validationErrors });
+      setError(message);
       return;
     }
 
@@ -592,22 +617,54 @@ export default function AgentDocketDetailPage({
           photos: option.photos,
           salesSheetUrl: option.salesSheetUrl.trim(),
           notes: option.notes.trim(),
-        })),
+      })),
       overallNotes: overallNotes.trim(),
     };
 
-    const response = await fetch(`/api/agent/research/${id}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    console.log("[Research Submit] PAYLOAD", payload);
 
-    const result = (await response.json()) as { success?: boolean; error?: string };
+    let result: { success?: boolean; error?: string; details?: unknown } | null = null;
+    let response: Response;
 
-    if (!response.ok || !result.success) {
-      setError(result.error ?? "Failed to submit research report.");
+    try {
+      response = await fetch(`/api/agent/research/${id}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error ? requestError.message : "Network request failed before reaching API.";
+      console.error("[Research Submit] FETCH_FAILED", { requestError });
+      setError(`Failed to submit research report: ${message}`);
+      setSubmittingResearch(false);
+      return;
+    }
+
+    try {
+      result = (await response.json()) as { success?: boolean; error?: string; details?: unknown };
+    } catch (parseError) {
+      console.error("[Research Submit] RESPONSE_PARSE_FAILED", { parseError });
+      setError(`Failed to submit research report: API returned an unreadable response (HTTP ${response.status}).`);
+      setSubmittingResearch(false);
+      return;
+    }
+
+    if (!response.ok || !result?.success) {
+      const detailsText =
+        result?.details !== undefined
+          ? `\nDetails: ${
+              typeof result.details === "string" ? result.details : JSON.stringify(result.details, null, 2)
+            }`
+          : "";
+      const errorMessage = result?.error ?? "Failed to submit research report.";
+      console.error("[Research Submit] API_FAILED", {
+        status: response.status,
+        result,
+      });
+      setError(`Failed to submit research report (HTTP ${response.status}): ${errorMessage}${detailsText}`);
       setSubmittingResearch(false);
       return;
     }
@@ -627,7 +684,7 @@ export default function AgentDocketDetailPage({
         </header>
 
         {loading ? <p className="text-white/75">Loading docket...</p> : null}
-        {error ? <p className="text-red-400">{error}</p> : null}
+        {error ? <p className="whitespace-pre-line text-red-400">{error}</p> : null}
         {questionsConfirmation ? (
           <p className="whitespace-pre-line text-emerald-400">{questionsConfirmation}</p>
         ) : null}

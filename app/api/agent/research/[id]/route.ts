@@ -36,6 +36,13 @@ type ResearchPayload = {
   overallNotes?: string;
 };
 
+type SupabaseErrorLike = {
+  message: string;
+  details?: string | null;
+  hint?: string | null;
+  code?: string | null;
+};
+
 function toNonEmptyString(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
@@ -64,7 +71,7 @@ function normalizeAuctionListings(value: unknown) {
     return [] as Array<{
       lot_title: string;
       specs: string;
-      auction_lot_link: string;
+      auction_lot_link: string | null;
       photos: string[];
     }>;
   }
@@ -79,11 +86,11 @@ function normalizeAuctionListings(value: unknown) {
       return {
         lot_title: lotTitle,
         specs,
-        auction_lot_link: auctionLotLink,
+        auction_lot_link: auctionLotLink || null,
         photos,
       };
     })
-    .filter((item) => item.lot_title && item.specs && item.auction_lot_link);
+    .filter((item) => item.lot_title && item.specs);
 }
 
 function normalizeDealerOptions(value: unknown) {
@@ -158,19 +165,76 @@ function normalizeDealerOptions(value: unknown) {
   }>;
 }
 
+function toErrorObject(error: unknown) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null,
+    };
+  }
+
+  return {
+    message: typeof error === "string" ? error : "Unknown error",
+    raw: error,
+  };
+}
+
+function toSupabaseError(error: SupabaseErrorLike | null) {
+  if (!error) {
+    return null;
+  }
+
+  return {
+    message: error.message,
+    details: error.details ?? null,
+    hint: error.hint ?? null,
+    code: error.code ?? null,
+  };
+}
+
+function errorResponse(status: 400 | 500, message: string, details?: unknown) {
+  const errorObject = {
+    message,
+    details: details ?? null,
+    status,
+    timestamp: new Date().toISOString(),
+  };
+
+  console.error("[Research API Error]", errorObject);
+
+  return Response.json(
+    {
+      success: false,
+      error: message,
+      errorObject,
+    },
+    { status }
+  );
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
+
+  if (!id) {
+    return errorResponse(400, "Docket ID is required.");
+  }
+
+  let payload: ResearchPayload;
+
   try {
-    const { id } = await context.params;
+    payload = (await request.json()) as ResearchPayload;
+  } catch (parseError) {
+    return errorResponse(400, "Invalid request body.", {
+      operation: "request.json",
+      parseError: toErrorObject(parseError),
+    });
+  }
 
-    if (!id) {
-      return Response.json({ success: false, error: "docket id is required" }, { status: 400 });
-    }
-
-    const payload = (await request.json()) as ResearchPayload;
-
+  try {
     const hammerPriceLowJpy = toPositiveInteger(payload.hammerPriceLowJpy);
     const hammerPriceHighJpy = toPositiveInteger(payload.hammerPriceHighJpy);
     const recommendedMaxBidJpy = toPositiveInteger(payload.recommendedMaxBidJpy);
@@ -179,40 +243,37 @@ export async function POST(
     const auctionListings = normalizeAuctionListings(payload.auctionListings);
     const privateDealerOptions = normalizeDealerOptions(payload.privateDealerOptions);
 
+    const validationErrors: string[] = [];
+
     if (!hammerPriceLowJpy || !hammerPriceHighJpy || !recommendedMaxBidJpy) {
-      return Response.json(
-        { success: false, error: "Auction pricing fields are required and must be valid numbers" },
-        { status: 400 }
-      );
+      validationErrors.push("Auction pricing fields are required and must be valid numbers.");
     }
 
-    if (hammerPriceHighJpy < hammerPriceLowJpy) {
-      return Response.json(
-        { success: false, error: "Hammer high price must be greater than or equal to low price" },
-        { status: 400 }
-      );
+    if (hammerPriceLowJpy && hammerPriceHighJpy && hammerPriceHighJpy < hammerPriceLowJpy) {
+      validationErrors.push("Hammer high price must be greater than or equal to low price.");
     }
 
     if (auctionListings.length === 0) {
-      return Response.json(
-        { success: false, error: "At least one auction listing is required" },
-        { status: 400 }
-      );
+      validationErrors.push("At least one auction listing with Lot Title and Specs is required.");
     }
 
     if (!privateDealerOptions.some((item) => item.option_number === 1)) {
-      return Response.json(
-        { success: false, error: "Private Dealer Option 1 is required" },
-        { status: 400 }
-      );
+      validationErrors.push("Private Dealer Option 1 is required.");
     }
 
     if (!overallNotes) {
-      return Response.json(
-        { success: false, error: "Overall notes are required" },
-        { status: 400 }
-      );
+      validationErrors.push("Overall notes are required.");
     }
+
+    if (validationErrors.length > 0) {
+      return errorResponse(400, "Validation failed for research submission.", {
+        validationErrors,
+      });
+    }
+
+    const validHammerPriceLowJpy = hammerPriceLowJpy as number;
+    const validHammerPriceHighJpy = hammerPriceHighJpy as number;
+    const validRecommendedMaxBidJpy = recommendedMaxBidJpy as number;
 
     const supabase = createServerClient();
 
@@ -223,14 +284,18 @@ export async function POST(
       .maybeSingle();
 
     if (docketError) {
-      return Response.json({ success: false, error: docketError.message }, { status: 500 });
+      return errorResponse(500, "Failed to load docket.", {
+        operation: "dockets.select",
+        docketId: id,
+        supabase: toSupabaseError(docketError),
+      });
     }
 
     if (!docket) {
-      return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
+      return errorResponse(400, "Docket not found.", { docketId: id });
     }
 
-    const midpointHammerJpy = Math.round((hammerPriceLowJpy + hammerPriceHighJpy) / 2);
+    const midpointHammerJpy = Math.round((validHammerPriceLowJpy + validHammerPriceHighJpy) / 2);
     const exchange = await fetchJPYtoCAD();
     const midpointHammerCad = Number((midpointHammerJpy * exchange.rate).toFixed(2));
 
@@ -240,20 +305,28 @@ export async function POST(
       .eq("docket_id", id);
 
     if (clearAuctionResearchError) {
-      return Response.json({ success: false, error: clearAuctionResearchError.message }, { status: 500 });
+      return errorResponse(500, "Failed to clear existing auction research.", {
+        operation: "auction_research.delete",
+        docketId: id,
+        supabase: toSupabaseError(clearAuctionResearchError),
+      });
     }
 
     const { error: auctionResearchError } = await supabase.from("auction_research").insert({
       docket_id: id,
-      hammer_price_low_jpy: hammerPriceLowJpy,
-      hammer_price_high_jpy: hammerPriceHighJpy,
-      recommended_max_bid_jpy: recommendedMaxBidJpy,
+      hammer_price_low_jpy: validHammerPriceLowJpy,
+      hammer_price_high_jpy: validHammerPriceHighJpy,
+      recommended_max_bid_jpy: validRecommendedMaxBidJpy,
       sales_history_notes: salesHistoryNotes,
       auction_listings: auctionListings,
     });
 
     if (auctionResearchError) {
-      return Response.json({ success: false, error: auctionResearchError.message }, { status: 500 });
+      return errorResponse(500, "Failed to insert auction research.", {
+        operation: "auction_research.insert",
+        docketId: id,
+        supabase: toSupabaseError(auctionResearchError),
+      });
     }
 
     const { error: clearDealerOptionsError } = await supabase
@@ -262,7 +335,11 @@ export async function POST(
       .eq("docket_id", id);
 
     if (clearDealerOptionsError) {
-      return Response.json({ success: false, error: clearDealerOptionsError.message }, { status: 500 });
+      return errorResponse(500, "Failed to clear existing private dealer options.", {
+        operation: "private_dealer_options.delete",
+        docketId: id,
+        supabase: toSupabaseError(clearDealerOptionsError),
+      });
     }
 
     const dealerRows = privateDealerOptions.map((item) => ({
@@ -286,7 +363,11 @@ export async function POST(
     const { error: dealerOptionsError } = await supabase.from("private_dealer_options").insert(dealerRows);
 
     if (dealerOptionsError) {
-      return Response.json({ success: false, error: dealerOptionsError.message }, { status: 500 });
+      return errorResponse(500, "Failed to insert private dealer options.", {
+        operation: "private_dealer_options.insert",
+        docketId: id,
+        supabase: toSupabaseError(dealerOptionsError),
+      });
     }
 
     const { error: clearEstimateError } = await supabase
@@ -295,7 +376,11 @@ export async function POST(
       .eq("docket_id", id);
 
     if (clearEstimateError) {
-      return Response.json({ success: false, error: clearEstimateError.message }, { status: 500 });
+      return errorResponse(500, "Failed to clear existing auction estimate.", {
+        operation: "auction_estimate.delete",
+        docketId: id,
+        supabase: toSupabaseError(clearEstimateError),
+      });
     }
 
     const { error: estimateError } = await supabase.from("auction_estimate").insert({
@@ -306,7 +391,11 @@ export async function POST(
     });
 
     if (estimateError) {
-      return Response.json({ success: false, error: estimateError.message }, { status: 500 });
+      return errorResponse(500, "Failed to insert auction estimate.", {
+        operation: "auction_estimate.insert",
+        docketId: id,
+        supabase: toSupabaseError(estimateError),
+      });
     }
 
     const { error: docketUpdateError } = await supabase
@@ -319,7 +408,11 @@ export async function POST(
       .eq("id", id);
 
     if (docketUpdateError) {
-      return Response.json({ success: false, error: docketUpdateError.message }, { status: 500 });
+      return errorResponse(500, "Failed to update docket status.", {
+        operation: "dockets.update",
+        docketId: id,
+        supabase: toSupabaseError(docketUpdateError),
+      });
     }
 
     const resendApiKey = process.env.RESEND_API_KEY;
@@ -328,10 +421,10 @@ export async function POST(
     const devMode = process.env.DEV_MODE === "true";
 
     if (!resendApiKey || !fromEmail) {
-      return Response.json(
-        { success: false, error: "Email configuration is missing" },
-        { status: 500 }
-      );
+      return errorResponse(500, "Email configuration is missing.", {
+        missingResendApiKey: !resendApiKey,
+        missingFromEmail: !fromEmail,
+      });
     }
 
     const resend = new Resend(resendApiKey);
@@ -344,16 +437,17 @@ export async function POST(
       .join(" ");
     const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
 
-    await resend.emails.send({
-      from: fromEmail,
-      to: adminEmail ?? "adam@jdmrushimports.ca",
-      subject: `Research report submitted for docket ${id}`,
-      text: `${devPrefix}Marcus submitted research for docket ${id}.
+    try {
+      await resend.emails.send({
+        from: fromEmail,
+        to: adminEmail ?? "adam@jdmrushimports.ca",
+        subject: `Research report submitted for docket ${id}`,
+        text: `${devPrefix}Marcus submitted research for docket ${id}.
 
 Customer: ${customerName || "Unknown Customer"}
 Vehicle: ${vehicleSummary || "Unknown Vehicle"}
-Hammer Range (JPY): ${hammerPriceLowJpy.toLocaleString()} - ${hammerPriceHighJpy.toLocaleString()}
-Recommended Max Bid (JPY): ${recommendedMaxBidJpy.toLocaleString()}
+Hammer Range (JPY): ${validHammerPriceLowJpy.toLocaleString()} - ${validHammerPriceHighJpy.toLocaleString()}
+Recommended Max Bid (JPY): ${validRecommendedMaxBidJpy.toLocaleString()}
 Midpoint Hammer (JPY): ${midpointHammerJpy.toLocaleString()}
 FX (JPY->CAD): ${exchange.rate}
 Midpoint Hammer (CAD): ${midpointHammerCad.toLocaleString()}
@@ -362,10 +456,23 @@ Private Dealer Options: ${privateDealerOptions.length}
 
 Overall Notes:
 ${overallNotes}`,
-    });
+      });
+    } catch (emailError) {
+      return errorResponse(500, "Research saved but failed to send notification email.", {
+        operation: "resend.emails.send",
+        docketId: id,
+        emailError: toErrorObject(emailError),
+      });
+    }
 
-    return Response.json({ success: true });
-  } catch {
-    return Response.json({ success: false, error: "Invalid request body" }, { status: 400 });
+    return Response.json({
+      success: true,
+      message: "Research report submitted successfully.",
+    });
+  } catch (unexpectedError) {
+    return errorResponse(500, "Unexpected server error during research submission.", {
+      docketId: id,
+      unexpectedError: toErrorObject(unexpectedError),
+    });
   }
 }
