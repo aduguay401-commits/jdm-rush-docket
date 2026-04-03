@@ -507,6 +507,9 @@ export async function POST(
     const validHammerPriceLowJpy = hammerPriceLowJpy as number;
     const validHammerPriceHighJpy = hammerPriceHighJpy as number;
     const validRecommendedMaxBidJpy = recommendedMaxBidJpy as number;
+    const auctionResearchNotes = [salesHistoryNotes, overallNotes]
+      .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
+      .join("\n\n");
 
     const supabase = createServerClient();
     logStep("supabase.client_created", { docketId: id });
@@ -604,7 +607,7 @@ export async function POST(
         hammer_price_low_jpy: validHammerPriceLowJpy,
         hammer_price_high_jpy: validHammerPriceHighJpy,
         recommended_max_bid_jpy: validRecommendedMaxBidJpy,
-        sales_history_notes: salesHistoryNotes,
+        sales_history_notes: auctionResearchNotes,
         auction_listings: auctionListings,
       })
       .select("id");
@@ -639,16 +642,9 @@ export async function POST(
       });
     }
 
-    const dealerRows = privateDealerOptions.map((item) => {
-      const feeBreakdown = calculateImportCost({
-        vehiclePriceJPY: item.dealer_price_jpy,
-        destinationCity,
-        vehicleType: vehicleTypeRaw,
-        dutyType: dutyTypeRaw,
-        exchangeRate: exchange.rate,
-      });
-
-      return {
+    const insertedDealerRows: Array<{ id: string; option_number: number }> = [];
+    for (const item of privateDealerOptions) {
+      const dealerInsertPayload = {
         docket_id: id,
         option_number: item.option_number,
         year: item.year,
@@ -660,35 +656,68 @@ export async function POST(
         transmission: item.transmission,
         trim: item.trim,
         dealer_price_jpy: item.dealer_price_jpy,
-        dealer_price_cad: feeBreakdown.dealerPriceCAD,
         photos: item.photos,
         sales_sheet_url: item.sales_sheet_url || null,
         marcus_notes: item.marcus_notes || null,
-        calculated_fees: feeBreakdown,
-        total_delivered_cad: feeBreakdown.totalDeliveredCAD,
       };
-    });
-    logStep("supabase.private_dealer_options.insert.payload", {
-      docketId: id,
-      rowCount: dealerRows.length,
-      dealerRows,
-    });
-
-    const { data: insertedDealerRows, error: dealerOptionsError } = await supabase
-      .from("private_dealer_options")
-      .insert(dealerRows)
-      .select("id, option_number");
-    logStep("supabase.private_dealer_options.insert.result", {
-      data: insertedDealerRows,
-      error: toSupabaseError(dealerOptionsError),
-    });
-
-    if (dealerOptionsError) {
-      return errorResponse(500, "Failed to insert private dealer options.", {
-        operation: "private_dealer_options.insert",
+      logStep("supabase.private_dealer_options.insert.payload", {
         docketId: id,
-        supabase: toSupabaseError(dealerOptionsError),
+        dealerInsertPayload,
       });
+
+      const { data: insertedDealerRow, error: dealerInsertError } = await supabase
+        .from("private_dealer_options")
+        .insert(dealerInsertPayload)
+        .select("id, option_number")
+        .single();
+      logStep("supabase.private_dealer_options.insert.result", {
+        data: insertedDealerRow,
+        error: toSupabaseError(dealerInsertError),
+      });
+
+      if (dealerInsertError || !insertedDealerRow) {
+        return errorResponse(500, "Failed to insert private dealer option.", {
+          operation: "private_dealer_options.insert",
+          docketId: id,
+          optionNumber: item.option_number,
+          supabase: toSupabaseError(dealerInsertError),
+        });
+      }
+
+      const dealerFees = calculateImportCost({
+        vehiclePriceJPY: item.dealer_price_jpy,
+        destinationCity,
+        vehicleType: vehicleTypeRaw,
+        dutyType: dutyTypeRaw,
+        exchangeRate: exchange.rate,
+      });
+
+      const { data: updatedDealerRow, error: dealerUpdateError } = await supabase
+        .from("private_dealer_options")
+        .update({
+          calculated_fees: dealerFees,
+          total_delivered_cad: dealerFees.totalDeliveredCAD,
+          dealer_price_cad: dealerFees.dealerPriceCAD,
+        })
+        .eq("id", insertedDealerRow.id)
+        .select("id, option_number")
+        .single();
+      logStep("supabase.private_dealer_options.update_fees.result", {
+        data: updatedDealerRow,
+        error: toSupabaseError(dealerUpdateError),
+      });
+
+      if (dealerUpdateError || !updatedDealerRow) {
+        return errorResponse(500, "Failed to update private dealer option fee calculations.", {
+          operation: "private_dealer_options.update",
+          docketId: id,
+          privateDealerOptionId: insertedDealerRow.id,
+          optionNumber: item.option_number,
+          supabase: toSupabaseError(dealerUpdateError),
+        });
+      }
+
+      insertedDealerRows.push(updatedDealerRow);
     }
 
     const { data: clearedEstimateRows, error: clearEstimateError } = await supabase
@@ -715,10 +744,7 @@ export async function POST(
         docket_id: id,
         midpoint_hammer_jpy: midpointHammerJpy,
         midpoint_hammer_cad: midpointHammerCad,
-        calculated_fees: {
-          ...auctionEstimateFees,
-          overall_notes: overallNotes,
-        },
+        calculated_fees: auctionEstimateFees,
         total_delivered_estimate_cad: auctionEstimateFees.totalDeliveredCAD,
       })
       .select("id");
