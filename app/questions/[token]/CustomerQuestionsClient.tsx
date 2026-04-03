@@ -33,6 +33,7 @@ export function CustomerQuestionsClient({
 
   const hasUnansweredQuestions = unansweredQuestions.length > 0;
   const visibleName = customerName.trim() || "there";
+  const firstName = customerName.trim().split(/\s+/)[0] || "there";
 
   const allAnswersFilled = useMemo(
     () =>
@@ -133,9 +134,8 @@ export function CustomerQuestionsClient({
 
         <div className="mt-10 space-y-6">
           <section className="rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] sm:p-8">
-            <p className="text-sm uppercase tracking-[0.28em] text-[#E55125]">Customer Questions</p>
-            <h1 className="mt-3 text-3xl font-semibold text-white sm:text-[2.2rem]">
-              A Few Quick Questions
+            <h1 className="text-3xl font-semibold text-white sm:text-[2.2rem]">
+              A Few Quick Questions, {firstName}
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/68 sm:text-base">
               Hi {visibleName}, we need a bit more information before we can keep your docket moving.
