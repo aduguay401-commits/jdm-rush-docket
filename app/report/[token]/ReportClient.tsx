@@ -298,6 +298,10 @@ export function ReportClient({
   decisionEndpoint,
   questionEndpoint,
 }: ReportClientProps) {
+  const [approvalConfirmed, setApprovalConfirmed] = useState(false);
+  const [customerFirstName, setCustomerFirstName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [vehicleDescription, setVehicleDescription] = useState("");
   const [isDeciding, setIsDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [decisionState, setDecisionState] = useState<{
@@ -390,6 +394,15 @@ export function ReportClient({
     }
 
     setDecisionState({ path, optionNumber: optionNumber ?? null });
+    setCustomerFirstName(docket.customer_first_name?.trim() || "there");
+    setCustomerEmail(docket.customer_email?.trim() || "");
+    setVehicleDescription(
+      [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" ") || "your selected vehicle"
+    );
+    setApprovalConfirmed(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
     setIsDeciding(false);
   }
 
@@ -443,274 +456,320 @@ export function ReportClient({
           </div>
         </header>
 
-        <section className="pt-10">
-          <h1 className="text-3xl font-semibold text-white sm:text-[2.35rem]">
-            Your Custom JDM Report is Ready, {visibleName}
-          </h1>
-          <SearchSummaryCard docket={docket} />
-          {hasDecision ? (
-            <div className="mt-5 rounded-2xl border-l-4 border-[#E55125] bg-[#1a1a1a] p-5">
-              <p className="text-sm font-semibold text-emerald-400">
-                ✓ Approval received
+        {approvalConfirmed ? (
+          <section className="pt-12">
+            <div className="mx-auto max-w-[760px] rounded-3xl border border-white/10 bg-[#141414] p-6 text-center sm:p-10">
+              <div className="mx-auto flex h-[72px] w-[72px] items-center justify-center rounded-full border-2 border-[#E55125] bg-[#1a1a1a]">
+                <span className="text-3xl leading-none text-[#E55125]">✓</span>
+              </div>
+
+              <h1 className="mt-6 text-3xl font-semibold text-white sm:text-[2.35rem]">
+                You&apos;re all set, {customerFirstName}!
+              </h1>
+              <p className="mt-4 text-sm leading-6 text-white/80">
+                Your approval for {vehicleDescription} has been received. We&apos;re ready for the next steps.
               </p>
-              <p className="mt-2 text-sm leading-6 text-white/85">
-                Thanks. We have your approval on file for {customerDisplayName} ({customerDisplayEmail}) and our
-                team is moving to the next steps.
+              {customerEmail ? (
+                <p className="mt-2 text-sm leading-6 text-white/70">
+                  We&apos;ll send next-step documents to {customerEmail}.
+                </p>
+              ) : null}
+
+              <div className="mt-8 rounded-2xl border border-white/10 bg-black/30 p-5 text-left sm:p-6">
+                <h2 className="text-sm font-semibold tracking-[0.15em] text-white/75">WHAT HAPPENS NOW</h2>
+                <ol className="mt-4 space-y-3 text-sm text-white/85">
+                  <li>1. Check your email (Action required)</li>
+                  <li>2. Sign Purchase Agreement (Action required)</li>
+                  <li>3. Submit $1,500 deposit (Action required)</li>
+                  <li>4. We get to work (We handle this)</li>
+                  <li>5. We keep you updated (We handle this)</li>
+                </ol>
+              </div>
+
+              <p className="mt-6 text-sm leading-6 text-white/75">
+                Questions at any point? Reach us at{" "}
+                <a className="text-[#E55125] underline-offset-4 hover:underline" href="mailto:support@jdmrushimports.ca">
+                  support@jdmrushimports.ca
+                </a>
+                .
               </p>
+              <p className="mt-6 text-sm text-white/75">Adam &amp; the JDM Rush Team</p>
             </div>
-          ) : null}
-          {decisionError ? <p className="mt-4 text-sm text-red-400">{decisionError}</p> : null}
-        </section>
+          </section>
+        ) : null}
 
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Auction Sales History</h2>
-          <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-            <p className="text-sm text-white/65">Hammer Price Range</p>
-            <p className="mt-1 text-lg text-white">
-              {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
-            </p>
+        {!approvalConfirmed && (
+          <>
+            <section className="pt-10">
+              <h1 className="text-3xl font-semibold text-white sm:text-[2.35rem]">
+                Your Custom JDM Report is Ready, {visibleName}
+              </h1>
+              <SearchSummaryCard docket={docket} />
+              {hasDecision ? (
+                <div className="mt-5 rounded-2xl border-l-4 border-[#E55125] bg-[#1a1a1a] p-5">
+                  <p className="text-sm font-semibold text-emerald-400">
+                    ✓ Approval received
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-white/85">
+                    Thanks. We have your approval on file for {customerDisplayName} ({customerDisplayEmail}) and our
+                    team is moving to the next steps.
+                  </p>
+                </div>
+              ) : null}
+              {decisionError ? <p className="mt-4 text-sm text-red-400">{decisionError}</p> : null}
+            </section>
 
-            <p className="mt-5 text-sm text-white/65">Recommended Max Bid</p>
-            <p className="mt-1 text-xl font-semibold text-[#E55125]">
-              {formatJpy(auctionResearch?.recommended_max_bid_jpy)}
-            </p>
+            <section className="border-t border-white/10 pt-10">
+              <h2 className="text-2xl font-semibold text-white">Auction Sales History</h2>
+              <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+                <p className="text-sm text-white/65">Hammer Price Range</p>
+                <p className="mt-1 text-lg text-white">
+                  {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+                </p>
 
-            <p className="mt-5 text-sm text-white/65">Sales Notes</p>
-            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-              {renderText(auctionResearch?.sales_history_notes)}
-            </p>
-          </div>
-        </section>
+                <p className="mt-5 text-sm text-white/65">Recommended Max Bid</p>
+                <p className="mt-1 text-xl font-semibold text-[#E55125]">
+                  {formatJpy(auctionResearch?.recommended_max_bid_jpy)}
+                </p>
 
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Current Weekly Auction Listings</h2>
-          {listings.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
-              No weekly listings were included in this report.
-            </div>
-          ) : (
-            <div className="mt-5 space-y-4">
-              {listings.map((listing, index) => (
-                <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={`${index}-${listing.lot_title ?? "lot"}`}>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                    <div>
-                      <h3 className="text-lg font-semibold text-white">{renderText(listing.lot_title)}</h3>
-                      <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-white">{renderText(listing.specs)}</p>
-                    </div>
-                    {listing.auction_lot_link ? (
-                      <a
-                        className="text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
-                        href={listing.auction_lot_link}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        Open lot details
-                      </a>
-                    ) : null}
-                  </div>
+                <p className="mt-5 text-sm text-white/65">Sales Notes</p>
+                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                  {renderText(auctionResearch?.sales_history_notes)}
+                </p>
+              </div>
+            </section>
 
-                  {Array.isArray(listing.photos) && listing.photos.length > 0 ? (
-                    <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {listing.photos.map((photo, photoIndex) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          alt={`${listing.lot_title ?? "Auction listing"} photo ${photoIndex + 1}`}
-                          className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
-                          key={`${photo}-${photoIndex}`}
-                          loading="lazy"
-                          src={photo}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
+            <section className="border-t border-white/10 pt-10">
+              <h2 className="text-2xl font-semibold text-white">Current Weekly Auction Listings</h2>
+              {listings.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
+                  No weekly listings were included in this report.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {listings.map((listing, index) => (
+                    <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={`${index}-${listing.lot_title ?? "lot"}`}>
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <h3 className="text-lg font-semibold text-white">{renderText(listing.lot_title)}</h3>
+                          <p className="mt-2 whitespace-pre-wrap text-base leading-7 text-white">{renderText(listing.specs)}</p>
+                        </div>
+                        {listing.auction_lot_link ? (
+                          <a
+                            className="text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                            href={listing.auction_lot_link}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open lot details
+                          </a>
+                        ) : null}
+                      </div>
 
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Auction Option</h2>
-          <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-            <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
-              <p>
-                <span className="text-white/45">Hammer Range:</span>{" "}
-                {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+                      {Array.isArray(listing.photos) && listing.photos.length > 0 ? (
+                        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {listing.photos.map((photo, photoIndex) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt={`${listing.lot_title ?? "Auction listing"} photo ${photoIndex + 1}`}
+                              className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
+                              key={`${photo}-${photoIndex}`}
+                              loading="lazy"
+                              src={photo}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="border-t border-white/10 pt-10">
+              <h2 className="text-2xl font-semibold text-white">Auction Option</h2>
+              <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+                <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
+                  <p>
+                    <span className="text-white/45">Hammer Range:</span>{" "}
+                    {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+                  </p>
+                  <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
+                    Estimated hammer price is based on the midpoint of the 3-month sales range (
+                    {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
+                    {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
+                    actual winning hammer price at auction.
+                  </p>
+                  <p>
+                    <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
+                  </p>
+                  <p>
+                    <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
+                  </p>
+                  <p>
+                    <span className="text-white/45">Total Delivered Estimate:</span>{" "}
+                    {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
+                  </p>
+                </div>
+
+                <FeeBreakdownTable
+                  breakdown={auctionEstimate?.calculated_fees ?? null}
+                  destination={destination}
+                  exchangeRateAtReport={docket.exchange_rate_at_report}
+                  exchangeRateDate={docket.exchange_rate_date}
+                  networkFeeLabel="JPY Auction Fee"
+                />
+
+                <p className="mt-4 text-xs leading-5 text-white/55">
+                  Auction pricing is an estimate and final landed cost can change based on the final hammer result,
+                  exchange movement, and auction-side conditions.
+                </p>
+
+                {!hasDecision ? (
+                  <button
+                    className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={isDeciding}
+                    onClick={() => submitDecision("auction")}
+                    type="button"
+                  >
+                    {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
+                  </button>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="border-t border-white/10 pt-10">
+              <h2 className="text-2xl font-semibold text-white">Private Dealer Options</h2>
+              {privateDealerOptions.length === 0 ? (
+                <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
+                  No private dealer options were included in this report.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-5">
+                  {privateDealerOptions.map((option) => (
+                    <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={option.option_number}>
+                      <div className="flex flex-col gap-2">
+                        <h3 className="text-lg font-semibold text-white">
+                          Option {option.option_number} —{" "}
+                          {[option.year, option.make, option.model]
+                            .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                            .join(" ") || "N/A"}
+                        </h3>
+                      </div>
+
+                      {Array.isArray(option.photos) && option.photos.length > 0 ? (
+                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                          {option.photos.map((photo, index) => (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt={`Dealer option ${option.option_number} photo ${index + 1}`}
+                              className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
+                              key={`${photo}-${index}`}
+                              loading="lazy"
+                              src={photo}
+                            />
+                          ))}
+                        </div>
+                      ) : null}
+
+                      <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
+                        <p>
+                          <span className="text-white/45">Vehicle:</span>{" "}
+                          {[option.year, option.make, option.model].filter(Boolean).join(" ") || "N/A"}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Grade:</span> {renderText(option.grade)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Mileage:</span> {renderText(option.mileage)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Colour:</span> {renderText(option.colour)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Transmission:</span> {renderText(option.transmission)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Trim:</span> {renderText(option.trim)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Dealer Price (JPY):</span> {formatJpy(option.dealer_price_jpy)}
+                        </p>
+                        <p>
+                          <span className="text-white/45">Dealer Price (CAD):</span> {formatCad(option.dealer_price_cad)}
+                        </p>
+                      </div>
+
+                      {hasDisplayNotes(option.marcus_notes) ? (
+                        <>
+                          <p className="mt-5 text-sm text-white/65">Marcus Notes</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                            {option.marcus_notes?.trim()}
+                          </p>
+                        </>
+                      ) : null}
+
+                      <FeeBreakdownTable
+                        breakdown={option.calculated_fees}
+                        destination={destination}
+                        exchangeRateAtReport={docket.exchange_rate_at_report}
+                        exchangeRateDate={docket.exchange_rate_date}
+                        networkFeeLabel="Inter-dealer Network Fee"
+                      />
+
+                      {!hasDecision ? (
+                        <button
+                          className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                          disabled={isDeciding}
+                          onClick={() =>
+                            submitDecision(
+                              "private_dealer",
+                              option.option_number as 1 | 2 | 3
+                            )
+                          }
+                          type="button"
+                        >
+                          {isDeciding
+                            ? "Saving your choice..."
+                            : "Approve for Purchase — Private Dealer"}
+                        </button>
+                      ) : null}
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="border-t border-white/10 pt-10">
+              <h2 className="text-2xl font-semibold text-white">Ask Us Anything</h2>
+              <p className="mt-2 text-sm leading-6 text-white/65">
+                Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
               </p>
-              <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
-                Estimated hammer price is based on the midpoint of the 3-month sales range (
-                {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
-                {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
-                actual winning hammer price at auction.
-              </p>
-              <p>
-                <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
-              </p>
-              <p>
-                <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
-              </p>
-              <p>
-                <span className="text-white/45">Total Delivered Estimate:</span>{" "}
-                {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
-              </p>
-            </div>
 
-            <FeeBreakdownTable
-              breakdown={auctionEstimate?.calculated_fees ?? null}
-              destination={destination}
-              exchangeRateAtReport={docket.exchange_rate_at_report}
-              exchangeRateDate={docket.exchange_rate_date}
-              networkFeeLabel="JPY Auction Fee"
-            />
+              <div className="mt-5">
+                <textarea
+                  className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                  disabled={isSendingQuestion}
+                  onChange={(event) => setQuestionText(event.target.value)}
+                  placeholder="Type your question"
+                  value={questionText}
+                />
+              </div>
 
-            <p className="mt-4 text-xs leading-5 text-white/55">
-              Auction pricing is an estimate and final landed cost can change based on the final hammer result,
-              exchange movement, and auction-side conditions.
-            </p>
+              {questionError ? <p className="mt-4 text-sm text-red-400">{questionError}</p> : null}
+              {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
 
-            {!hasDecision ? (
               <button
-                className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isDeciding}
-                onClick={() => submitDecision("auction")}
+                className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={isSendingQuestion}
+                onClick={submitQuestion}
                 type="button"
               >
-                {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
+                {isSendingQuestion ? "Sending..." : "Send My Question"}
               </button>
-            ) : null}
-          </div>
-        </section>
-
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Private Dealer Options</h2>
-          {privateDealerOptions.length === 0 ? (
-            <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
-              No private dealer options were included in this report.
-            </div>
-          ) : (
-            <div className="mt-5 space-y-5">
-              {privateDealerOptions.map((option) => (
-                <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={option.option_number}>
-                  <div className="flex flex-col gap-2">
-                    <h3 className="text-lg font-semibold text-white">
-                      Option {option.option_number} —{" "}
-                      {[option.year, option.make, option.model]
-                        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-                        .join(" ") || "N/A"}
-                    </h3>
-                  </div>
-
-                  {Array.isArray(option.photos) && option.photos.length > 0 ? (
-                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                      {option.photos.map((photo, index) => (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          alt={`Dealer option ${option.option_number} photo ${index + 1}`}
-                          className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
-                          key={`${photo}-${index}`}
-                          loading="lazy"
-                          src={photo}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-
-                  <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
-                    <p>
-                      <span className="text-white/45">Vehicle:</span>{" "}
-                      {[option.year, option.make, option.model].filter(Boolean).join(" ") || "N/A"}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Grade:</span> {renderText(option.grade)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Mileage:</span> {renderText(option.mileage)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Colour:</span> {renderText(option.colour)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Transmission:</span> {renderText(option.transmission)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Trim:</span> {renderText(option.trim)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Dealer Price (JPY):</span> {formatJpy(option.dealer_price_jpy)}
-                    </p>
-                    <p>
-                      <span className="text-white/45">Dealer Price (CAD):</span> {formatCad(option.dealer_price_cad)}
-                    </p>
-                  </div>
-
-                  {hasDisplayNotes(option.marcus_notes) ? (
-                    <>
-                      <p className="mt-5 text-sm text-white/65">Marcus Notes</p>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                        {option.marcus_notes?.trim()}
-                      </p>
-                    </>
-                  ) : null}
-
-                  <FeeBreakdownTable
-                    breakdown={option.calculated_fees}
-                    destination={destination}
-                    exchangeRateAtReport={docket.exchange_rate_at_report}
-                    exchangeRateDate={docket.exchange_rate_date}
-                    networkFeeLabel="Inter-dealer Network Fee"
-                  />
-
-                  {!hasDecision ? (
-                    <button
-                      className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                      disabled={isDeciding}
-                      onClick={() =>
-                        submitDecision(
-                          "private_dealer",
-                          option.option_number as 1 | 2 | 3
-                        )
-                      }
-                      type="button"
-                    >
-                      {isDeciding
-                        ? "Saving your choice..."
-                        : "Approve for Purchase — Private Dealer"}
-                    </button>
-                  ) : null}
-                </article>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <section className="border-t border-white/10 pt-10">
-          <h2 className="text-2xl font-semibold text-white">Ask Us Anything</h2>
-          <p className="mt-2 text-sm leading-6 text-white/65">
-            Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
-          </p>
-
-          <div className="mt-5">
-            <textarea
-              className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
-              disabled={isSendingQuestion}
-              onChange={(event) => setQuestionText(event.target.value)}
-              placeholder="Type your question"
-              value={questionText}
-            />
-          </div>
-
-          {questionError ? <p className="mt-4 text-sm text-red-400">{questionError}</p> : null}
-          {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
-
-          <button
-            className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={isSendingQuestion}
-            onClick={submitQuestion}
-            type="button"
-          >
-            {isSendingQuestion ? "Sending..." : "Send My Question"}
-          </button>
-        </section>
+            </section>
+          </>
+        )}
       </div>
     </main>
   );
