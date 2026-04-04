@@ -72,6 +72,7 @@ export default function AgentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dockets, setDockets] = useState<Docket[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [role, setRole] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -88,6 +89,13 @@ export default function AgentDashboardPage() {
       if (role !== "agent" && role !== "admin") {
         await supabase.auth.signOut();
         router.replace("/agent/login");
+        return;
+      }
+
+      setRole(role);
+
+      if (role === "admin") {
+        router.replace("/admin/dashboard");
         return;
       }
 
@@ -125,13 +133,23 @@ export default function AgentDashboardPage() {
             <h1 className="mt-2 text-3xl font-semibold">Export Agent Dashboard</h1>
           </div>
           <div className="mt-4 flex justify-center sm:absolute sm:right-0 sm:top-0 sm:mt-0">
-            <button
-              className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white"
-              onClick={handleSignOut}
-              type="button"
-            >
-              Sign Out
-            </button>
+            <div className="flex items-center gap-2">
+              {role === "admin" ? (
+                <Link
+                  className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10"
+                  href="/admin/dashboard"
+                >
+                  Admin Dashboard
+                </Link>
+              ) : null}
+              <button
+                className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white"
+                onClick={handleSignOut}
+                type="button"
+              >
+                Sign Out
+              </button>
+            </div>
           </div>
         </header>
 

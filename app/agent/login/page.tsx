@@ -5,6 +5,30 @@ import { useRouter } from "next/navigation";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
+async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
+  const byId = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (byId.data?.role) {
+    return byId.data.role as string;
+  }
+
+  const byUserId = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (byUserId.data?.role) {
+    return byUserId.data.role as string;
+  }
+
+  return null;
+}
+
 export default function AgentLoginPage() {
   const router = useRouter();
   const supabase = createBrowserSupabaseClient();
@@ -31,6 +55,22 @@ export default function AgentLoginPage() {
       return;
     }
 
+    const { data: userResponse } = await supabase.auth.getUser();
+    const user = userResponse.user;
+
+    if (!user) {
+      setError("Unable to load user profile.");
+      setLoading(false);
+      return;
+    }
+
+    const role = await getUserRole(user.id, supabase);
+
+    if (role === "admin") {
+      router.push("/admin/dashboard");
+      return;
+    }
+
     router.push("/agent/dashboard");
   }
 
@@ -42,6 +82,7 @@ export default function AgentLoginPage() {
             JDM Rush
           </p>
           <h1 className="mt-3 text-3xl font-semibold">Export Agent Portal</h1>
+          <p className="mt-2 text-xs text-white/60">Admin users are redirected to the admin dashboard after sign-in.</p>
         </div>
 
         <form className="space-y-4" onSubmit={handleSignIn}>
