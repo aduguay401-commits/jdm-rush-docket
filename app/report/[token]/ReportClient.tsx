@@ -301,6 +301,7 @@ export function ReportClient({
   const [approvalConfirmed, setApprovalConfirmed] = useState(false);
   const [customerFirstName, setCustomerFirstName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
+  const [agreementUrl, setAgreementUrl] = useState("");
   const [vehicleDescription, setVehicleDescription] = useState("");
   const [isDeciding, setIsDeciding] = useState(false);
   const [decisionError, setDecisionError] = useState<string | null>(null);
@@ -379,7 +380,7 @@ export function ReportClient({
       body: JSON.stringify({ path, dealer_index: optionNumber }),
     });
 
-    const result = (await response.json()) as { success?: boolean; error?: string };
+    const result = (await response.json()) as { success?: boolean; error?: string; agreementUrl?: string };
 
     if (response.status === 409) {
       setDecisionError("You've already submitted your approval...");
@@ -396,6 +397,12 @@ export function ReportClient({
     setDecisionState({ path, optionNumber: optionNumber ?? null });
     setCustomerFirstName(docket.customer_first_name?.trim() || "there");
     setCustomerEmail(docket.customer_email?.trim() || "");
+    setAgreementUrl(
+      result.agreementUrl ??
+        (path === "private_dealer"
+          ? "https://forms.wix.com/r/7191838185536618530"
+          : "https://forms.wix.com/r/7211765470112776777")
+    );
     setVehicleDescription(
       [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
         .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -484,6 +491,48 @@ export function ReportClient({
                   <li>4. We get to work (We handle this)</li>
                   <li>5. We keep you updated (We handle this)</li>
                 </ol>
+              </div>
+
+              <div className="mt-8 text-left">
+                <h2 className="text-sm font-semibold tracking-[0.22em] text-[#E55125]">TAKE ACTION NOW</h2>
+                <div className="mt-4 flex flex-col gap-4 md:flex-row">
+                  <article className="flex-1 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a] p-5 sm:p-6">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[#E55125]">STEP 1</p>
+                    <h3 className="mt-3 text-xl font-semibold text-white">Sign Your Purchase Agreement</h3>
+                    <p className="mt-3 text-sm leading-6 text-white/75">
+                      Takes less than 2 minutes and unlocks sourcing + shipping prep right away.
+                    </p>
+                    <a
+                      className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-[#E55125] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#f06a40]"
+                      href={agreementUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Sign Agreement →
+                    </a>
+                  </article>
+
+                  <article className="flex-1 rounded-2xl border border-[#2a2a2a] bg-[#1a1a1a] p-5 sm:p-6">
+                    <p className="text-xs font-semibold tracking-[0.16em] text-[#E55125]">STEP 2</p>
+                    <h3 className="mt-3 text-xl font-semibold text-white">Submit Your Deposit</h3>
+                    <p className="mt-3 text-sm leading-6 text-white/75">
+                      $1,500 CAD total secures your vehicle and confirms your allocation in the pipeline.
+                    </p>
+                    <p className="mt-2 text-sm text-white/65">$500 non-refundable + $1,000 refundable</p>
+                    <a
+                      className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-white px-4 py-3 text-sm font-semibold text-black transition hover:bg-white/90"
+                      href="https://www.jdmrushimports.ca/deposit"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      Submit Deposit →
+                    </a>
+                  </article>
+                </div>
+                <p className="mt-4 text-sm leading-6 text-white/70">
+                  Not ready right now? No problem — we&apos;ve sent everything to {customerEmail || "your email"} so
+                  you can complete it anytime.
+                </p>
               </div>
 
               <p className="mt-6 text-sm leading-6 text-white/75">
