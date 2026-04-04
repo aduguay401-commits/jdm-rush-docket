@@ -147,9 +147,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
 
   const { data: docket, error: docketError } = await supabase
     .from("dockets")
-    .select(
-      "id, customer_first_name, customer_last_name, customer_email, vehicle_year, vehicle_make, vehicle_model, budget_bracket, destination_city, destination_province, timeline, status, selected_path, selected_private_dealer_option, exchange_rate_at_report, exchange_rate_date"
-    )
+    .select("*")
     .eq("report_url_token", token)
     .maybeSingle<DocketReportRecord>();
 
@@ -279,7 +277,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
     <ReportClient
       auctionEstimate={normalizedAuctionEstimate}
       auctionResearch={normalizedAuctionResearch}
-      decisionEndpoint={`/api/customer/report/${token}/decision`}
+      decisionEndpoint={`/api/customer/approve/${token}`}
       docket={docket}
       privateDealerOptions={normalizedPrivateDealerOptions}
       questionEndpoint={`/api/customer/report/${token}/question`}

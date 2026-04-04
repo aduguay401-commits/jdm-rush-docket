@@ -46,8 +46,11 @@ export type DocketReportRecord = {
   destination_province: string | null;
   timeline: string | null;
   status: string | null;
-  selected_path: string | null;
-  selected_private_dealer_option: number | null;
+  selected_path?: string | null;
+  selected_private_dealer_option?: number | null;
+  chosen_path?: string | null;
+  chosen_dealer_index?: number | null;
+  approved_at?: string | null;
   exchange_rate_at_report: number | null;
   exchange_rate_date: string | null;
 };
@@ -301,23 +304,34 @@ export function ReportClient({
     path: "private_dealer" | "auction";
     optionNumber: 1 | 2 | 3 | null;
   } | null>(() => {
+    const selectedPath =
+      docket.chosen_path === "private_dealer" || docket.chosen_path === "auction"
+        ? docket.chosen_path
+        : docket.selected_path === "private_dealer" || docket.selected_path === "auction"
+          ? docket.selected_path
+          : null;
+
+    const selectedOption =
+      docket.chosen_dealer_index === 1 || docket.chosen_dealer_index === 2 || docket.chosen_dealer_index === 3
+        ? docket.chosen_dealer_index
+        : docket.selected_private_dealer_option === 1 ||
+            docket.selected_private_dealer_option === 2 ||
+            docket.selected_private_dealer_option === 3
+          ? docket.selected_private_dealer_option
+          : null;
+
     if (docket.status !== "decision_made") {
       return null;
     }
 
-    if (docket.selected_path === "auction") {
+    if (selectedPath === "auction") {
       return { path: "auction", optionNumber: null };
     }
 
-    if (
-      docket.selected_path === "private_dealer" &&
-      (docket.selected_private_dealer_option === 1 ||
-        docket.selected_private_dealer_option === 2 ||
-        docket.selected_private_dealer_option === 3)
-    ) {
+    if (selectedPath === "private_dealer" && selectedOption) {
       return {
         path: "private_dealer",
-        optionNumber: docket.selected_private_dealer_option,
+        optionNumber: selectedOption,
       };
     }
 
@@ -336,9 +350,14 @@ export function ReportClient({
 
   const hasDecision = decisionState !== null;
   const destination = cityLabel(docket.destination_city);
-  const decisionSuccessMessage = hasDecision
-    ? "✅ Great choice! We’ve received your selection and our team will proceed with the next steps."
-    : null;
+  const customerDisplayName =
+    [docket.customer_first_name, docket.customer_last_name]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .join(" ") || "Customer";
+  const customerDisplayEmail =
+    typeof docket.customer_email === "string" && docket.customer_email.trim().length > 0
+      ? docket.customer_email
+      : "No email on file";
 
   async function submitDecision(path: "private_dealer" | "auction", optionNumber?: 1 | 2 | 3) {
     if (hasDecision || isDeciding) {
@@ -353,13 +372,19 @@ export function ReportClient({
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ path, optionNumber }),
+      body: JSON.stringify({ path, dealer_index: optionNumber }),
     });
 
     const result = (await response.json()) as { success?: boolean; error?: string };
 
+    if (response.status === 409) {
+      setDecisionError("You've already submitted your approval...");
+      setIsDeciding(false);
+      return;
+    }
+
     if (!response.ok || !result.success) {
-      setDecisionError(result.error ?? "Failed to save your selection.");
+      setDecisionError("Something went wrong. Please email support@jdmrushimports.ca");
       setIsDeciding(false);
       return;
     }
@@ -423,10 +448,16 @@ export function ReportClient({
             Your Custom JDM Report is Ready, {visibleName}
           </h1>
           <SearchSummaryCard docket={docket} />
-          {decisionSuccessMessage ? (
-            <p className="mt-5 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-300">
-              {decisionSuccessMessage}
-            </p>
+          {hasDecision ? (
+            <div className="mt-5 rounded-2xl border-l-4 border-[#E55125] bg-[#1a1a1a] p-5">
+              <p className="text-sm font-semibold text-emerald-400">
+                ✓ Approval received
+              </p>
+              <p className="mt-2 text-sm leading-6 text-white/85">
+                Thanks. We have your approval on file for {customerDisplayName} ({customerDisplayEmail}) and our
+                team is moving to the next steps.
+              </p>
+            </div>
           ) : null}
           {decisionError ? <p className="mt-4 text-sm text-red-400">{decisionError}</p> : null}
         </section>
