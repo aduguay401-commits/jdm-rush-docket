@@ -449,6 +449,43 @@ export function ReportClient({
   const listings = Array.isArray(auctionResearch?.auction_listings)
     ? auctionResearch?.auction_listings
     : [];
+  const confirmationSteps = [
+    {
+      number: 1,
+      title: "Check your email",
+      badge: "Action required",
+      badgeTone: "action" as const,
+      detail: `We've sent your next-step documents to ${customerEmail || "your email address"}. Please open them to begin.`,
+    },
+    {
+      number: 2,
+      title: "Sign Purchase Agreement",
+      badge: "Action required",
+      badgeTone: "action" as const,
+      detail: "Complete your purchase agreement so we can officially start sourcing and shipping prep.",
+    },
+    {
+      number: 3,
+      title: "Submit $1,500 deposit",
+      badge: "Action required",
+      badgeTone: "action" as const,
+      detail: "Submit your deposit to secure allocation and lock in your place in the import pipeline.",
+    },
+    {
+      number: 4,
+      title: "We get to work",
+      badge: "We handle this",
+      badgeTone: "handled" as const,
+      detail: "Our team handles sourcing, inspections, export logistics, and the full import coordination process.",
+    },
+    {
+      number: 5,
+      title: "We keep you updated",
+      badge: "We handle this",
+      badgeTone: "handled" as const,
+      detail: "You'll receive regular progress updates as milestones are completed through delivery.",
+    },
+  ];
 
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-5 py-10 text-white sm:px-6 sm:py-12">
@@ -474,7 +511,7 @@ export function ReportClient({
                 You&apos;re all set, {customerFirstName}!
               </h1>
               <p className="mt-4 text-sm leading-6 text-white/80">
-                Your approval for {vehicleDescription} has been received. We&apos;re ready for the next steps.
+                Your approval for {vehicleDescription}{" "}has been received.
               </p>
               {customerEmail ? (
                 <p className="mt-2 text-sm leading-6 text-white/70">
@@ -482,15 +519,32 @@ export function ReportClient({
                 </p>
               ) : null}
 
-              <div className="mt-8 rounded-2xl border border-white/10 bg-black/30 p-5 text-left sm:p-6">
-                <h2 className="text-sm font-semibold tracking-[0.15em] text-white/75">WHAT HAPPENS NOW</h2>
-                <ol className="mt-4 space-y-3 text-sm text-white/85">
-                  <li>1. Check your email (Action required)</li>
-                  <li>2. Sign Purchase Agreement (Action required)</li>
-                  <li>3. Submit $1,500 deposit (Action required)</li>
-                  <li>4. We get to work (We handle this)</li>
-                  <li>5. We keep you updated (We handle this)</li>
-                </ol>
+              <div className="mt-8 rounded-[12px] bg-[#1a1a1a] p-8 text-left">
+                <h2 className="text-sm font-semibold tracking-[0.22em] text-[#E55125]">WHAT HAPPENS NOW</h2>
+                <div className="mt-6">
+                  {confirmationSteps.map((step) => (
+                    <article className="mb-6 flex items-start gap-4 last:mb-0" key={step.number}>
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#E55125] text-sm font-semibold text-white">
+                        {step.number}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-base font-semibold text-white">{step.title}</h3>
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${
+                              step.badgeTone === "action"
+                                ? "bg-[#E55125]/20 text-[#ff9b7a]"
+                                : "bg-[#323232] text-[#d1d1d1]"
+                            }`}
+                          >
+                            {step.badge}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-[1.6] text-white/60">{step.detail}</p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-8 text-left">
