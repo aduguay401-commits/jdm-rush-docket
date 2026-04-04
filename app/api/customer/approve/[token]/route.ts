@@ -62,22 +62,35 @@ function buildApprovalEmailHtml({
             <tr>
               <td style="padding:24px;">
                 ${devBanner}
-                <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#ffffff;">You're approved - next steps for your ${vehicleDescription}</h1>
-                <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;">Hi ${customerName}, we have your approval on file and are ready to move forward.</p>
-                <div style="border-left:4px solid #E55125;background:#1a1a1a;padding:16px 18px;border-radius:10px;">
-                  <p style="margin:0 0 10px;font-size:14px;line-height:1.6;color:#f0f0f0;">Deposit required: <strong>$1,500 CAD total</strong></p>
-                  <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#c8c8c8;">$500 non-refundable</p>
-                  <p style="margin:0;font-size:14px;line-height:1.6;color:#c8c8c8;">$1,000 refundable</p>
+                <h1 style="margin:0 0 12px;font-size:26px;line-height:1.25;color:#ffffff;">You're in. Let's go get your car. 🎉</h1>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;">Hi ${customerName.split(" ")[0] || customerName}, your approval is locked in for your ${vehicleDescription}.</p>
+
+                <div style="margin:0 0 16px;padding:16px 18px;border:1px solid #2f2f2f;border-radius:10px;background:#171717;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#E55125;font-weight:700;letter-spacing:0.04em;">STEP 1: Sign Purchase Agreement</p>
+                  <p style="margin:0;font-size:14px;line-height:1.7;color:#d0d0d0;">Please complete the purchase agreement so we can move immediately to final sourcing.</p>
                 </div>
-                <p style="margin:16px 0 0;font-size:14px;line-height:1.7;color:#d0d0d0;">Customer: ${customerName} (${customerEmail})</p>
-                <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:22px;">
+
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 18px;">
                   <tr>
                     <td align="center" style="border-radius:999px;background:#E55125;">
-                      <a href="${agreementUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">Sign Purchase Agreement</a>
+                      <a href="${agreementUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">Sign Your Purchase Agreement →</a>
                     </td>
                   </tr>
                 </table>
-                <p style="margin:18px 0 0;font-size:12px;line-height:1.6;color:#9f9f9f;">Need help? Reply to this email or contact support@jdmrushimports.ca.</p>
+
+                <div style="margin:0 0 16px;padding:16px 18px;border:1px solid #2f2f2f;border-radius:10px;background:#171717;">
+                  <p style="margin:0 0 8px;font-size:14px;line-height:1.5;color:#E55125;font-weight:700;letter-spacing:0.04em;">STEP 2: Submit deposit</p>
+                  <p style="margin:0 0 12px;font-size:14px;line-height:1.7;color:#d0d0d0;">Once the agreement is signed, submit your $1,500 CAD deposit to activate sourcing.</p>
+                  <div style="border-left:4px solid #E55125;background:#1a1a1a;padding:14px 16px;border-radius:10px;">
+                    <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:#f0f0f0;">Deposit required: <strong>$1,500 CAD total</strong></p>
+                    <p style="margin:0 0 6px;font-size:14px;line-height:1.6;color:#c8c8c8;">$500 non-refundable</p>
+                    <p style="margin:0;font-size:14px;line-height:1.6;color:#c8c8c8;">$1,000 refundable</p>
+                  </div>
+                </div>
+
+                <p style="margin:0 0 10px;font-size:14px;line-height:1.7;color:#d0d0d0;">Customer: ${customerName} (${customerEmail})</p>
+                <p style="margin:0 0 16px;font-size:14px;line-height:1.7;color:#d0d0d0;">We will send your first sourcing update within 48-72 hours after both steps are complete.</p>
+                <p style="margin:0;font-size:12px;line-height:1.6;color:#9f9f9f;">Need help? Reply to this email or contact support@jdmrushimports.ca.</p>
               </td>
             </tr>
           </table>
