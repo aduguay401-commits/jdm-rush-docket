@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
+import { createClient } from "@/lib/supabase/client";
 
 type Props = {
   initialDockets: NormalizedAdminDocket[];
@@ -79,6 +80,31 @@ function formatCurrencyCad(value: number | null | undefined) {
   }).format(value);
 }
 
+function formatStatus(status: string | null | undefined) {
+  switch (status) {
+    case "new":
+      return "New";
+    case "questions_sent":
+      return "Questions Sent";
+    case "answers_received":
+      return "Answers Received";
+    case "research_in_progress":
+      return "Research In Progress";
+    case "report_sent":
+      return "Report Sent";
+    case "decision_made":
+      return "Decision Made";
+    case "cleared":
+      return "Cleared";
+    case "lost":
+      return "Lost";
+    case "paused":
+      return "Paused";
+    default:
+      return "New";
+  }
+}
+
 function getCustomerName(docket: NormalizedAdminDocket) {
   return `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() || "Unnamed Customer";
 }
@@ -120,6 +146,10 @@ function getMarcusStatus(docket: NormalizedAdminDocket) {
     return "Paused";
   }
   return "In Progress";
+}
+
+function getReminderCount(docket: NormalizedAdminDocket) {
+  return docket.email_log.filter((entry) => entry.email_type === "manual_reminder").length;
 }
 
 export default function AdminDashboardClient({ initialDockets }: Props) {
@@ -324,6 +354,12 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     }
   }
 
+  async function handleLogout() {
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    window.location.href = "/agent/login";
+  }
+
   const metrics = useMemo(() => {
     const active = dockets.filter(isActive).length;
     const needsAttention = dockets.filter(isNeedsAttention).length;
@@ -399,7 +435,16 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       <div className="mx-auto w-full max-w-[1400px]">
         <header className="mb-6 border-b border-white/10 pb-4">
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#E55125]">JDM Rush</p>
-          <h1 className="mt-2 text-3xl font-semibold">Admin Pipeline Dashboard</h1>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <h1 className="text-3xl font-semibold">Admin Pipeline Dashboard</h1>
+            <button
+              className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
+              onClick={() => void handleLogout()}
+              type="button"
+            >
+              Logout
+            </button>
+          </div>
         </header>
 
         <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -474,6 +519,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                 const status = docket.status ?? "new";
                 const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-zinc-700 text-zinc-100";
                 const pausedRow = isPaused(docket);
+                const reminderCount = getReminderCount(docket);
 
                 return (
                   <tr
@@ -492,10 +538,12 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     <td className="px-3 py-3 font-medium">{getCustomerName(docket)}</td>
                     <td className="px-3 py-3 text-white/85">{getVehicleLabel(docket)}</td>
                     <td className="px-3 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>{status}</span>
+                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
+                        {formatStatus(docket.status)}
+                      </span>
                     </td>
                     <td className="px-3 py-3 text-white/80">{getDaysInStatus(docket)}</td>
-                    <td className="px-3 py-3 text-white/80">{docket.reminders_sent_total}</td>
+                    <td className="px-3 py-3 text-white/80">{reminderCount}</td>
                     <td className="px-3 py-3 text-white/85">{formatCurrencyCad(docket.estimated_deal_value)}</td>
                     <td className="px-3 py-3 text-white/80">{getMarcusStatus(docket)}</td>
                     <td className="px-3 py-3">
@@ -570,7 +618,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     onChange={(event) => setStatusDraft(event.target.value)}
                   >
                     {STATUS_ORDER.map((status) => (
-                      <option key={status} value={status}>{status}</option>
+                      <option key={status} value={status}>
+                        {formatStatus(status)}
+                      </option>
                     ))}
                   </select>
                 </label>
@@ -675,7 +725,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
             <section className="mt-4 border-b border-white/10 pb-4">
               <p className="text-sm text-white/70">
-                Reminder count: {selectedDocket.email_log.filter((entry) => entry.email_type === "manual_reminder").length}
+                Reminder count: {getReminderCount(selectedDocket)}
               </p>
               <button
                 className="mt-2 rounded-md border border-[#E55125]/70 px-3 py-2 text-sm text-[#E55125] hover:bg-[#E55125]/10"
