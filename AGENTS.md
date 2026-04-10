@@ -1,4 +1,4 @@
-# AGENTS.md — JDM Rush Docket
+# AGENTS.md — Rascal Pricing
 
 ## Workflow rules
 - Never commit directly to main
@@ -27,12 +27,13 @@
 ## Execution and Reporting Expectations
 - Tasks should be broken into small, explicit steps
 - Prefer single-purpose edits over multi-step instructions
-- Do not combine edit, commit, push, and deployment logic into a single execution
-- Complete file edits first, then handle git and deployment as separate steps
+- Do not combine unrelated feature edits into a single execution
+- Complete file edits first, then validation, then git actions
+- Never merge to main automatically
 
 ## Completion Rules
 - Do not mark a task as complete until all requested phases are finished
-- If a task has multiple phases (edit, git, deploy), each must be completed in sequence
+- If a task has multiple phases, each must be completed in sequence
 - If a phase cannot be completed, clearly indicate the stage where execution stopped
 
 ## Failure Awareness
@@ -48,7 +49,7 @@
 - Molty is the orchestrator (planning, verification, reporting)
 - Codex CLI is the executor (all code edits)
 
-Molty must not perform code edits directly  
+Molty must not perform code edits directly
 Molty must not treat attempted edits as successful completion
 
 ---
@@ -147,7 +148,7 @@ For every code task, report acceptance criteria in this exact format:
 
 - criterion: `<description>` -> pass/fail
 
-Do not summarize verification vaguely.  
+Do not summarize verification vaguely.
 Do not collapse multiple checks into one statement.
 
 ---
@@ -231,7 +232,7 @@ Every code-edit task must include a unique temporary proof marker generated for 
 
 Examples:
 - `PROOF_2026_04_10_A1`
-- `PROOF_docket_home_001`
+- `PROOF_rascal_home_001`
 
 The proof marker must appear in one of:
 - the requested code change itself
@@ -247,9 +248,9 @@ After verification, the proof marker may be removed in a second Codex task if th
 For every code task, the response must include the exact stdout from at least one verification command that proves the requested change exists in the changed file.
 
 Accepted examples:
-- `grep -n 'PROOF_xxx' src/app/page.tsx`
-- `git diff -- src/app/page.tsx`
-- `sed -n '1,40p' src/app/page.tsx`
+- `grep -n 'PROOF_xxx' app/page.tsx`
+- `git diff -- app/page.tsx`
+- `sed -n '1,40p' app/page.tsx`
 
 A summary of command output is not sufficient by itself.
 
@@ -274,15 +275,54 @@ If any of the above is missing:
 
 ---
 
-### Preferred Validation Pattern
+## Safe Git Automation Rule (MANDATORY)
 
-When practical, use a unique proof marker in the actual requested change so the execution can be validated quickly by searching:
-- the changed file
-- the returned diff
-- the Codex session logs
+Molty may automatically run git add, git commit, and git push only when all of the following are true:
 
-Preferred example:
-- add `console.log("PROOF_DOCKET_0410_X1")`
-- verify the file contains it
-- verify the returned validation output contains it
-- remove it in a follow-up cleanup task if needed
+- current branch is a feature branch
+- branch is not `main`
+- code validation passed
+- no Stop and ask before condition was triggered
+- no unresolved repo-state conflict exists
+- the task is low-risk and self-contained
+
+If any of the above is false:
+- do not commit
+- do not push
+- report `STATUS: FAILED` or stop for guidance
+
+Molty must never:
+- push directly to `main`
+- merge to `main`
+- deploy production directly
+- bypass failed validation
+
+---
+
+### Required Output for Auto Git Tasks
+
+If Molty performs git actions, the response must also include:
+- `GIT ACTIONS`
+- `BRANCH`
+- `COMMIT MESSAGE`
+- `PUSH RESULT`
+
+Example format:
+- `GIT ACTIONS: git add, git commit, git push`
+- `BRANCH: feature/example-branch`
+- `COMMIT MESSAGE: Add homepage CTA section`
+- `PUSH RESULT: pushed to origin/feature/example-branch`
+
+---
+
+### Preferred Preview Workflow
+
+Preferred workflow for normal feature work:
+
+1. code edit via Codex CLI
+2. validation passes
+3. commit to current feature branch
+4. push feature branch
+5. review in Vercel preview
+6. iterate as needed
+7. merge to `main` manually after approval
