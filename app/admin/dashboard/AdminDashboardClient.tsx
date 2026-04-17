@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
-import { createClient } from "@/lib/supabase/client";
+import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Props = {
   initialDockets: NormalizedAdminDocket[];
@@ -355,7 +355,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   }
 
   async function handleLogout() {
-    const supabase = createClient();
+    const supabase = createBrowserSupabaseClient();
     await supabase.auth.signOut();
     window.location.href = "/agent/login";
   }
