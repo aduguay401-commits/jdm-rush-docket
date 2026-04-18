@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
@@ -144,15 +144,18 @@ function getDaysInStatus(docket: NormalizedAdminDocket) {
   return Number.isFinite(days) && days >= 0 ? days : 0;
 }
 
-function getMarcusStatus(docket: NormalizedAdminDocket) {
+function getAgentStatus(docket: NormalizedAdminDocket) {
   if (docket.status === "new" || docket.status === "answers_received") {
-    return "Needs Marcus";
+    return "Pending Agent";
   }
   if (docket.status === "cleared" || docket.status === "lost") {
     return "Complete";
   }
   if (isPaused(docket)) {
     return "Paused";
+  }
+  if (Array.isArray(docket.auction_research) && docket.auction_research.length > 0) {
+    return "Research Submitted";
   }
   return "In Progress";
 }
@@ -171,7 +174,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [flaggedOnly, setFlaggedOnly] = useState(false);
 
   const [selectedDocketId, setSelectedDocketId] = useState<string | null>(null);
+  const [scrollToQuestionsOnOpen, setScrollToQuestionsOnOpen] = useState(false);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const customerQaRef = useRef<HTMLElement | null>(null);
 
   const [statusDraft, setStatusDraft] = useState("new");
   const [lostReasonDraft, setLostReasonDraft] = useState("");
@@ -201,6 +206,26 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     setPausedUntilDraft(selectedDocket.paused_until ? selectedDocket.paused_until.slice(0, 10) : "");
     setNotesSavedState("idle");
   }, [selectedDocket]);
+
+  useEffect(() => {
+    if (!selectedDocket || !scrollToQuestionsOnOpen) {
+      return;
+    }
+
+    if (selectedDocket.status !== "answers_received") {
+      setScrollToQuestionsOnOpen(false);
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => {
+      customerQaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollToQuestionsOnOpen(false);
+    });
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+    };
+  }, [selectedDocket, scrollToQuestionsOnOpen]);
 
   useEffect(() => {
     function onEscape(event: KeyboardEvent) {
@@ -310,6 +335,11 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     }
 
     setSendingReminderId(null);
+  }
+
+  function handleOpenDrawer(docketId: string, options?: { scrollToQuestions?: boolean }) {
+    setSelectedDocketId(docketId);
+    setScrollToQuestionsOnOpen(Boolean(options?.scrollToQuestions));
   }
 
   async function saveStatus() {
@@ -556,7 +586,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                 <th className="px-3 py-3">Days in status</th>
                 <th className="px-3 py-3">Reminders sent</th>
                 <th className="px-3 py-3">Est. deal value</th>
-                <th className="px-3 py-3">Marcus status</th>
+                <th className="px-3 py-3">AGENT STATUS</th>
                 <th className="px-3 py-3">Actions</th>
               </tr>
             </thead>
@@ -591,20 +621,34 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     <td className="px-3 py-3 text-white/80">{getDaysInStatus(docket)}</td>
                     <td className="px-3 py-3 text-white/80">{reminderCount}</td>
                     <td className="px-3 py-3 text-white/85">{formatCurrencyCad(docket.estimated_deal_value)}</td>
-                    <td className="px-3 py-3 text-white/80">{getMarcusStatus(docket)}</td>
+                    <td className="px-3 py-3 text-white/80">{getAgentStatus(docket)}</td>
                     <td className="px-3 py-3">
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          className="rounded-md border border-[#E55125]/70 px-2 py-1 text-xs text-[#E55125] hover:bg-[#E55125]/10"
-                          disabled={sendingReminderId === docket.id}
-                          onClick={() => void handleSendReminder(docket.id)}
-                          type="button"
-                        >
-                          {sendingReminderId === docket.id ? "Sending..." : "Send Reminder"}
-                        </button>
+                        {status === "questions_sent" ||
+                        status === "research_in_progress" ||
+                        status === "report_sent" ||
+                        status === "decision_made" ? (
+                          <button
+                            className="rounded-md border border-[#E55125]/70 px-2 py-1 text-xs text-[#E55125] hover:bg-[#E55125]/10"
+                            disabled={sendingReminderId === docket.id}
+                            onClick={() => void handleSendReminder(docket.id)}
+                            type="button"
+                          >
+                            {sendingReminderId === docket.id ? "Sending..." : "Send Reminder"}
+                          </button>
+                        ) : null}
+                        {status === "answers_received" ? (
+                          <button
+                            className="rounded-md border border-orange-400/80 px-2 py-1 text-xs text-orange-300 hover:bg-orange-400/10"
+                            onClick={() => handleOpenDrawer(docket.id, { scrollToQuestions: true })}
+                            type="button"
+                          >
+                            View Answers
+                          </button>
+                        ) : null}
                         <button
                           className="rounded-md border border-white/20 px-2 py-1 text-xs text-white hover:bg-white/10"
-                          onClick={() => setSelectedDocketId(docket.id)}
+                          onClick={() => handleOpenDrawer(docket.id)}
                           type="button"
                         >
                           View
@@ -805,6 +849,25 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       {entry.changed_by ?? "system"} • {formatDate(entry.created_at)}
                     </p>
                   </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="mt-4 border-b border-white/10 pb-4" ref={customerQaRef}>
+              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/70">Customer Q&A</h3>
+              <div className="space-y-3 text-sm">
+                {selectedDocket.marcus_questions.length === 0 ? (
+                  <p className="text-white/50">Awaiting customer responses</p>
+                ) : null}
+                {selectedDocket.marcus_questions.map((question) => (
+                  <article className="rounded-md border border-white/10 bg-black/25 p-3" key={question.id}>
+                    <p className="text-white/85">{question.question_text || "Untitled question"}</p>
+                    <p className="mt-1 text-orange-300">
+                      {question.answer_text && question.answer_text.trim().length > 0
+                        ? question.answer_text
+                        : "Awaiting customer responses"}
+                    </p>
+                  </article>
                 ))}
               </div>
             </section>

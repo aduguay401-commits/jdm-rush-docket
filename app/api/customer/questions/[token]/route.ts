@@ -93,11 +93,12 @@ export async function POST(
     }
 
     const supabase = createServerClient();
+    const serviceRoleSupabase = createServerClient();
 
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, customer_first_name, customer_email, vehicle_year, vehicle_make, vehicle_model"
+        "id, status, customer_first_name, customer_email, vehicle_year, vehicle_make, vehicle_model"
       )
       .eq("questions_url_token", token)
       .maybeSingle();
@@ -154,6 +155,17 @@ export async function POST(
 
     if (statusError) {
       return Response.json({ success: false, error: statusError.message }, { status: 500 });
+    }
+
+    const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
+      docket_id: docket.id,
+      old_status: docket.status,
+      new_status: "answers_received",
+      changed_by: "customer",
+    });
+
+    if (statusHistoryError) {
+      return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
     }
 
     const resendApiKey = process.env.RESEND_API_KEY;

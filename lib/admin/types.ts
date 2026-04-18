@@ -17,6 +17,14 @@ export type EmailLogItem = {
   body_snapshot: string | null;
 };
 
+export type MarcusQuestionItem = {
+  id: string;
+  question_text: string | null;
+  answer_text: string | null;
+  answered_at: string | null;
+  created_at: string | null;
+};
+
 export type AdminDocket = {
   id: string;
   created_at: string;
@@ -42,6 +50,7 @@ export type AdminDocket = {
   marcus_questions_count: CountRelation[] | null;
   customer_questions_count: CountRelation[] | null;
   email_log_count: CountRelation[] | null;
+  marcus_questions: MarcusQuestionItem[] | null;
   auction_research: Record<string, unknown>[] | null;
   private_dealer_options: Record<string, unknown>[] | null;
   follow_up_sequences: Record<string, unknown>[] | null;
@@ -53,6 +62,7 @@ export type NormalizedAdminDocket = AdminDocket & {
   marcus_questions_total: number;
   customer_questions_total: number;
   reminders_sent_total: number;
+  marcus_questions: MarcusQuestionItem[];
   docket_status_history: DocketStatusHistoryItem[];
   email_log: EmailLogItem[];
 };

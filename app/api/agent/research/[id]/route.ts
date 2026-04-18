@@ -492,12 +492,13 @@ export async function POST(
       .join("\n\n");
 
     const supabase = createServerClient();
+    const serviceRoleSupabase = createServerClient();
     logStep("supabase.client_created", { docketId: id });
 
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, vehicle_type, duty_type"
+        "id, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, vehicle_type, duty_type"
       )
       .eq("id", id)
       .maybeSingle();
@@ -517,6 +518,7 @@ export async function POST(
     if (!docket) {
       return errorResponse(400, "Docket not found.", { docketId: id });
     }
+    const oldStatus = docket.status;
 
     const rawDestinationCity = toNonEmptyString(docket.destination_city);
     const destinationCity = rawDestinationCity ? normalizeDestinationCity(rawDestinationCity) : null;
@@ -765,6 +767,21 @@ export async function POST(
       });
     }
 
+    const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
+      docket_id: id,
+      old_status: oldStatus,
+      new_status: "report_sent",
+      changed_by: "agent",
+    });
+
+    if (statusHistoryError) {
+      return errorResponse(500, "Failed to insert docket status history.", {
+        operation: "docket_status_history.insert",
+        docketId: id,
+        supabase: toSupabaseError(statusHistoryError),
+      });
+    }
+
     const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL;
@@ -799,11 +816,8 @@ export async function POST(
         to: adminEmail ?? "adam@jdmrushimports.ca",
         from: fromEmail,
       });
-      await resend.emails.send({
-        from: fromEmail,
-        to: adminEmail ?? "adam@jdmrushimports.ca",
-        subject: `Research report submitted for docket ${id}`,
-        text: `${devPrefix}Marcus submitted research for docket ${id}.
+      const subject = `Research report submitted for docket ${id}`;
+      const bodySnapshot = `${devPrefix}Marcus submitted research for docket ${id}.
 
 Customer: ${customerName || "Unknown Customer"}
 Vehicle: ${vehicleSummary || "Unknown Vehicle"}
@@ -816,8 +830,39 @@ Auction Listings: ${auctionListings.length}
 Private Dealer Options: ${privateDealerOptions.length}
 
 Overall Notes:
-${overallNotes}`,
+${overallNotes}`;
+      const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
+
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        text: bodySnapshot,
       });
+
+      if (sendResult.error) {
+        return errorResponse(500, "Research saved but failed to send notification email.", {
+          operation: "resend.emails.send",
+          docketId: id,
+          emailError: sendResult.error,
+        });
+      }
+
+      const { error: emailLogError } = await serviceRoleSupabase.from("email_log").insert({
+        docket_id: id,
+        email_type: "email_4_report_ready",
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: bodySnapshot,
+      });
+
+      if (emailLogError) {
+        return errorResponse(500, "Research saved but failed to log report email.", {
+          operation: "email_log.insert",
+          docketId: id,
+          supabase: toSupabaseError(emailLogError),
+        });
+      }
       logStep("email.send.success", { docketId: id });
     } catch (emailError) {
       logStep("email.send.failed", {

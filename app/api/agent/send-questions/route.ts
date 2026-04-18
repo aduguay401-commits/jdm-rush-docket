@@ -95,6 +95,23 @@ export async function POST(request: Request) {
     }
 
     const supabase = createServerClient();
+    const serviceRoleSupabase = createServerClient();
+
+    const { data: currentDocket, error: currentDocketError } = await supabase
+      .from("dockets")
+      .select("id, status")
+      .eq("id", docketId)
+      .maybeSingle<{ id: string; status: string | null }>();
+
+    if (currentDocketError) {
+      return Response.json({ success: false, error: currentDocketError.message }, { status: 500 });
+    }
+
+    if (!currentDocket) {
+      return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
+    }
+
+    const oldStatus = currentDocket.status;
 
     const rows = questions.map((questionText) => ({
       docket_id: docketId,
@@ -114,6 +131,17 @@ export async function POST(request: Request) {
 
     if (updateError) {
       return Response.json({ success: false, error: updateError.message }, { status: 500 });
+    }
+
+    const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
+      docket_id: docketId,
+      old_status: oldStatus,
+      new_status: "questions_sent",
+      changed_by: "agent",
+    });
+
+    if (statusHistoryError) {
+      return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
     }
 
     const { data: docket, error: docketError } = await supabase
