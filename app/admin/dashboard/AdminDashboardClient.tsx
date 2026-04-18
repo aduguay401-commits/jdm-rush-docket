@@ -938,7 +938,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             {!showArchived ? (
               <section className="mt-6 border-t border-white/10 pt-4">
                 <button
-                  className="w-full rounded-md border border-white/30 px-4 py-3 text-base font-bold text-white/85 hover:bg-white/5"
+                  className="w-full rounded-md border border-[#E55125] bg-[#E55125] px-4 py-3 text-base font-bold text-white hover:bg-[#cf4a22]"
                   onClick={() => void handleArchiveSelectedDocket()}
                   type="button"
                 >
