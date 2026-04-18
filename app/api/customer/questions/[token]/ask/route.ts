@@ -71,17 +71,52 @@ export async function POST(
       devMode && marcusOriginalEmail
         ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
         : "";
-
-    await resend.emails.send({
-      from: fromEmail,
-      to: marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
-      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
-      subject: `Customer submitted a new question for docket ${docket.id}`,
-      text: `${marcusDevPrefix}Customer ${customerName || "Unknown Customer"} sent a question for docket ${docket.id}.
+    const recipientEmail = marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca";
+    const subject = `Customer submitted a new question for docket ${docket.id}`;
+    const bodySnapshot = `${marcusDevPrefix}Customer ${customerName || "Unknown Customer"} sent a question for docket ${docket.id}.
 
 Question:
-${questionText}`,
-    });
+${questionText}`;
+
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
+        subject,
+        text: bodySnapshot,
+      });
+
+      if (sendResult.error) {
+        console.error("[Customer Follow-up Question Send Error]", {
+          docketId: docket.id,
+          token,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+
+      const { error: emailLogError } = await supabase.from("email_log").insert({
+        docket_id: docket.id,
+        email_type: "customer_followup_question_sent",
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: bodySnapshot,
+      });
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Customer Follow-up Question Send Error]", {
+        docketId: docket.id,
+        token,
+        recipient: recipientEmail,
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
     return Response.json({ success: true });
   } catch {

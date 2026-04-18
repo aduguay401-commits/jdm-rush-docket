@@ -311,15 +311,35 @@ export async function POST(request: Request) {
       originalRecipient,
     })
 
-    const sendResult = await resend.emails.send({
-      from: fromEmail,
-      to: recipientEmail,
-      subject,
-      html,
-      text,
-    })
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        html,
+        text,
+      })
 
-    if (sendResult.error) {
+      if (sendResult.error) {
+        console.error('[Follow-up Email Send Error]', {
+          sequenceId: sequence.id,
+          docketId: docket.id,
+          sequenceType,
+          step,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        })
+        continue
+      }
+    } catch (error) {
+      console.error('[Follow-up Email Send Error]', {
+        sequenceId: sequence.id,
+        docketId: docket.id,
+        sequenceType,
+        step,
+        recipient: recipientEmail,
+        error,
+      })
       continue
     }
 

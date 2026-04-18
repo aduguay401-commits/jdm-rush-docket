@@ -121,13 +121,33 @@ export async function POST(
     originalRecipient: docket.customer_email,
   });
 
-  await resend.emails.send({
-    from: fromEmail,
-    to: recipientEmail,
-    subject,
-    html,
-    text: `Hi ${customerName},\n\nJust checking in on your ${vehicleDescription}. Reply to this email if anything has changed and we will update your docket right away.\n\nJDM Rush Imports`,
-  });
+  try {
+    const sendResult = await resend.emails.send({
+      from: fromEmail,
+      to: recipientEmail,
+      subject,
+      html,
+      text: `Hi ${customerName},\n\nJust checking in on your ${vehicleDescription}. Reply to this email if anything has changed and we will update your docket right away.\n\nJDM Rush Imports`,
+    });
+
+    if (sendResult.error) {
+      console.error("[Manual Reminder Send Error]", {
+        docketId: docket.id,
+        id,
+        recipient: recipientEmail,
+        error: sendResult.error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
+  } catch (error) {
+    console.error("[Manual Reminder Send Error]", {
+      docketId: docket.id,
+      id,
+      recipient: recipientEmail,
+      error,
+    });
+    return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+  }
 
   const { error: emailLogError } = await supabase.from("email_log").insert({
     docket_id: docket.id,
