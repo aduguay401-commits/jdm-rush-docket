@@ -20,6 +20,7 @@ type AgentCreateResponse = {
   success: boolean;
   error?: string;
   agent?: AgentRow;
+  emailSent?: boolean;
 };
 
 type AgentDeleteResponse = {
@@ -41,6 +42,7 @@ export default function AgentManagementClient() {
   const [submitting, setSubmitting] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   const [firstName, setFirstName] = useState("");
@@ -75,6 +77,7 @@ export default function AgentManagementClient() {
   async function handleCreateAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setWarning(null);
     setSuccess(null);
 
     if (tempPassword.trim().length < 8) {
@@ -107,7 +110,13 @@ export default function AgentManagementClient() {
       setLastName("");
       setEmail("");
       setTempPassword("");
-      setSuccess("Agent account created and welcome email sent.");
+      if (result.emailSent === false) {
+        setWarning(
+          "Agent created successfully. Welcome email could not be sent — please share login credentials manually."
+        );
+      } else {
+        setSuccess("Agent account created and welcome email sent.");
+      }
     } catch (createError) {
       setError(createError instanceof Error ? createError.message : "Failed to create agent");
     } finally {
@@ -122,6 +131,7 @@ export default function AgentManagementClient() {
     }
 
     setError(null);
+    setWarning(null);
     setSuccess(null);
     setDeletingId(id);
 
@@ -218,6 +228,7 @@ export default function AgentManagementClient() {
         </section>
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
+        {warning ? <p className="mb-4 text-sm text-amber-300">{warning}</p> : null}
         {success ? <p className="mb-4 text-sm text-green-400">{success}</p> : null}
 
         <section className="rounded-xl border border-white/10 bg-[#131313]">

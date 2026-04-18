@@ -162,12 +162,9 @@ export async function POST(request: Request) {
   const fromEmail = process.env.FROM_EMAIL;
   const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
   const devMode = process.env.DEV_MODE === "true";
-  if (!resendApiKey || !fromEmail) {
-    return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
-  }
 
   const supabase = createServerClient();
-  const resend = new Resend(resendApiKey);
+  const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
   const createdAuthUser = await supabase.auth.admin.createUser({
     email,
@@ -204,7 +201,12 @@ export async function POST(request: Request) {
     originalRecipient: email,
   });
 
+  let emailSent = false;
   try {
+    if (!resend || !fromEmail) {
+      throw new Error("Email configuration is missing");
+    }
+
     const sendResult = await resend.emails.send({
       from: fromEmail,
       to: recipientEmail,
@@ -214,15 +216,13 @@ export async function POST(request: Request) {
     });
 
     if (sendResult.error) {
-      await supabase.from("profiles").delete().eq("id", authUserId);
-      await supabase.auth.admin.deleteUser(authUserId);
-      return Response.json({ success: false, error: "Failed to send welcome email" }, { status: 500 });
+      console.error("Failed to send welcome email", sendResult.error);
+    } else {
+      emailSent = true;
     }
-  } catch {
-    await supabase.from("profiles").delete().eq("id", authUserId);
-    await supabase.auth.admin.deleteUser(authUserId);
-    return Response.json({ success: false, error: "Failed to send welcome email" }, { status: 500 });
+  } catch (emailError) {
+    console.error("Failed to send welcome email", emailError);
   }
 
-  return Response.json({ success: true, agent: insertedProfile });
+  return Response.json({ success: true, agent: insertedProfile, emailSent });
 }
