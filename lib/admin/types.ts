@@ -36,6 +36,7 @@ export type AdminDocket = {
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
+  vehicle_description: string | null;
   destination_city: string | null;
   destination_province: string | null;
   budget_bracket: string | null;

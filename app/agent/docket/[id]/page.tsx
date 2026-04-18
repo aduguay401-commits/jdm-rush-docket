@@ -17,6 +17,7 @@ type Docket = {
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
+  vehicle_description: string | null;
   budget_bracket: string | null;
   destination_city: string | null;
   destination_province: string | null;
@@ -359,7 +360,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, budget_bracket, destination_city, destination_province, timeline, additional_notes"
+          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes"
         )
         .eq("id", id)
         .maybeSingle();
@@ -1054,6 +1055,11 @@ export default function AgentDocketDetailPage({
             <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
               <h2 className="mb-4 text-xl font-semibold">Sales Lead Information</h2>
               <div className="grid gap-2 text-sm text-white/85 sm:grid-cols-2">
+                {docket.vehicle_description?.trim() ? (
+                  <p className="sm:col-span-2">
+                    <span className="text-white">Customer&apos;s Vehicle Request:</span> {docket.vehicle_description}
+                  </p>
+                ) : null}
                 <p>
                   <span className="text-white">Name:</span> {docket.customer_first_name || ""} {docket.customer_last_name || ""}
                 </p>

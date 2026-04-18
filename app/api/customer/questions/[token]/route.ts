@@ -65,7 +65,7 @@ function buildAnswersReceivedEmailHtml({
                 ${devBanner}
                 <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">Got your answers — we're on it, ${firstName}</h1>
                 <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
-                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Thanks for answering our questions. Our export agent Marcus is now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Thanks for answering our questions. We have received your answers. Our trusted export agents in Japan are now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.</p>
                 <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
               </td>
             </tr>
@@ -204,7 +204,7 @@ export async function POST(
         : "";
     const text = `${textDevPrefix}Hi ${firstName},
 
-Thanks for answering our questions. Our export agent Marcus is now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.
+Thanks for answering our questions. We have received your answers. Our trusted export agents in Japan are now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.
 
 Adam & the JDM Rush Team
 support@jdmrushimports.ca`;

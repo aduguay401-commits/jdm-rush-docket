@@ -705,6 +705,11 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                 {[selectedDocket.destination_city, selectedDocket.destination_province].filter(Boolean).join(", ") || "N/A"}
               </p>
               <p><span className="text-white/60">Vehicle:</span> {getVehicleLabel(selectedDocket)}</p>
+              {selectedDocket.vehicle_description?.trim() ? (
+                <p>
+                  <span className="text-white/60">Customer&apos;s Vehicle Request:</span> {selectedDocket.vehicle_description}
+                </p>
+              ) : null}
             </section>
 
             <section className="mt-4 space-y-3 border-b border-white/10 pb-4">

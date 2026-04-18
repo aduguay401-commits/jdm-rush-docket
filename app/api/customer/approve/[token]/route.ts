@@ -15,11 +15,18 @@ function buildCustomerName(firstName: string | null | undefined, lastName: strin
 }
 
 function buildVehicleDescription(
-  year: string | null | undefined,
+  year: string | number | null | undefined,
   make: string | null | undefined,
   model: string | null | undefined
 ) {
-  return [year, make, model]
+  const normalizedYear =
+    typeof year === "number"
+      ? String(year)
+      : typeof year === "string" && year.trim().length > 0
+        ? year.trim()
+        : null;
+
+  return [normalizedYear, make, model]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
 }
@@ -220,7 +227,7 @@ export async function POST(
         : "unknown@email.com";
     const vehicleDescription =
       buildVehicleDescription(
-        docket.vehicle_year as string | null,
+        docket.vehicle_year as string | number | null,
         docket.vehicle_make as string | null,
         docket.vehicle_model as string | null
       ) || "vehicle";

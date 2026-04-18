@@ -1,4 +1,6 @@
 // SQL migration note:
+// ALTER TABLE dockets ADD COLUMN IF NOT EXISTS vehicle_description TEXT;
+// SQL migration note:
 // ALTER TABLE dockets ADD COLUMN IF NOT EXISTS additional_info JSONB;
 
 import { Resend } from 'resend'
@@ -14,6 +16,7 @@ type IntakePayload = {
   vehicle_year?: string
   vehicle_make?: string
   vehicle_model?: string
+  vehicle_description?: string
   budget?: string
   budget_bracket?: string
   destination_city?: string
@@ -153,6 +156,15 @@ function toAdditionalInfoValue(value: unknown): string | number | boolean | null
   return null
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function buildAdditionalInfo(payload: IntakePayload): Record<string, string | number | boolean> | null {
   const entries: Array<[string, string | number | boolean | null]> = [
     ['mileage', toAdditionalInfoValue(payload.desired_mileage)],
@@ -220,25 +232,38 @@ export async function POST(request: Request) {
     }
 
     const additionalInfo = buildAdditionalInfo(payload)
+    const customerFirstName = toOptionalString(payload.customer_first_name)
+    const customerLastName = toOptionalString(payload.customer_last_name)
+    const customerPhone = toOptionalString(payload.customer_phone)
+    const vehicleYear = toOptionalString(payload.vehicle_year)
+    const vehicleMake = toOptionalString(payload.vehicle_make)
+    const vehicleModel = toOptionalString(payload.vehicle_model)
+    const vehicleDescription = toOptionalString(payload.vehicle_description)
+    const budgetBracket = toOptionalString(payload.budget_bracket ?? payload.budget)
+    const timeline = toOptionalString(payload.timeline)
+    const additionalNotes = toOptionalString(payload.additional_notes)
+    const selectedPath = toOptionalString(payload.selected_path)
+    const selectedPrivateDealerOption = toOptionalNumber(payload.selected_private_dealer_option)
 
     const docketInsert = {
       status: 'new' as const,
-      customer_first_name: toOptionalString(payload.customer_first_name),
-      customer_last_name: toOptionalString(payload.customer_last_name),
+      customer_first_name: customerFirstName,
+      customer_last_name: customerLastName,
       customer_email: customerEmail,
-      customer_phone: toOptionalString(payload.customer_phone),
-      vehicle_year: toOptionalString(payload.vehicle_year),
-      vehicle_make: toOptionalString(payload.vehicle_make),
-      vehicle_model: toOptionalString(payload.vehicle_model),
-      budget_bracket: toOptionalString(payload.budget_bracket ?? payload.budget),
+      customer_phone: customerPhone,
+      vehicle_year: vehicleYear,
+      vehicle_make: vehicleMake,
+      vehicle_model: vehicleModel,
+      vehicle_description: vehicleDescription,
+      budget_bracket: budgetBracket,
       destination_city: destinationCity,
       destination_province: destinationProvince,
       vehicle_type: toOptionalString(payload.vehicle_type),
       duty_type: toOptionalString(payload.duty_type),
-      timeline: toOptionalString(payload.timeline),
-      additional_notes: toOptionalString(payload.additional_notes),
-      selected_path: toOptionalString(payload.selected_path),
-      selected_private_dealer_option: toOptionalNumber(payload.selected_private_dealer_option),
+      timeline,
+      additional_notes: additionalNotes,
+      selected_path: selectedPath,
+      selected_private_dealer_option: selectedPrivateDealerOption,
       ...(shouldStoreAdditionalInfo && additionalInfo ? { additional_info: additionalInfo } : {}),
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
@@ -277,8 +302,15 @@ export async function POST(request: Request) {
     }
 
     const resend = new Resend(resendApiKey)
-    const fullName = `${payload.customer_first_name ?? ''} ${payload.customer_last_name ?? ''}`.trim()
-    const vehicle = `${payload.vehicle_make ?? ''} ${payload.vehicle_model ?? ''}`.trim()
+    const fullName = `${customerFirstName ?? ''} ${customerLastName ?? ''}`.trim()
+    const customerFirstNameForEmail = customerFirstName ?? 'there'
+    const makeModelForSummary = [vehicleMake, vehicleModel].filter(Boolean).join(' ')
+    const vehicleForSummary =
+      vehicleDescription ?? (makeModelForSummary.length > 0 ? makeModelForSummary : 'N/A')
+    const destinationForSummary =
+      [destinationCity, destinationProvince].filter(Boolean).join(', ') || 'N/A'
+    const timelineForSummary = timeline ?? 'N/A'
+    const budgetForSummary = budgetBracket ?? 'N/A'
     const customerDevPrefix =
       devMode && customerOriginalEmail
         ? `[DEV MODE — This email would normally go to: ${customerOriginalEmail}]\n\n`
@@ -291,22 +323,62 @@ export async function POST(request: Request) {
 
     // Email 1: Customer Welcome
     try {
-      const subject = 'Welcome to JDM Rush Imports'
-      const bodySnapshot = `${customerDevPrefix}Hi ${payload.customer_first_name ?? 'there'},
+      const subject = `Welcome to JDM Rush — your docket is ready, ${customerFirstNameForEmail}`
+      const devModeBannerHtml =
+        devMode && customerOriginalEmail
+          ? `<div style='margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;'>[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
+          : ''
+      const bodySnapshot = `<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;'>
+  ${devModeBannerHtml}
+  <img src='https://www.jdmrushimports.ca/logo.png' alt='JDM Rush' style='height: 40px; margin-bottom: 32px;' />
+  <h1 style='font-size: 24px; font-weight: 700; margin-bottom: 8px;'>You are in the queue, ${escapeHtml(customerFirstNameForEmail)}! 🇯🇵</h1>
+  <p style='color: #aaaaaa; font-size: 15px; margin-bottom: 24px;'>Hi ${escapeHtml(customerFirstNameForEmail)},</p>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
+    Thanks for reaching out to JDM Rush Imports. We have received your request and created your personal import docket. Our team is reviewing your submission now and will be in touch shortly.
+  </p>
+  <div style='background: #1a1a1a; border-radius: 10px; padding: 24px; margin: 28px 0;'>
+    <p style='font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 12px 0;'>YOUR REQUEST SUMMARY</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Vehicle:</strong> ${escapeHtml(vehicleForSummary)}</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Destination:</strong> ${escapeHtml(destinationForSummary)}</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Timeline:</strong> ${escapeHtml(timelineForSummary)}</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Budget:</strong> ${escapeHtml(budgetForSummary)}</p>
+  </div>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
+    While you wait, feel free to explore our <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125;'>Import Calculator</a> to get a sense of total landed costs for your vehicle.
+  </p>
+  <p style='color: #666666; font-size: 13px; margin-top: 32px; line-height: 1.6;'>
+    Questions? Just reply to this email — we are here every step of the way.
+  </p>
+  <p style='color: #888888; font-size: 14px; margin-top: 32px;'>
+    Adam & the JDM Rush Team<br/>
+    <a href='mailto:support@jdmrushimports.ca' style='color: #E55125;'>support@jdmrushimports.ca</a>
+  </p>
+</div>`
+      const textBody = `${customerDevPrefix}You are in the queue, ${customerFirstNameForEmail}!
 
-Thanks for submitting your intake form with JDM Rush Imports.
+Hi ${customerFirstNameForEmail},
 
-We have created your docket (${docket.id}) and our team will review your request shortly.
+Thanks for reaching out to JDM Rush Imports. We have received your request and created your personal import docket. Our team is reviewing your submission now and will be in touch shortly.
 
-Vehicle: ${vehicle}
+Your request summary
+- Vehicle: ${vehicleForSummary}
+- Destination: ${destinationForSummary}
+- Timeline: ${timelineForSummary}
+- Budget: ${budgetForSummary}
 
-Best,
-JDM Rush Imports`
+Explore our Import Calculator:
+https://www.jdmrushimports.ca/import-calculator
+
+Questions? Reply to this email.
+
+Adam & the JDM Rush Team
+support@jdmrushimports.ca`
       const sendResult = await resend.emails.send({
         from: fromEmail,
         to: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         subject,
-        text: bodySnapshot,
+        html: bodySnapshot,
+        text: textBody,
       })
 
       if (sendResult.error) {
@@ -347,7 +419,7 @@ Docket ID: ${docket.id}
 Customer: ${fullName}
 Email: ${payload.customer_email}
 Phone: ${payload.customer_phone ?? 'N/A'}
-Vehicle: ${vehicle}
+Vehicle: ${vehicleForSummary}
 Timeline: ${payload.timeline ?? 'N/A'}
 
 Please review and begin follow-up.`
@@ -390,13 +462,13 @@ Please review and begin follow-up.`
 
     // Email 3: Admin Notification
     try {
-      const subject = `Admin Notification: New Intake ${docket.id}`
+      const subject = `New Docket — ${fullName || 'Unknown Customer'} / ${vehicleForSummary}`
       const bodySnapshot = `A new intake has been received and added to Supabase.
 
 Docket ID: ${docket.id}
 Customer: ${fullName}
 Email: ${payload.customer_email}
-Vehicle: ${vehicle}
+Vehicle: ${vehicleForSummary}
 Exchange Rate (JPY/CAD): ${exchange.rate}
 Exchange Rate Date: ${exchange.date}`
       const sendResult = await resend.emails.send({
