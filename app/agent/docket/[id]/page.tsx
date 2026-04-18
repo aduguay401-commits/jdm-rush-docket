@@ -30,6 +30,12 @@ type CustomerAnswer = {
   answer_text: string | null;
 };
 
+type SentQuestion = {
+  id: string;
+  question_text: string;
+  created_at: string;
+};
+
 type AuctionListingForm = {
   lotTitle: string;
   specs: string;
@@ -58,6 +64,31 @@ type DealerOptionForm = {
 const MAX_QUESTIONS = 10;
 const RESEARCH_SUBMIT_ERROR_MESSAGE =
   "Unable to submit research. Please check all fields and try again, or contact support at adam@jdmrushimports.ca";
+const QUESTIONS_BASE_STATUS = "questions_sent";
+const STATUS_ORDER = [
+  "new",
+  "questions_sent",
+  "answers_received",
+  "research_in_progress",
+  "report_sent",
+  "decision_made",
+  "unresponsive",
+  "paused",
+  "cleared",
+  "lost",
+] as const;
+const STATUS_LABELS: Record<string, string> = {
+  new: "New",
+  questions_sent: "Questions Sent",
+  answers_received: "Answers Received",
+  research_in_progress: "Research In Progress",
+  report_sent: "Report Sent",
+  decision_made: "Decision Made",
+  cleared: "Cleared",
+  lost: "Lost",
+  paused: "Paused",
+  unresponsive: "Unresponsive",
+};
 
 const INITIAL_AUCTION_LISTING: AuctionListingForm = {
   lotTitle: "",
@@ -144,6 +175,59 @@ function cleanFileName(value: string) {
   return value.replace(/[^a-zA-Z0-9._-]/g, "_");
 }
 
+function formatStatus(status: string | null | undefined) {
+  const normalized = status ?? "new";
+  return STATUS_LABELS[normalized] ?? normalized;
+}
+
+function isStatusAtOrAfter(status: string | null | undefined, baseStatus: string) {
+  const normalized = status ?? "new";
+  const currentIndex = STATUS_ORDER.indexOf(normalized as (typeof STATUS_ORDER)[number]);
+  const baseIndex = STATUS_ORDER.indexOf(baseStatus as (typeof STATUS_ORDER)[number]);
+
+  if (currentIndex === -1 || baseIndex === -1) {
+    return normalized === baseStatus;
+  }
+
+  return currentIndex >= baseIndex;
+}
+
+function extractStoragePath(filePath: string) {
+  const trimmed = filePath.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+    try {
+      const url = new URL(trimmed);
+      const marker = "/docket-files/";
+      const markerIndex = url.pathname.indexOf(marker);
+      if (markerIndex >= 0) {
+        return decodeURIComponent(url.pathname.slice(markerIndex + marker.length));
+      }
+    } catch {
+      return trimmed;
+    }
+  }
+
+  if (trimmed.startsWith("docket-files/")) {
+    return trimmed.slice("docket-files/".length);
+  }
+
+  return trimmed.replace(/^\/+/, "");
+}
+
+function extractOriginalFileName(filePath: string) {
+  const storagePath = extractStoragePath(filePath);
+  if (!storagePath) {
+    return "file";
+  }
+
+  const basename = storagePath.split("/").pop() ?? storagePath;
+  return basename.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-/i, "");
+}
+
 export default function AgentDocketDetailPage({
   params,
 }: {
@@ -162,6 +246,12 @@ export default function AgentDocketDetailPage({
   const [questionsConfirmation, setQuestionsConfirmation] = useState<string | null>(null);
   const [proceedConfirmation, setProceedConfirmation] = useState<string | null>(null);
   const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
+  const [sentQuestions, setSentQuestions] = useState<SentQuestion[]>([]);
+  const [addingQuestion, setAddingQuestion] = useState(false);
+  const [addQuestionDraft, setAddQuestionDraft] = useState("");
+  const [addQuestionLoading, setAddQuestionLoading] = useState(false);
+  const [addQuestionSuccess, setAddQuestionSuccess] = useState<string | null>(null);
+  const [photoPreviewUrls, setPhotoPreviewUrls] = useState<Record<string, string>>({});
 
   const [hammerPriceLowJpy, setHammerPriceLowJpy] = useState("");
   const [hammerPriceHighJpy, setHammerPriceHighJpy] = useState("");
@@ -176,11 +266,77 @@ export default function AgentDocketDetailPage({
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
 
-  const isResearchInProgress = docket?.status === "research_in_progress";
-  const isAnswersReceived = docket?.status === "answers_received";
+  const currentStatus = docket?.status ?? "new";
+  const isResearchInProgress = currentStatus === "research_in_progress";
+  const isAnswersReceived = currentStatus === "answers_received";
+  const isQuestionsLocked = isStatusAtOrAfter(currentStatus, QUESTIONS_BASE_STATUS);
   const shouldShowResearchForm = isResearchInProgress || isAnswersReceived || researchLocked;
-  const shouldHideQuestionsAndProceed = isResearchInProgress || isAnswersReceived || researchLocked;
+  const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
   const isFormDisabled = submittingResearch || researchLocked;
+  const customerQuestionsLink = docket?.questions_url_token
+    ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
+    : null;
+  const questionsSentAt = sentQuestions.length > 0 ? sentQuestions[0]?.created_at : null;
+
+  async function createSignedPreviewUrl(filePath: string) {
+    const storagePath = extractStoragePath(filePath);
+    if (!storagePath) {
+      return null;
+    }
+
+    const { data, error } = await supabase.storage.from("docket-files").createSignedUrl(storagePath, 3600);
+
+    if (error || !data?.signedUrl) {
+      return null;
+    }
+
+    return data.signedUrl;
+  }
+
+  async function syncPreviewUrls(filePaths: string[]) {
+    const missing = filePaths.filter((path) => Boolean(path) && !photoPreviewUrls[path]);
+    if (missing.length === 0) {
+      return;
+    }
+
+    const entries = await Promise.all(
+      missing.map(async (path) => {
+        const signedUrl = await createSignedPreviewUrl(path);
+        return signedUrl ? [path, signedUrl] : null;
+      })
+    );
+
+    const next: Record<string, string> = {};
+    for (const item of entries) {
+      if (!item) {
+        continue;
+      }
+
+      const [path, signedUrl] = item;
+      next[path] = signedUrl;
+    }
+
+    if (Object.keys(next).length === 0) {
+      return;
+    }
+
+    setPhotoPreviewUrls((prev) => ({ ...prev, ...next }));
+  }
+
+  async function loadSentQuestions(docketId: string) {
+    const { data, error } = await supabase
+      .from("marcus_questions")
+      .select("id, question_text, created_at")
+      .eq("docket_id", docketId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      setError(error.message);
+      return;
+    }
+
+    setSentQuestions((data ?? []) as SentQuestion[]);
+  }
 
   useEffect(() => {
     async function loadDocket() {
@@ -216,12 +372,26 @@ export default function AgentDocketDetailPage({
 
       setDocket(data as Docket);
 
-      const { data: answersData, error: answersError } = await supabase
-        .from("marcus_questions")
-        .select("id, question_text, answer_text")
-        .eq("docket_id", id)
-        .not("answered_at", "is", null)
-        .order("created_at", { ascending: true });
+      const [{ data: sentQuestionsData, error: sentQuestionsError }, { data: answersData, error: answersError }] =
+        await Promise.all([
+          supabase
+            .from("marcus_questions")
+            .select("id, question_text, created_at")
+            .eq("docket_id", id)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("marcus_questions")
+            .select("id, question_text, answer_text")
+            .eq("docket_id", id)
+            .not("answered_at", "is", null)
+            .order("created_at", { ascending: true }),
+        ]);
+
+      if (sentQuestionsError) {
+        setError(sentQuestionsError.message);
+        setLoading(false);
+        return;
+      }
 
       if (answersError) {
         setError(answersError.message);
@@ -229,12 +399,68 @@ export default function AgentDocketDetailPage({
         return;
       }
 
+      setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setLoading(false);
     }
 
     void loadDocket();
   }, [id, router, supabase]);
+
+  useEffect(() => {
+    if (!docket) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function hydratePreviewUrls() {
+      const paths = [
+        ...auctionListings.flatMap((listing) => listing.photos),
+        ...dealerOptions.flatMap((option) => option.photos),
+      ]
+        .map((path) => path.trim())
+        .filter((path, index, array) => path.length > 0 && array.indexOf(path) === index);
+
+      if (paths.length === 0) {
+        return;
+      }
+
+      const signedEntries = await Promise.all(
+        paths.map(async (path) => {
+          const storagePath = extractStoragePath(path);
+          if (!storagePath) {
+            return null;
+          }
+
+          const { data, error } = await supabase.storage.from("docket-files").createSignedUrl(storagePath, 3600);
+          if (error || !data?.signedUrl) {
+            return null;
+          }
+
+          return [path, data.signedUrl] as const;
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      const nextEntries = signedEntries.filter((item): item is readonly [string, string] => Boolean(item));
+
+      if (nextEntries.length === 0) {
+        return;
+      }
+
+      setPhotoPreviewUrls((prev) => ({ ...prev, ...Object.fromEntries(nextEntries) }));
+    }
+
+    void hydratePreviewUrls();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [auctionListings, dealerOptions, docket, supabase]);
 
   useEffect(() => {
     if (redirectCountdown === null) {
@@ -313,16 +539,53 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
-    const customerQuestionsLink = docket?.questions_url_token
-      ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
-      : null;
-
-    setQuestionsConfirmation(
-      customerQuestionsLink
-        ? `Questions sent successfully. Docket status updated to questions_sent.\nCustomer Questions Link: ${customerQuestionsLink}`
-        : "Questions sent successfully. Docket status updated to questions_sent."
-    );
+    await loadSentQuestions(id);
+    setQuestionsConfirmation("Questions sent to customer");
+    setAddQuestionSuccess(null);
     setSavingQuestions(false);
+  }
+
+  async function sendAddedQuestion() {
+    if (!isQuestionsLocked || addQuestionLoading) {
+      return;
+    }
+
+    const nextQuestion = addQuestionDraft.trim();
+    if (!nextQuestion) {
+      setError("Enter a question before sending.");
+      return;
+    }
+
+    setAddQuestionLoading(true);
+    setError(null);
+    setAddQuestionSuccess(null);
+    setQuestionsConfirmation(null);
+
+    const response = await fetch("/api/agent/send-questions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        docketId: id,
+        questions: [nextQuestion],
+      }),
+    });
+
+    const result = (await response.json()) as { success?: boolean; error?: string };
+
+    if (!response.ok || !result.success) {
+      setError(result.error ?? "Failed to send question.");
+      setAddQuestionLoading(false);
+      return;
+    }
+
+    await loadSentQuestions(id);
+    setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
+    setAddQuestionDraft("");
+    setAddingQuestion(false);
+    setAddQuestionSuccess("Question sent to customer");
+    setAddQuestionLoading(false);
   }
 
   async function proceedWithoutQuestions() {
@@ -373,9 +636,35 @@ export default function AgentDocketDetailPage({
     });
   }
 
+  function removeAuctionListingPhoto(listingIndex: number, photoIndex: number) {
+    setAuctionListings((prev) =>
+      prev.map((listing, index) =>
+        index === listingIndex
+          ? {
+              ...listing,
+              photos: listing.photos.filter((_, indexInPhotos) => indexInPhotos !== photoIndex),
+            }
+          : listing
+      )
+    );
+  }
+
   function updateDealerOption(optionNumber: number, patch: Partial<DealerOptionForm>) {
     setDealerOptions((prev) =>
       prev.map((item) => (item.optionNumber === optionNumber ? { ...item, ...patch } : item))
+    );
+  }
+
+  function removeDealerOptionPhoto(optionNumber: number, photoIndex: number) {
+    setDealerOptions((prev) =>
+      prev.map((option) =>
+        option.optionNumber === optionNumber
+          ? {
+              ...option,
+              photos: option.photos.filter((_, indexInPhotos) => indexInPhotos !== photoIndex),
+            }
+          : option
+      )
     );
   }
 
@@ -490,6 +779,7 @@ export default function AgentDocketDetailPage({
       updateAuctionListing(index, {
         photos: [...auctionListings[index].photos, ...uploaded],
       });
+      await syncPreviewUrls(uploaded);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload listing photos.";
       setError(message);
@@ -517,6 +807,7 @@ export default function AgentDocketDetailPage({
       updateDealerOption(optionNumber, {
         photos: [...currentOption.photos, ...uploaded],
       });
+      await syncPreviewUrls(uploaded);
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload dealer photos.";
       setError(message);
@@ -787,7 +1078,7 @@ export default function AgentDocketDetailPage({
                   <span className="text-white">Timeline:</span> {docket.timeline || "N/A"}
                 </p>
                 <p>
-                  <span className="text-white">Current Status:</span> {docket.status || "new"}
+                  <span className="text-white">Current Status:</span> {formatStatus(docket.status)}
                 </p>
                 <p className="sm:col-span-2">
                   <span className="text-white">Additional Notes:</span> {docket.additional_notes || "N/A"}
@@ -929,7 +1220,43 @@ export default function AgentDocketDetailPage({
                           />
                         </label>
                         {listing.photos.length > 0 ? (
-                          <p className="text-xs text-white/70">{listing.photos.length} photo file(s) uploaded.</p>
+                          <div className="flex flex-wrap gap-3">
+                            {listing.photos.map((photoPath, photoIndex) => {
+                              const previewUrl = photoPreviewUrls[photoPath];
+                              const fileName = extractOriginalFileName(photoPath);
+
+                              return (
+                                <div className="w-20" key={`${photoPath}-${photoIndex}`}>
+                                  <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
+                                    {previewUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        alt={fileName}
+                                        className="h-full w-full object-cover"
+                                        src={previewUrl}
+                                      />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
+                                        No preview
+                                      </div>
+                                    )}
+                                    <button
+                                      aria-label={`Remove ${fileName}`}
+                                      className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
+                                      disabled={isFormDisabled}
+                                      onClick={() => removeAuctionListingPhoto(listingIndex, photoIndex)}
+                                      type="button"
+                                    >
+                                      ×
+                                    </button>
+                                  </div>
+                                  <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
+                                    {fileName}
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
                         ) : null}
                       </div>
                     ))}
@@ -1102,10 +1429,48 @@ export default function AgentDocketDetailPage({
                             </label>
 
                             {option.photos.length > 0 ? (
-                              <p className="text-xs text-white/70">{option.photos.length} photo file(s) uploaded.</p>
+                              <div className="flex flex-wrap gap-3">
+                                {option.photos.map((photoPath, photoIndex) => {
+                                  const previewUrl = photoPreviewUrls[photoPath];
+                                  const fileName = extractOriginalFileName(photoPath);
+
+                                  return (
+                                    <div className="w-20" key={`${option.optionNumber}-${photoPath}-${photoIndex}`}>
+                                      <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
+                                        {previewUrl ? (
+                                          // eslint-disable-next-line @next/next/no-img-element
+                                          <img
+                                            alt={fileName}
+                                            className="h-full w-full object-cover"
+                                            src={previewUrl}
+                                          />
+                                        ) : (
+                                          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
+                                            No preview
+                                          </div>
+                                        )}
+                                        <button
+                                          aria-label={`Remove ${fileName}`}
+                                          className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
+                                          disabled={isFormDisabled}
+                                          onClick={() => removeDealerOptionPhoto(option.optionNumber, photoIndex)}
+                                          type="button"
+                                        >
+                                          ×
+                                        </button>
+                                      </div>
+                                      <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
+                                        {fileName}
+                                      </p>
+                                    </div>
+                                  );
+                                })}
+                              </div>
                             ) : null}
                             {option.salesSheetUrl ? (
-                              <p className="text-xs text-white/70">Sales sheet uploaded: {option.salesSheetUrl}</p>
+                              <p className="text-xs text-emerald-300">
+                                ✅ {extractOriginalFileName(option.salesSheetUrl)} uploaded
+                              </p>
                             ) : null}
 
                             <label className="block text-sm text-white/85">
@@ -1156,7 +1521,87 @@ export default function AgentDocketDetailPage({
               </section>
             ) : null}
 
-            {!shouldHideQuestionsAndProceed ? (
+            {isQuestionsLocked ? (
+              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+                <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
+                <p className="text-sm text-emerald-400">Questions sent to customer</p>
+                {questionsSentAt ? (
+                  <p className="mt-2 text-xs text-white/70">
+                    Sent: {new Date(questionsSentAt).toLocaleString()}
+                  </p>
+                ) : null}
+                {customerQuestionsLink ? (
+                  <p className="mt-1 text-xs text-white/80">
+                    Customer questions URL:{" "}
+                    <a
+                      className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
+                      href={customerQuestionsLink}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {customerQuestionsLink}
+                    </a>
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
+                )}
+
+                <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
+                  <h3 className="text-sm font-medium text-white/90">Sent Questions</h3>
+                  {sentQuestions.length === 0 ? (
+                    <p className="mt-2 text-sm text-white/70">No sent questions found yet.</p>
+                  ) : (
+                    <ul className="mt-2 space-y-2 text-sm text-white/85">
+                      {sentQuestions.map((question, index) => (
+                        <li key={question.id}>
+                          {index + 1}. {question.question_text}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+
+                <div className="mt-4">
+                  <button
+                    className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={addQuestionLoading}
+                    onClick={() => {
+                      setAddingQuestion((prev) => !prev);
+                      setAddQuestionSuccess(null);
+                    }}
+                    type="button"
+                  >
+                    + Add a Question
+                  </button>
+                </div>
+
+                {addingQuestion ? (
+                  <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-black/20 p-4">
+                    <label className="block text-sm text-white/85">
+                      New Question
+                      <input
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                        disabled={addQuestionLoading}
+                        onChange={(event) => setAddQuestionDraft(event.target.value)}
+                        placeholder="Enter an additional question"
+                        type="text"
+                        value={addQuestionDraft}
+                      />
+                    </label>
+                    <button
+                      className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={addQuestionLoading}
+                      onClick={sendAddedQuestion}
+                      type="button"
+                    >
+                      {addQuestionLoading ? "Sending..." : "Send"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {addQuestionSuccess ? <p className="mt-3 text-sm text-emerald-400">{addQuestionSuccess}</p> : null}
+              </section>
+            ) : !shouldHideQuestionsAndProceed ? (
               <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
                 <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
                 <div className="space-y-3">

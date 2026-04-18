@@ -21,6 +21,19 @@ type Docket = {
   timeline: string | null;
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  new: "New",
+  questions_sent: "Questions Sent",
+  answers_received: "Answers Received",
+  research_in_progress: "Research In Progress",
+  report_sent: "Report Sent",
+  decision_made: "Decision Made",
+  cleared: "Cleared",
+  lost: "Lost",
+  paused: "Paused",
+  unresponsive: "Unresponsive",
+};
+
 const STATUS_BADGE_STYLES: Record<string, string> = {
   new: "bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/35",
   questions_sent: "bg-sky-400/15 text-sky-300 ring-1 ring-sky-300/35",
@@ -29,40 +42,71 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   report_sent: "bg-violet-400/15 text-violet-300 ring-1 ring-violet-300/35",
   decision_made: "bg-green-400/15 text-green-300 ring-1 ring-green-300/35",
   cleared: "bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/35",
+  lost: "bg-red-500/15 text-red-300 ring-1 ring-red-300/35",
+  paused: "bg-zinc-400/20 text-zinc-300 ring-1 ring-zinc-300/35",
+  unresponsive: "bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/35",
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "🟡 new",
-  questions_sent: "🔵 questions_sent",
-  answers_received: "🔵 answers_received",
-  research_in_progress: "🟠 research_in_progress",
-  report_sent: "🟣 report_sent",
-  decision_made: "🟢 decision_made",
-  cleared: "✅ cleared",
-};
+function formatStatus(status: string | null | undefined) {
+  const normalized = status ?? "new";
+  return STATUS_LABELS[normalized] ?? normalized;
+}
 
-async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
+function buildVehicleLabel(
+  year: string | null | undefined,
+  make: string | null | undefined,
+  model: string | null | undefined
+) {
+  return [year, make, model]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+}
+
+function extractFirstName(profile: {
+  first_name?: string | null;
+  name?: string | null;
+  full_name?: string | null;
+}) {
+  const raw = profile.first_name ?? profile.name ?? profile.full_name ?? "";
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  return trimmed.split(/\s+/)[0] ?? null;
+}
+
+async function getAgentProfile(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
   const byId = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, first_name, name, full_name")
     .eq("id", userId)
     .maybeSingle();
 
   if (byId.data?.role) {
-    return byId.data.role as string;
+    return {
+      role: byId.data.role as string,
+      firstName: extractFirstName(byId.data),
+    };
   }
 
   const byUserId = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, first_name, name, full_name")
     .eq("user_id", userId)
     .maybeSingle();
 
   if (byUserId.data?.role) {
-    return byUserId.data.role as string;
+    return {
+      role: byUserId.data.role as string,
+      firstName: extractFirstName(byUserId.data),
+    };
   }
 
-  return null;
+  return {
+    role: null,
+    firstName: null,
+  };
 }
 
 export default function AgentDashboardPage() {
@@ -73,6 +117,7 @@ export default function AgentDashboardPage() {
   const [dockets, setDockets] = useState<Docket[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
+  const [agentFirstName, setAgentFirstName] = useState("there");
 
   useEffect(() => {
     async function loadDashboard() {
@@ -84,7 +129,8 @@ export default function AgentDashboardPage() {
         return;
       }
 
-      const role = await getUserRole(user.id, supabase);
+      const profile = await getAgentProfile(user.id, supabase);
+      const role = profile.role;
 
       if (role !== "agent" && role !== "admin") {
         await supabase.auth.signOut();
@@ -93,6 +139,7 @@ export default function AgentDashboardPage() {
       }
 
       setRole(role);
+      setAgentFirstName(profile.firstName ?? "there");
 
       if (role === "admin") {
         router.replace("/admin/dashboard");
@@ -165,7 +212,10 @@ export default function AgentDashboardPage() {
         {!loading && !error && dockets.length > 0 ? (
           <>
             <section className="pb-6">
-              <h2 className="text-2xl font-semibold text-white">Your pipeline is live, Marcus.</h2>
+              <h2 className="text-2xl font-semibold text-white">
+                Welcome back, {agentFirstName}. You&apos;ve got active dockets ready for your attention — let&apos;s
+                get these builds moving. 🇯🇵
+              </h2>
               <p className="mt-2 text-base text-[#888]">
                 Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
                 pull your research, and let&apos;s get these deals moving. 🇯🇵
@@ -173,17 +223,14 @@ export default function AgentDashboardPage() {
             </section>
             <div className="grid gap-4">
               {dockets.map((docket) => {
-              const status = docket.status ?? "new";
-              const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-white/10 text-white ring-1 ring-white/25";
-              const badgeLabel = STATUS_LABELS[status] ?? status;
-              const customerName = `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
-                "Unnamed Customer";
-              const vehicle = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
-                .filter(Boolean)
-                .join(" ");
-              const destination = [docket.destination_city, docket.destination_province]
-                .filter(Boolean)
-                .join(", ");
+                const status = docket.status ?? "new";
+                const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-white/10 text-white ring-1 ring-white/25";
+                const badgeLabel = formatStatus(status);
+                const customerName =
+                  `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
+                  "Unnamed Customer";
+                const vehicle = buildVehicleLabel(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model);
+                const destination = [docket.destination_city, docket.destination_province].filter(Boolean).join(", ");
 
                 return (
                   <article
