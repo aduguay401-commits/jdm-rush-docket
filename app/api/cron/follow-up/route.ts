@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/email'
 
 type SequenceType = 'A' | 'B' | 'C'
 
@@ -203,11 +203,10 @@ export async function POST(request: Request) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  const resendApiKey = process.env.RESEND_API_KEY
   const fromEmail = process.env.FROM_EMAIL
   const adminEmail = process.env.ADMIN_EMAIL ?? 'adam@jdmrushimports.ca'
 
-  if (!supabaseUrl || !serviceRoleKey || !resendApiKey || !fromEmail) {
+  if (!supabaseUrl || !serviceRoleKey || !fromEmail) {
     return Response.json({ error: 'Server configuration is missing' }, { status: 500 })
   }
 
@@ -217,7 +216,6 @@ export async function POST(request: Request) {
       autoRefreshToken: false,
     },
   })
-  const resend = new Resend(resendApiKey)
   const nowIso = new Date().toISOString()
 
   const { data: sequences, error: sequencesError } = await supabase
@@ -311,7 +309,7 @@ export async function POST(request: Request) {
     })
 
     try {
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
         subject,

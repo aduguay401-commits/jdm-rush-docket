@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -167,8 +167,6 @@ export async function POST(
     if (statusHistoryError) {
       return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
     }
-
-    const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
     const adminEmail = process.env.ADMIN_EMAIL;
@@ -178,7 +176,7 @@ export async function POST(
         : null;
     const recipientEmail = devMode ? adminEmail : originalRecipient;
 
-    if (!resendApiKey || !fromEmail) {
+    if (!fromEmail) {
       return Response.json(
         { success: false, error: "Email configuration is missing" },
         { status: 500 }
@@ -208,10 +206,8 @@ Thanks for answering our questions. We have received your answers. Our trusted e
 
 Adam & the JDM Rush Team
 support@jdmrushimports.ca`;
-
-    const resend = new Resend(resendApiKey);
     try {
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
         subject,

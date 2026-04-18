@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
 import {
@@ -781,26 +781,20 @@ export async function POST(
         supabase: toSupabaseError(statusHistoryError),
       });
     }
-
-    const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
     logStep("email.config_checked", {
-      hasResendApiKey: !!resendApiKey,
       hasFromEmail: !!fromEmail,
       hasAdminEmail: !!adminEmail,
       devMode,
     });
 
-    if (!resendApiKey || !fromEmail) {
+    if (!fromEmail) {
       return errorResponse(500, "Email configuration is missing.", {
-        missingResendApiKey: !resendApiKey,
         missingFromEmail: !fromEmail,
       });
     }
-
-    const resend = new Resend(resendApiKey);
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
@@ -833,7 +827,7 @@ Overall Notes:
 ${overallNotes}`;
       const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
 
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
         subject,

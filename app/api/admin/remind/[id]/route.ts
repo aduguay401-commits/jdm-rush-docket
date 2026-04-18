@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin/auth";
@@ -94,17 +94,13 @@ export async function POST(
   if (!docket.customer_email) {
     return Response.json({ success: false, error: "Customer email is missing" }, { status: 400 });
   }
-
-  const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL;
   const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
   const devMode = process.env.DEV_MODE === "true";
 
-  if (!resendApiKey || !fromEmail) {
+  if (!fromEmail) {
     return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
   }
-
-  const resend = new Resend(resendApiKey);
   const customerName = [docket.customer_first_name, docket.customer_last_name].filter(Boolean).join(" ") || "there";
   const vehicleDescription =
     buildVehicleDescription(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model) || "vehicle";
@@ -118,7 +114,7 @@ export async function POST(
   });
 
   try {
-    const sendResult = await resend.emails.send({
+    const sendResult = await sendEmail({
       from: fromEmail,
       to: recipientEmail,
       subject,

@@ -3,7 +3,7 @@
 // SQL migration note:
 // ALTER TABLE dockets ADD COLUMN IF NOT EXISTS additional_info JSONB;
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/email'
 
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
@@ -284,8 +284,6 @@ export async function POST(request: Request) {
         { status: 500 }
       )
     }
-
-    const resendApiKey = process.env.RESEND_API_KEY
     const fromEmail = process.env.FROM_EMAIL
     const devMode = process.env.DEV_MODE === 'true'
     const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL
@@ -294,14 +292,12 @@ export async function POST(request: Request) {
     const customerOriginalEmail = customerEmail
     const customerRecipientEmail = devMode ? adminEmail : customerOriginalEmail
 
-    if (!resendApiKey || !fromEmail) {
+    if (!fromEmail) {
       return Response.json(
         { success: false, error: 'Email configuration is missing' },
         { status: 500 }
       )
     }
-
-    const resend = new Resend(resendApiKey)
     const fullName = `${customerFirstName ?? ''} ${customerLastName ?? ''}`.trim()
     const customerFirstNameForEmail = customerFirstName ?? 'there'
     const makeModelForSummary = [vehicleMake, vehicleModel].filter(Boolean).join(' ')
@@ -373,7 +369,7 @@ Questions? Reply to this email.
 
 Adam & the JDM Rush Team
 support@jdmrushimports.ca`
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         subject,
@@ -423,7 +419,7 @@ Vehicle: ${vehicleForSummary}
 Timeline: ${payload.timeline ?? 'N/A'}
 
 Please review and begin follow-up.`
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
@@ -471,7 +467,7 @@ Email: ${payload.customer_email}
 Vehicle: ${vehicleForSummary}
 Exchange Rate (JPY/CAD): ${exchange.rate}
 Exchange Rate Date: ${exchange.date}`
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: adminEmail ?? 'adam@jdmrushimports.ca',
         subject,

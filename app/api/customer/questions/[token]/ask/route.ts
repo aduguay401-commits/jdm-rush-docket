@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -47,22 +47,18 @@ export async function POST(
     if (insertError) {
       return Response.json({ success: false, error: insertError.message }, { status: 500 });
     }
-
-    const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
     const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL;
     const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL;
 
-    if (!resendApiKey || !fromEmail) {
+    if (!fromEmail) {
       return Response.json(
         { success: false, error: "Email configuration is missing" },
         { status: 500 }
       );
     }
-
-    const resend = new Resend(resendApiKey);
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
@@ -79,7 +75,7 @@ Question:
 ${questionText}`;
 
     try {
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
         ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),

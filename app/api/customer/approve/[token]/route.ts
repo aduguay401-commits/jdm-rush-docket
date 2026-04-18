@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { createDepositInvoice } from "@/lib/invoiceStub";
 import { createServerClient } from "@/lib/supabase/server";
@@ -236,13 +236,11 @@ export async function POST(
       chosenPath: payload.path,
       chosenDealerIndex: payload.dealer_index ?? null,
     });
-
-    const resendApiKey = process.env.RESEND_API_KEY;
     const fromEmail = process.env.FROM_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
     const devMode = process.env.DEV_MODE === "true";
 
-    if (!resendApiKey || !fromEmail) {
+    if (!fromEmail) {
       return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
     }
 
@@ -250,8 +248,6 @@ export async function POST(
       payload.path === "private_dealer"
         ? "https://forms.wix.com/r/7191838185536618530"
         : "https://forms.wix.com/r/7211765470112776777";
-
-    const resend = new Resend(resendApiKey);
     const recipientEmail = devMode ? adminEmail : customerEmail;
     const subject = `You're approved — next steps for your ${vehicleDescription}`;
     const html = buildApprovalEmailHtml({
@@ -264,7 +260,7 @@ export async function POST(
     });
 
     try {
-      const sendResult = await resend.emails.send({
+      const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
         subject,

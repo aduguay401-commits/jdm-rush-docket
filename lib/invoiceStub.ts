@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 type CreateDepositInvoiceInput = {
   docketId: string;
@@ -19,21 +19,17 @@ export async function createDepositInvoice(input: CreateDepositInvoiceInput) {
     chosenDealerIndex: input.chosenDealerIndex ?? null,
     depositTotalCad: 1500,
   });
-
-  const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL;
   const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
   const devMode = process.env.DEV_MODE === "true";
 
-  if (!resendApiKey || !fromEmail) {
+  if (!fromEmail) {
     throw new Error("Email configuration is missing");
   }
-
-  const resend = new Resend(resendApiKey);
   const subject = `[INVOICE STUB] Deposit Required — ${input.customerName}`;
   const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
 
-  await resend.emails.send({
+  await sendEmail({
     from: fromEmail,
     to: adminEmail,
     subject,

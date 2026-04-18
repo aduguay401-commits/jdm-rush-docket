@@ -1,4 +1,4 @@
-import { Resend } from "resend";
+import { sendEmail } from '@/lib/email';
 
 import { requireAdmin } from "@/lib/admin/auth";
 import { createServerClient } from "@/lib/supabase/server";
@@ -156,14 +156,11 @@ export async function POST(request: Request) {
   if (tempPassword.length < 8) {
     return Response.json({ success: false, error: "Temporary password must be at least 8 characters" }, { status: 400 });
   }
-
-  const resendApiKey = process.env.RESEND_API_KEY;
   const fromEmail = process.env.FROM_EMAIL;
   const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
   const devMode = process.env.DEV_MODE === "true";
 
   const supabase = createServerClient();
-  const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
   const createdAuthUser = await supabase.auth.admin.createUser({
     email,
@@ -202,11 +199,11 @@ export async function POST(request: Request) {
 
   let emailSent = false;
   try {
-    if (!resend || !fromEmail) {
+    if (!fromEmail) {
       throw new Error("Email configuration is missing");
     }
 
-    const sendResult = await resend.emails.send({
+    const sendResult = await sendEmail({
       from: fromEmail,
       to: recipientEmail,
       subject: emailContent.subject,
