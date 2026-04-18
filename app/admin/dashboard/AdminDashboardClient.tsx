@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
@@ -508,13 +509,21 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#E55125]">JDM Rush</p>
           <div className="mt-2 flex items-center justify-between gap-3">
             <h1 className="text-3xl font-semibold">Admin Pipeline Dashboard</h1>
-            <button
-              className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
-              onClick={() => void handleLogout()}
-              type="button"
-            >
-              Logout
-            </button>
+            <div className="flex items-center gap-2">
+              <Link
+                className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
+                href="/admin/agents"
+              >
+                Manage Agents
+              </Link>
+              <button
+                className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
+                onClick={() => void handleLogout()}
+                type="button"
+              >
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
