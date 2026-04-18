@@ -9,7 +9,7 @@ type Props = {
   initialDockets: NormalizedAdminDocket[];
 };
 
-type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost";
+type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost" | "archived";
 
 type PatchPayload = {
   status?: string | null;
@@ -19,6 +19,8 @@ type PatchPayload = {
   paused_until?: string | null;
   lost_reason?: string | null;
   estimated_deal_value?: number | null;
+  is_archived?: boolean | null;
+  archived_at?: string | null;
 };
 
 const STATUS_ORDER = [
@@ -28,6 +30,7 @@ const STATUS_ORDER = [
   "research_in_progress",
   "report_sent",
   "decision_made",
+  "unresponsive",
   "paused",
   "cleared",
   "lost",
@@ -51,6 +54,8 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   cleared: "bg-zinc-400/20 text-zinc-300 ring-1 ring-zinc-400/40",
   lost: "bg-red-950/60 text-red-300 ring-1 ring-red-900",
   paused: "bg-zinc-500/20 text-zinc-300 ring-1 ring-zinc-500/40 italic",
+  unresponsive: "bg-[#7a4f00] text-[#ffb347] ring-1 ring-[#7a4f00]",
+  archived: "bg-zinc-700/60 text-zinc-200 ring-1 ring-zinc-600",
 };
 
 function formatDate(value: string | null | undefined) {
@@ -100,6 +105,10 @@ function formatStatus(status: string | null | undefined) {
       return "Lost";
     case "paused":
       return "Paused";
+    case "unresponsive":
+      return "Unresponsive";
+    case "archived":
+      return "Archived";
     default:
       return "New";
   }
@@ -209,11 +218,12 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     };
   }, [selectedDocketId]);
 
-  async function refreshDockets() {
+  async function refreshDockets(archivedOnly: boolean = statusFilter === "archived") {
     setLoading(true);
     setError(null);
 
-    const response = await fetch("/api/admin/dockets", { method: "GET" });
+    const query = archivedOnly ? "?archived=true" : "";
+    const response = await fetch(`/api/admin/dockets${query}`, { method: "GET" });
     const result = (await response.json()) as {
       success: boolean;
       error?: string;
@@ -230,7 +240,8 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     setLoading(false);
   }
 
-  async function patchDocket(id: string, payload: PatchPayload) {
+  async function patchDocket(id: string, payload: PatchPayload, options?: { refreshAfter?: boolean }) {
+    const refreshAfter = options?.refreshAfter ?? true;
     const response = await fetch(`/api/admin/dockets/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -243,7 +254,34 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       throw new Error(result.error ?? "Failed to update docket");
     }
 
-    await refreshDockets();
+    if (refreshAfter) {
+      await refreshDockets();
+    }
+  }
+
+  async function handleArchiveSelectedDocket() {
+    if (!selectedDocket) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure? This docket will be hidden from your main view. You can find it using the Archived filter anytime."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const archivedAt = new Date().toISOString();
+      await patchDocket(selectedDocket.id, { is_archived: true, archived_at: archivedAt }, { refreshAfter: false });
+      setDockets((previous) => previous.filter((docket) => docket.id !== selectedDocket.id));
+      setSelectedDocketId(null);
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : "Failed to archive docket");
+    }
   }
 
   async function handleToggleFlag(id: string, currentValue: boolean | null) {
@@ -414,6 +452,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       if (statusFilter === "lost") {
         return docket.status === "lost";
       }
+      if (statusFilter === "archived") {
+        return true;
+      }
 
       return true;
     });
@@ -477,7 +518,11 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           <select
             className="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm outline-none focus:border-[#E55125]"
             value={statusFilter}
-            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
+            onChange={(event) => {
+              const nextStatusFilter = event.target.value as StatusFilter;
+              setStatusFilter(nextStatusFilter);
+              void refreshDockets(nextStatusFilter === "archived");
+            }}
           >
             <option value="all">All</option>
             <option value="needs_attention">Needs Attention</option>
@@ -486,6 +531,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             <option value="paused">Paused</option>
             <option value="cleared">Cleared</option>
             <option value="lost">Lost</option>
+            <option value="archived">Archived</option>
           </select>
           <label className="inline-flex items-center gap-2 text-sm text-white/85">
             <input
@@ -735,6 +781,15 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
               >
                 {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
               </button>
+              {selectedDocket.status === "unresponsive" || selectedDocket.status === "lost" ? (
+                <button
+                  className="mt-2 ml-2 rounded-md border border-amber-500/70 px-3 py-2 text-sm text-amber-300 hover:bg-amber-500/10"
+                  onClick={() => void handleArchiveSelectedDocket()}
+                  type="button"
+                >
+                  Archive
+                </button>
+              ) : null}
             </section>
 
             <section className="mt-4 border-b border-white/10 pb-4">

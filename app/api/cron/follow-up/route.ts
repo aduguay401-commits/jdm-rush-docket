@@ -67,10 +67,10 @@ const BODY_LINES: Record<SequenceType, Record<1 | 2 | 3, string>> = {
   },
 }
 
-const STEP_DELAYS_DAYS: Record<SequenceType, [number, number]> = {
-  A: [2, 3],
-  B: [2, 3],
-  C: [3, 3],
+const SEQUENCE_TIMING: Record<string, number[]> = {
+  A: [0, 3, 7],
+  B: [0, 4, 10],
+  C: [0, 3, 7],
 }
 
 function asSequenceType(value: string | null): SequenceType | null {
@@ -338,7 +338,13 @@ export async function POST(request: Request) {
     const nextEmailsSent = (typeof sequence.emails_sent === 'number' ? sequence.emails_sent : 0) + 1
 
     if (step < 3) {
-      const delayDays = STEP_DELAYS_DAYS[sequenceType][step - 1]
+      const timings = SEQUENCE_TIMING[sequenceType] ?? [0, 0, 0]
+      const currentIndex = step - 1
+      const nextIndex = step
+      const delayDays = Math.max(
+        0,
+        (timings[nextIndex] ?? 0) - (timings[currentIndex] ?? 0)
+      )
       const nextSendAt = new Date(Date.now() + delayDays * DAY_MS).toISOString()
 
       const { error: updateSequenceError } = await supabase
