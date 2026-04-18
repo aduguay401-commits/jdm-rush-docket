@@ -704,10 +704,8 @@ export default function AgentDocketDetailPage({
         body: JSON.stringify(payload),
       });
     } catch (requestError) {
-      const message =
-        requestError instanceof Error ? requestError.message : "Network request failed before reaching API.";
       console.error("[Research Submit] FETCH_FAILED", { requestError });
-      setError(`Failed to submit research report: ${message}`);
+      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }
@@ -716,7 +714,7 @@ export default function AgentDocketDetailPage({
       result = (await response.json()) as { success?: boolean; error?: string; details?: unknown };
     } catch (parseError) {
       console.error("[Research Submit] RESPONSE_PARSE_FAILED", { parseError });
-      setError(`Failed to submit research report: API returned an unreadable response (HTTP ${response.status}).`);
+      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }

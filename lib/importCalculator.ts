@@ -157,13 +157,21 @@ const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
   "regina sk": "regina-sk",
   "saskatoon sk": "saskatoon-sk",
   "winnipeg mb": "winnipeg-mb",
+  "winnipeg manitoba": "winnipeg-mb",
   "toronto on": "toronto-on",
+  "toronto ontario": "toronto-on",
   "ottawa on": "toronto-on",
+  "ottawa ontario": "toronto-on",
   "calgary ab": "calgary-ab",
+  "calgary alberta": "calgary-ab",
   "edmonton ab": "edmonton-ab",
+  "edmonton alberta": "edmonton-ab",
   "montreal qc": "montreal-qc",
+  "montreal quebec": "montreal-qc",
   "vancouver bc": "richmond-bc",
+  "vancouver british columbia": "richmond-bc",
   "halifax ns": "montreal-qc",
+  "halifax nova scotia": "montreal-qc",
 
   // Comma variants
   "victoria, bc": "victoria-bc",
@@ -175,16 +183,25 @@ const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
   "regina, sk": "regina-sk",
   "saskatoon, sk": "saskatoon-sk",
   "winnipeg, mb": "winnipeg-mb",
+  "winnipeg, manitoba": "winnipeg-mb",
   "toronto, on": "toronto-on",
+  "toronto, ontario": "toronto-on",
   "ottawa, on": "toronto-on",
+  "ottawa, ontario": "toronto-on",
   "calgary, ab": "calgary-ab",
+  "calgary, alberta": "calgary-ab",
   "edmonton, ab": "edmonton-ab",
+  "edmonton, alberta": "edmonton-ab",
   "montreal, qc": "montreal-qc",
+  "montreal, quebec": "montreal-qc",
   "vancouver, bc": "richmond-bc",
+  "vancouver, british columbia": "richmond-bc",
   "halifax, ns": "montreal-qc",
+  "halifax, nova scotia": "montreal-qc",
 };
 
-const PROVINCE_SUFFIX_PATTERN = /(?:,\s*|\s+)(bc|ab|sk|mb|on|qc|ns)$/i;
+const PROVINCE_SUFFIX_PATTERN =
+  /(?:,\s*|\s+)(bc|british columbia|ab|alberta|sk|saskatchewan|mb|manitoba|on|ontario|qc|quebec|ns|nova scotia)$/i;
 
 function round2(value: number): number {
   return Number(value.toFixed(2));
@@ -216,13 +233,15 @@ export function normalizeDestinationCity(raw: string): DestinationCity | null {
     return null;
   }
 
-  const cleaned = trimmed.toLowerCase().replace(/\s+/g, " ");
-  const withoutProvince = cleaned.replace(PROVINCE_SUFFIX_PATTERN, "").trim();
-  const cleanedSlug = cleaned.replace(/\s+/g, "-");
+  const cleaned = trimmed.toLowerCase().replace(/\./g, "").replace(/\s+/g, " ");
+  const cleanedNoComma = cleaned.replace(/,/g, " ").replace(/\s+/g, " ");
+  const withoutProvince = cleanedNoComma.replace(PROVINCE_SUFFIX_PATTERN, "").trim();
+  const cleanedSlug = cleanedNoComma.replace(/\s+/g, "-");
   const withoutProvinceSlug = withoutProvince.replace(/\s+/g, "-");
 
   return (
     DESTINATION_CITY_ALIASES[cleaned] ??
+    DESTINATION_CITY_ALIASES[cleanedNoComma] ??
     DESTINATION_CITY_ALIASES[cleanedSlug] ??
     DESTINATION_CITY_ALIASES[withoutProvince] ??
     DESTINATION_CITY_ALIASES[withoutProvinceSlug] ??
