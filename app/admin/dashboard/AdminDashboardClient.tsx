@@ -10,7 +10,7 @@ type Props = {
   initialDockets: NormalizedAdminDocket[];
 };
 
-type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost" | "archived";
+type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost";
 
 type PatchPayload = {
   status?: string | null;
@@ -177,6 +177,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
   const [selectedDocketId, setSelectedDocketId] = useState<string | null>(null);
   const [scrollToQuestionsOnOpen, setScrollToQuestionsOnOpen] = useState(false);
@@ -248,7 +249,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     };
   }, [selectedDocketId]);
 
-  async function refreshDockets(archivedOnly: boolean = statusFilter === "archived") {
+  async function refreshDockets(archivedOnly: boolean = showArchived) {
     setLoading(true);
     setError(null);
 
@@ -285,7 +286,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     }
 
     if (refreshAfter) {
-      await refreshDockets();
+      await refreshDockets(showArchived);
     }
   }
 
@@ -319,6 +320,20 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       await patchDocket(id, { is_flagged: !currentValue });
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Failed to toggle flag");
+    }
+  }
+
+  async function handleUnarchiveDocket(id: string) {
+    setError(null);
+
+    try {
+      await patchDocket(id, { is_archived: false, archived_at: null }, { refreshAfter: false });
+      setDockets((previous) => previous.filter((docket) => docket.id !== id));
+      if (selectedDocketId === id) {
+        setSelectedDocketId(null);
+      }
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Failed to unarchive docket");
     }
   }
 
@@ -433,6 +448,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     window.location.href = "/agent/login";
   }
 
+  async function handleToggleArchivedView() {
+    const nextShowArchived = !showArchived;
+    setShowArchived(nextShowArchived);
+    setSelectedDocketId(null);
+    await refreshDockets(nextShowArchived);
+  }
+
   const metrics = useMemo(() => {
     const active = dockets.filter(isActive).length;
     const needsAttention = dockets.filter(isNeedsAttention).length;
@@ -487,10 +509,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       if (statusFilter === "lost") {
         return docket.status === "lost";
       }
-      if (statusFilter === "archived") {
-        return true;
-      }
-
       return true;
     });
 
@@ -526,6 +544,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
               </Link>
               <button
                 className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
+                onClick={() => void handleToggleArchivedView()}
+                type="button"
+              >
+                {showArchived ? "Active Dockets" : "Archived"}
+              </button>
+              <button
+                className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-400 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
                 onClick={() => void handleLogout()}
                 type="button"
               >
@@ -535,24 +560,30 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           </div>
         </header>
 
-        <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-            <p className="text-xs uppercase tracking-wider text-white/60">Total Active Dockets</p>
-            <p className="mt-2 text-3xl font-semibold">{metrics.active}</p>
-          </article>
-          <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-            <p className="text-xs uppercase tracking-wider text-white/60">Needs Attention</p>
-            <p className="mt-2 text-3xl font-semibold text-orange-300">{metrics.needsAttention}</p>
-          </article>
-          <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-            <p className="text-xs uppercase tracking-wider text-white/60">Approved - Pending Deposit</p>
-            <p className="mt-2 text-3xl font-semibold text-green-300">{metrics.approvedPending}</p>
-          </article>
-          <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-            <p className="text-xs uppercase tracking-wider text-white/60">Total Pipeline Value</p>
-            <p className="mt-2 text-3xl font-semibold">{formatCurrencyCad(metrics.totalPipelineValue)}</p>
-          </article>
-        </section>
+        {showArchived ? (
+          <div className="mb-5 rounded-md border border-orange-400/20 border-l-4 border-l-orange-400/70 bg-orange-950/20 px-4 py-3 text-sm text-orange-100">
+            Viewing archived dockets
+          </div>
+        ) : (
+          <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
+              <p className="text-xs uppercase tracking-wider text-white/60">Total Active Dockets</p>
+              <p className="mt-2 text-3xl font-semibold">{metrics.active}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
+              <p className="text-xs uppercase tracking-wider text-white/60">Needs Attention</p>
+              <p className="mt-2 text-3xl font-semibold text-orange-300">{metrics.needsAttention}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
+              <p className="text-xs uppercase tracking-wider text-white/60">Approved - Pending Deposit</p>
+              <p className="mt-2 text-3xl font-semibold text-green-300">{metrics.approvedPending}</p>
+            </article>
+            <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
+              <p className="text-xs uppercase tracking-wider text-white/60">Total Pipeline Value</p>
+              <p className="mt-2 text-3xl font-semibold">{formatCurrencyCad(metrics.totalPipelineValue)}</p>
+            </article>
+          </section>
+        )}
 
         <section className="mb-5 grid gap-3 rounded-xl border border-white/10 bg-[#141414] p-4 md:grid-cols-[1fr_220px_auto] md:items-center">
           <input
@@ -565,11 +596,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           <select
             className="h-10 rounded-md border border-white/15 bg-black/30 px-3 text-sm outline-none focus:border-[#E55125]"
             value={statusFilter}
-            onChange={(event) => {
-              const nextStatusFilter = event.target.value as StatusFilter;
-              setStatusFilter(nextStatusFilter);
-              void refreshDockets(nextStatusFilter === "archived");
-            }}
+            onChange={(event) => setStatusFilter(event.target.value as StatusFilter)}
           >
             <option value="all">All</option>
             <option value="needs_attention">Needs Attention</option>
@@ -578,7 +605,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             <option value="paused">Paused</option>
             <option value="cleared">Cleared</option>
             <option value="lost">Lost</option>
-            <option value="archived">Archived</option>
           </select>
           <label className="inline-flex items-center gap-2 text-sm text-white/85">
             <input
@@ -672,6 +698,15 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                         >
                           View
                         </button>
+                        {showArchived ? (
+                          <button
+                            className="rounded-md border border-orange-400/60 px-2 py-1 text-xs text-orange-300 hover:bg-orange-400/10"
+                            onClick={() => void handleUnarchiveDocket(docket.id)}
+                            type="button"
+                          >
+                            Unarchive
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -849,15 +884,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
               >
                 {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
               </button>
-              {selectedDocket.status === "unresponsive" || selectedDocket.status === "lost" ? (
-                <button
-                  className="mt-2 ml-2 rounded-md border border-amber-500/70 px-3 py-2 text-sm text-amber-300 hover:bg-amber-500/10"
-                  onClick={() => void handleArchiveSelectedDocket()}
-                  type="button"
-                >
-                  Archive
-                </button>
-              ) : null}
+              <button
+                className="mt-2 ml-2 rounded-md border border-amber-500/70 px-3 py-2 text-sm text-amber-300 hover:bg-amber-500/10"
+                onClick={() => void handleArchiveSelectedDocket()}
+                type="button"
+              >
+                Archive
+              </button>
             </section>
 
             <section className="mt-4 border-b border-white/10 pb-4">
