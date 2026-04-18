@@ -62,50 +62,39 @@ function buildVehicleLabel(
     .join(" ");
 }
 
-function extractFirstName(profile: {
-  first_name?: string | null;
-  name?: string | null;
-  full_name?: string | null;
-}) {
-  const raw = profile.first_name ?? profile.name ?? profile.full_name ?? "";
-  const trimmed = raw.trim();
-  if (!trimmed) {
+function deriveDisplayNameFromEmail(email?: string | null) {
+  if (!email) {
     return null;
   }
 
-  return trimmed.split(/\s+/)[0] ?? null;
+  const localPart = email.split("@")[0]?.trim();
+  if (!localPart) {
+    return null;
+  }
+
+  const firstToken = localPart.split(/[._-]+/)[0]?.trim();
+  if (!firstToken) {
+    return null;
+  }
+
+  return firstToken.charAt(0).toUpperCase() + firstToken.slice(1).toLowerCase();
 }
 
 async function getAgentProfile(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
   const byId = await supabase
     .from("profiles")
-    .select("role, first_name, name, full_name")
+    .select("role")
     .eq("id", userId)
     .maybeSingle();
 
   if (byId.data?.role) {
     return {
       role: byId.data.role as string,
-      firstName: extractFirstName(byId.data),
-    };
-  }
-
-  const byUserId = await supabase
-    .from("profiles")
-    .select("role, first_name, name, full_name")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (byUserId.data?.role) {
-    return {
-      role: byUserId.data.role as string,
-      firstName: extractFirstName(byUserId.data),
     };
   }
 
   return {
     role: null,
-    firstName: null,
   };
 }
 
@@ -117,7 +106,7 @@ export default function AgentDashboardPage() {
   const [dockets, setDockets] = useState<Docket[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
-  const [agentFirstName, setAgentFirstName] = useState("there");
+  const [agentDisplayName, setAgentDisplayName] = useState("there");
 
   useEffect(() => {
     async function loadDashboard() {
@@ -139,7 +128,7 @@ export default function AgentDashboardPage() {
       }
 
       setRole(role);
-      setAgentFirstName(profile.firstName ?? "there");
+      setAgentDisplayName(deriveDisplayNameFromEmail(user.email) ?? "there");
 
       if (role === "admin") {
         router.replace("/admin/dashboard");
@@ -213,7 +202,7 @@ export default function AgentDashboardPage() {
           <>
             <section className="pb-6">
               <h2 className="text-2xl font-semibold text-white">
-                Welcome back, {agentFirstName}. You&apos;ve got active dockets ready for your attention — let&apos;s
+                Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention — let&apos;s
                 get these builds moving. 🇯🇵
               </h2>
               <p className="mt-2 text-base text-[#888]">

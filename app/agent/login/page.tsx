@@ -6,27 +6,18 @@ import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
-  const byId = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", userId)
     .maybeSingle();
 
-  if (byId.data?.role) {
-    return byId.data.role as string;
+  if (error) {
+    console.error("[Agent Login] Profile lookup error", error);
+    return null;
   }
 
-  const byUserId = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (byUserId.data?.role) {
-    return byUserId.data.role as string;
-  }
-
-  return null;
+  return data?.role ? (data.role as string) : null;
 }
 
 export default function AgentLoginPage() {
