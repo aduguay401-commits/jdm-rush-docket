@@ -6,14 +6,6 @@ import { Resend } from 'resend'
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
 
-const REQUIRED_FIELDS = [
-  'customer_first_name',
-  'customer_last_name',
-  'customer_email',
-  'vehicle_make',
-  'vehicle_model',
-] as const
-
 type IntakePayload = {
   customer_first_name?: string
   customer_last_name?: string
@@ -43,11 +35,100 @@ type IntakePayload = {
   [key: string]: unknown
 }
 
-function getMissingFields(payload: IntakePayload): string[] {
-  return REQUIRED_FIELDS.filter((field) => {
-    const value = payload[field]
-    return typeof value !== 'string' || value.trim().length === 0
-  })
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function formDataToObject(formData: FormData): IntakePayload {
+  const object: IntakePayload = {}
+
+  for (const [key, value] of formData.entries()) {
+    object[key] = typeof value === 'string' ? value : value.name
+  }
+
+  return object
+}
+
+function parseUrlEncoded(rawText: string): IntakePayload {
+  const params = new URLSearchParams(rawText)
+  const object: IntakePayload = {}
+
+  for (const [key, value] of params.entries()) {
+    object[key] = value
+  }
+
+  return object
+}
+
+function extractPayload(body: unknown): IntakePayload {
+  if (!isRecord(body)) {
+    return {}
+  }
+
+  const wrappedPayload = body.payload
+  if (isRecord(wrappedPayload)) {
+    return wrappedPayload as IntakePayload
+  }
+
+  const wrappedData = body.data
+  if (isRecord(wrappedData)) {
+    return wrappedData as IntakePayload
+  }
+
+  return body as IntakePayload
+}
+
+async function parseIntakeBody(request: Request): Promise<unknown> {
+  const contentType = request.headers.get('content-type')?.toLowerCase() ?? ''
+
+  if (contentType.includes('application/json')) {
+    const text = await request.text()
+    const trimmedText = text.trim()
+
+    if (!trimmedText) {
+      return {}
+    }
+
+    try {
+      return JSON.parse(trimmedText)
+    } catch {
+      return parseUrlEncoded(trimmedText)
+    }
+  }
+
+  if (
+    contentType.includes('application/x-www-form-urlencoded') ||
+    contentType.includes('multipart/form-data')
+  ) {
+    const formData = await request.formData()
+    return formDataToObject(formData)
+  }
+
+  const text = await request.text()
+  const trimmedText = text.trim()
+
+  if (!trimmedText) {
+    return {}
+  }
+
+  try {
+    return JSON.parse(trimmedText)
+  } catch {
+    return parseUrlEncoded(trimmedText)
+  }
+}
+
+function toOptionalNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
 }
 
 function toOptionalString(value: unknown): string | null {
@@ -112,12 +193,14 @@ async function hasAdditionalInfoColumn(
 
 export async function POST(request: Request) {
   try {
-    const payload = (await request.json()) as IntakePayload
-    const missingFields = getMissingFields(payload)
+    const body = await parseIntakeBody(request)
+    console.log('[Intake] Received payload:', JSON.stringify(body))
+    const payload = extractPayload(body)
+    const customerEmail = toOptionalString(payload.customer_email)
 
-    if (missingFields.length > 0) {
+    if (!customerEmail) {
       return Response.json(
-        { success: false, error: 'Missing required fields', missingFields },
+        { success: false, error: 'Missing required fields', missingFields: ['customer_email'] },
         { status: 400 }
       )
     }
@@ -142,7 +225,7 @@ export async function POST(request: Request) {
       status: 'new' as const,
       customer_first_name: toOptionalString(payload.customer_first_name),
       customer_last_name: toOptionalString(payload.customer_last_name),
-      customer_email: toOptionalString(payload.customer_email),
+      customer_email: customerEmail,
       customer_phone: toOptionalString(payload.customer_phone),
       vehicle_year: toOptionalString(payload.vehicle_year),
       vehicle_make: toOptionalString(payload.vehicle_make),
@@ -155,10 +238,7 @@ export async function POST(request: Request) {
       timeline: toOptionalString(payload.timeline),
       additional_notes: toOptionalString(payload.additional_notes),
       selected_path: toOptionalString(payload.selected_path),
-      selected_private_dealer_option:
-        typeof payload.selected_private_dealer_option === 'number'
-          ? payload.selected_private_dealer_option
-          : null,
+      selected_private_dealer_option: toOptionalNumber(payload.selected_private_dealer_option),
       ...(shouldStoreAdditionalInfo && additionalInfo ? { additional_info: additionalInfo } : {}),
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
@@ -186,8 +266,8 @@ export async function POST(request: Request) {
     const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL
     const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL
     const adminEmail = process.env.ADMIN_EMAIL
-    const customerOriginalEmail = payload.customer_email ?? null
-    const customerEmail = devMode ? adminEmail : customerOriginalEmail
+    const customerOriginalEmail = customerEmail
+    const customerRecipientEmail = devMode ? adminEmail : customerOriginalEmail
 
     if (!resendApiKey || !fromEmail) {
       return Response.json(
@@ -224,7 +304,7 @@ Best,
 JDM Rush Imports`
       const sendResult = await resend.emails.send({
         from: fromEmail,
-        to: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        to: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         subject,
         text: bodySnapshot,
       })
@@ -232,7 +312,7 @@ JDM Rush Imports`
       if (sendResult.error) {
         console.error('[Email #1 Send Error]', {
           docketId: docket.id,
-          recipient: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+          recipient: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
           error: sendResult.error,
         })
         return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
@@ -241,7 +321,7 @@ JDM Rush Imports`
       const { error: emailLogError } = await supabase.from('email_log').insert({
         docket_id: docket.id,
         email_type: 'email_1_customer_welcome',
-        recipient_email: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        recipient_email: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         subject,
         body_snapshot: bodySnapshot,
       })
@@ -252,7 +332,7 @@ JDM Rush Imports`
     } catch (error) {
       console.error('[Email #1 Send Error]', {
         docketId: docket.id,
-        recipient: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        recipient: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         error,
       })
       return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
@@ -356,10 +436,8 @@ Exchange Rate Date: ${exchange.date}`
     }
 
     return Response.json({ success: true, docketId: docket.id })
-  } catch {
-    return Response.json(
-      { success: false, error: 'Invalid request body' },
-      { status: 400 }
-    )
+  } catch (error) {
+    console.error('[Intake] Error:', error)
+    return Response.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 }
