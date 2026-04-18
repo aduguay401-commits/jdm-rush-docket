@@ -1,3 +1,6 @@
+// SQL migration note:
+// ALTER TABLE dockets ADD COLUMN IF NOT EXISTS additional_info JSONB;
+
 import { Resend } from 'resend'
 
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
@@ -19,6 +22,7 @@ type IntakePayload = {
   vehicle_year?: string
   vehicle_make?: string
   vehicle_model?: string
+  budget?: string
   budget_bracket?: string
   destination_city?: string
   destination_province?: string
@@ -28,6 +32,14 @@ type IntakePayload = {
   additional_notes?: string
   selected_path?: string
   selected_private_dealer_option?: number | null
+  desired_mileage?: string
+  intended_use?: string
+  who_for?: string
+  right_hand_drive?: string
+  ready_to_purchase?: string
+  imported_before?: string
+  decision_factor?: string
+  how_heard?: string
   [key: string]: unknown
 }
 
@@ -47,6 +59,57 @@ function toOptionalString(value: unknown): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function toAdditionalInfoValue(value: unknown): string | number | boolean | null {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+
+  return null
+}
+
+function buildAdditionalInfo(payload: IntakePayload): Record<string, string | number | boolean> | null {
+  const entries: Array<[string, string | number | boolean | null]> = [
+    ['mileage', toAdditionalInfoValue(payload.desired_mileage)],
+    ['intended_use', toAdditionalInfoValue(payload.intended_use)],
+    ['who_for', toAdditionalInfoValue(payload.who_for)],
+    ['right_hand_drive', toAdditionalInfoValue(payload.right_hand_drive)],
+    ['ready_to_purchase', toAdditionalInfoValue(payload.ready_to_purchase)],
+    ['imported_before', toAdditionalInfoValue(payload.imported_before)],
+    ['decision_factor', toAdditionalInfoValue(payload.decision_factor)],
+    ['how_heard', toAdditionalInfoValue(payload.how_heard)],
+  ]
+
+  const additionalInfo = Object.fromEntries(
+    entries.filter(([, value]) => value !== null)
+  ) as Record<string, string | number | boolean>
+
+  return Object.keys(additionalInfo).length > 0 ? additionalInfo : null
+}
+
+async function hasAdditionalInfoColumn(
+  supabase: ReturnType<typeof createServerClient>
+): Promise<boolean> {
+  const { error } = await supabase.from('dockets').select('additional_info').limit(1)
+
+  if (!error) {
+    return true
+  }
+
+  if (
+    typeof error.message === 'string' &&
+    error.message.toLowerCase().includes('additional_info')
+  ) {
+    return false
+  }
+
+  return false
+}
+
 export async function POST(request: Request) {
   try {
     const payload = (await request.json()) as IntakePayload
@@ -61,6 +124,19 @@ export async function POST(request: Request) {
 
     const exchange = await fetchJPYtoCAD()
     const supabase = createServerClient()
+    const shouldStoreAdditionalInfo = await hasAdditionalInfoColumn(supabase)
+    const rawDestinationCity = toOptionalString(payload.destination_city)
+    const providedDestinationProvince = toOptionalString(payload.destination_province)
+    let destinationCity = rawDestinationCity
+    let destinationProvince = providedDestinationProvince
+
+    if (!destinationProvince && rawDestinationCity?.includes(',')) {
+      const [cityPart, provincePart] = rawDestinationCity.split(',', 2).map((part) => part.trim())
+      destinationCity = cityPart || null
+      destinationProvince = provincePart || null
+    }
+
+    const additionalInfo = buildAdditionalInfo(payload)
 
     const docketInsert = {
       status: 'new' as const,
@@ -71,9 +147,9 @@ export async function POST(request: Request) {
       vehicle_year: toOptionalString(payload.vehicle_year),
       vehicle_make: toOptionalString(payload.vehicle_make),
       vehicle_model: toOptionalString(payload.vehicle_model),
-      budget_bracket: toOptionalString(payload.budget_bracket),
-      destination_city: toOptionalString(payload.destination_city),
-      destination_province: toOptionalString(payload.destination_province),
+      budget_bracket: toOptionalString(payload.budget_bracket ?? payload.budget),
+      destination_city: destinationCity,
+      destination_province: destinationProvince,
       vehicle_type: toOptionalString(payload.vehicle_type),
       duty_type: toOptionalString(payload.duty_type),
       timeline: toOptionalString(payload.timeline),
@@ -83,6 +159,7 @@ export async function POST(request: Request) {
         typeof payload.selected_private_dealer_option === 'number'
           ? payload.selected_private_dealer_option
           : null,
+      ...(shouldStoreAdditionalInfo && additionalInfo ? { additional_info: additionalInfo } : {}),
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
     }
