@@ -9,6 +9,8 @@ type PatchPayload = {
   paused_until?: string | null;
   lost_reason?: string | null;
   estimated_deal_value?: number | null;
+  is_archived?: boolean | null;
+  archived_at?: string | null;
 };
 
 export async function PATCH(
@@ -66,6 +68,14 @@ export async function PATCH(
 
     if (Object.prototype.hasOwnProperty.call(payload, "estimated_deal_value")) {
       updates.estimated_deal_value = payload.estimated_deal_value;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, "is_archived")) {
+      updates.is_archived = payload.is_archived;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, "archived_at")) {
+      updates.archived_at = payload.archived_at;
     }
 
     if (Object.keys(updates).length === 0) {
