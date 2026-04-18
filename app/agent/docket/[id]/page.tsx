@@ -56,6 +56,8 @@ type DealerOptionForm = {
 };
 
 const MAX_QUESTIONS = 10;
+const RESEARCH_SUBMIT_ERROR_MESSAGE =
+  "Unable to submit research. Please check all fields and try again, or contact support at adam@jdmrushimports.ca";
 
 const INITIAL_AUCTION_LISTING: AuctionListingForm = {
   lotTitle: "",
@@ -720,18 +722,11 @@ export default function AgentDocketDetailPage({
     }
 
     if (!response.ok || !result?.success) {
-      const detailsText =
-        result?.details !== undefined
-          ? `\nDetails: ${
-              typeof result.details === "string" ? result.details : JSON.stringify(result.details, null, 2)
-            }`
-          : "";
-      const errorMessage = result?.error ?? "Failed to submit research report.";
       console.error("[Research Submit] API_FAILED", {
         status: response.status,
         result,
       });
-      setError(`Failed to submit research report (HTTP ${response.status}): ${errorMessage}${detailsText}`);
+      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }

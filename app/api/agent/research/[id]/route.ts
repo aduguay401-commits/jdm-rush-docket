@@ -3,9 +3,9 @@ import { Resend } from "resend";
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
 import {
   calculateImportCost,
-  type DestinationCity,
   type DutyType,
   type VehicleType,
+  normalizeDestinationCity,
 } from "@/lib/importCalculator";
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -61,26 +61,6 @@ type SupabaseErrorLike = {
   hint?: string | null;
   code?: string | null;
 };
-
-const DESTINATION_CITIES: DestinationCity[] = [
-  "victoria-bc",
-  "duncan-bc",
-  "richmond-bc",
-  "kamloops-bc",
-  "kelowna-bc",
-  "okanagan-bc",
-  "regina-sk",
-  "saskatoon-sk",
-  "winnipeg-mb",
-  "toronto-on",
-  "calgary-ab",
-  "edmonton-ab",
-  "montreal-qc",
-];
-
-function isDestinationCity(value: string): value is DestinationCity {
-  return DESTINATION_CITIES.includes(value as DestinationCity);
-}
 
 function isVehicleType(value: string): value is VehicleType {
   return value === "regular" || value === "suv";
@@ -538,8 +518,10 @@ export async function POST(
       return errorResponse(400, "Docket not found.", { docketId: id });
     }
 
-    const destinationCity = toNonEmptyString(docket.destination_city);
-    if (!destinationCity || !isDestinationCity(destinationCity)) {
+    const rawDestinationCity = toNonEmptyString(docket.destination_city);
+    const destinationCity = rawDestinationCity ? normalizeDestinationCity(rawDestinationCity) : null;
+
+    if (!destinationCity) {
       return errorResponse(400, "Docket destination city is missing or invalid for fee calculation.", {
         docketId: id,
         destinationCity: docket.destination_city,

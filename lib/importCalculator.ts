@@ -113,6 +113,79 @@ const TRANSPORT_COSTS: Record<
   },
 };
 
+const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
+  // Canonical slugs
+  "victoria-bc": "victoria-bc",
+  "duncan-bc": "duncan-bc",
+  "richmond-bc": "richmond-bc",
+  "kamloops-bc": "kamloops-bc",
+  "kelowna-bc": "kelowna-bc",
+  "okanagan-bc": "okanagan-bc",
+  "regina-sk": "regina-sk",
+  "saskatoon-sk": "saskatoon-sk",
+  "winnipeg-mb": "winnipeg-mb",
+  "toronto-on": "toronto-on",
+  "calgary-ab": "calgary-ab",
+  "edmonton-ab": "edmonton-ab",
+  "montreal-qc": "montreal-qc",
+
+  // Human-readable aliases
+  victoria: "victoria-bc",
+  duncan: "duncan-bc",
+  richmond: "richmond-bc",
+  kamloops: "kamloops-bc",
+  kelowna: "kelowna-bc",
+  okanagan: "okanagan-bc",
+  regina: "regina-sk",
+  saskatoon: "saskatoon-sk",
+  winnipeg: "winnipeg-mb",
+  toronto: "toronto-on",
+  ottawa: "toronto-on",
+  calgary: "calgary-ab",
+  edmonton: "edmonton-ab",
+  montreal: "montreal-qc",
+  vancouver: "richmond-bc",
+  halifax: "montreal-qc",
+
+  // Province variants
+  "victoria bc": "victoria-bc",
+  "duncan bc": "duncan-bc",
+  "richmond bc": "richmond-bc",
+  "kamloops bc": "kamloops-bc",
+  "kelowna bc": "kelowna-bc",
+  "okanagan bc": "okanagan-bc",
+  "regina sk": "regina-sk",
+  "saskatoon sk": "saskatoon-sk",
+  "winnipeg mb": "winnipeg-mb",
+  "toronto on": "toronto-on",
+  "ottawa on": "toronto-on",
+  "calgary ab": "calgary-ab",
+  "edmonton ab": "edmonton-ab",
+  "montreal qc": "montreal-qc",
+  "vancouver bc": "richmond-bc",
+  "halifax ns": "montreal-qc",
+
+  // Comma variants
+  "victoria, bc": "victoria-bc",
+  "duncan, bc": "duncan-bc",
+  "richmond, bc": "richmond-bc",
+  "kamloops, bc": "kamloops-bc",
+  "kelowna, bc": "kelowna-bc",
+  "okanagan, bc": "okanagan-bc",
+  "regina, sk": "regina-sk",
+  "saskatoon, sk": "saskatoon-sk",
+  "winnipeg, mb": "winnipeg-mb",
+  "toronto, on": "toronto-on",
+  "ottawa, on": "toronto-on",
+  "calgary, ab": "calgary-ab",
+  "edmonton, ab": "edmonton-ab",
+  "montreal, qc": "montreal-qc",
+  "vancouver, bc": "richmond-bc",
+  "halifax, ns": "montreal-qc",
+};
+
+const PROVINCE_SUFFIX_PATTERN = /(?:,\s*|\s+)(bc|ab|sk|mb|on|qc|ns)$/i;
+
 function round2(value: number): number {
   return Number(value.toFixed(2));
 }
@@ -135,6 +208,26 @@ function getExportAgentFeeJPY(priceJPY: number): number {
     return 50000 + 2000000 * 0.08 + (priceJPY - 3000000) * 0.05;
   }
   return 50000 + 2000000 * 0.08 + 2000000 * 0.05 + (priceJPY - 5000000) * 0.03;
+}
+
+export function normalizeDestinationCity(raw: string): DestinationCity | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const cleaned = trimmed.toLowerCase().replace(/\s+/g, " ");
+  const withoutProvince = cleaned.replace(PROVINCE_SUFFIX_PATTERN, "").trim();
+  const cleanedSlug = cleaned.replace(/\s+/g, "-");
+  const withoutProvinceSlug = withoutProvince.replace(/\s+/g, "-");
+
+  return (
+    DESTINATION_CITY_ALIASES[cleaned] ??
+    DESTINATION_CITY_ALIASES[cleanedSlug] ??
+    DESTINATION_CITY_ALIASES[withoutProvince] ??
+    DESTINATION_CITY_ALIASES[withoutProvinceSlug] ??
+    null
+  );
 }
 
 export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
