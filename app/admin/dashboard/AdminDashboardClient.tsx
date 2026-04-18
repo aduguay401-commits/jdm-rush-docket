@@ -328,10 +328,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
     try {
       await patchDocket(id, { is_archived: false, archived_at: null }, { refreshAfter: false });
-      setDockets((previous) => previous.filter((docket) => docket.id !== id));
       if (selectedDocketId === id) {
         setSelectedDocketId(null);
       }
+      await refreshDockets(showArchived);
     } catch (updateError) {
       setError(updateError instanceof Error ? updateError.message : "Failed to unarchive docket");
     }
@@ -945,7 +945,17 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                   Archive
                 </button>
               </section>
-            ) : null}
+            ) : (
+              <section className="mt-6 border-t border-white/10 pt-4">
+                <button
+                  className="w-full rounded-md border border-[#E55125] bg-[#E55125] px-4 py-3 text-lg font-bold text-white hover:bg-[#cf4a22]"
+                  onClick={() => void handleUnarchiveDocket(selectedDocket.id)}
+                  type="button"
+                >
+                  Unarchive
+                </button>
+              </section>
+            )}
           </aside>
         </div>
       ) : null}
