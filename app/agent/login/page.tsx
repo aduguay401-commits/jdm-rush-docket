@@ -69,9 +69,11 @@ export default function AgentLoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-[#0d0d0d] px-6 text-white">
       <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#121212] p-8 shadow-2xl">
         <div className="mb-8 text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.35em] text-[#E55125]">
-            JDM Rush
-          </p>
+          <img
+            alt="JDM Rush Imports"
+            className="mx-auto w-40"
+            src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+          />
           <h1 className="mt-3 text-3xl font-semibold">Export Agent Portal</h1>
           <p className="mt-2 text-xs text-white/60">Admin users are redirected to the admin dashboard after sign-in.</p>
         </div>
