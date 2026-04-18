@@ -884,13 +884,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
               >
                 {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
               </button>
-              <button
-                className="mt-2 ml-2 rounded-md border border-amber-500/70 px-3 py-2 text-sm text-amber-300 hover:bg-amber-500/10"
-                onClick={() => void handleArchiveSelectedDocket()}
-                type="button"
-              >
-                Archive
-              </button>
             </section>
 
             <section className="mt-4 border-b border-white/10 pb-4">
@@ -942,6 +935,17 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                 ))}
               </div>
             </section>
+            {!showArchived ? (
+              <section className="mt-6 border-t border-white/10 pt-4">
+                <button
+                  className="w-full rounded-md border border-white/30 px-4 py-3 text-base font-bold text-white/85 hover:bg-white/5"
+                  onClick={() => void handleArchiveSelectedDocket()}
+                  type="button"
+                >
+                  Archive
+                </button>
+              </section>
+            ) : null}
           </aside>
         </div>
       ) : null}
