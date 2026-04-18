@@ -123,6 +123,10 @@ function getVehicleLabel(docket: NormalizedAdminDocket) {
   return [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model].filter(Boolean).join(" ") || "N/A";
 }
 
+function truncate(str: string, max: number) {
+  return str?.length > max ? str.substring(0, max) + "..." : str;
+}
+
 function isPaused(docket: NormalizedAdminDocket) {
   return docket.is_paused || docket.status === "paused";
 }
@@ -621,7 +625,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       </button>
                     </td>
                     <td className="px-3 py-3 font-medium">{getCustomerName(docket)}</td>
-                    <td className="px-3 py-3 text-white/85">{getVehicleLabel(docket)}</td>
+                    <td className="px-3 py-3 text-white/85">
+                      {truncate(docket.vehicle_description || docket.vehicle_make || "", 40) || "N/A"}
+                    </td>
                     <td className="px-3 py-3">
                       <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
                         {formatStatus(docket.status)}

@@ -37,11 +37,7 @@ function buildReminderEmailHtml({
           <table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" width=\"100%\" style=\"max-width:620px;background:#141414;border:1px solid #2a2a2a;border-radius:16px;overflow:hidden;\">
             <tr>
               <td style=\"padding:22px 24px;border-bottom:1px solid #2a2a2a;background:#111111;\">
-                <div style=\"font-weight:800;letter-spacing:0.14em;font-size:23px;line-height:1;\">
-                  <span style=\"color:#E55125;\">JDM</span>
-                  <span style=\"color:#ffffff;\"> RUSH</span>
-                </div>
-                <div style=\"margin-top:6px;font-size:11px;letter-spacing:0.35em;color:#8b8b8b;\">IMPORTS</div>
+                <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
               </td>
             </tr>
             <tr>

@@ -249,7 +249,7 @@ export default function AgentDocketDetailPage({
   const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
   const [sentQuestions, setSentQuestions] = useState<SentQuestion[]>([]);
   const [addingQuestion, setAddingQuestion] = useState(false);
-  const [addQuestionDraft, setAddQuestionDraft] = useState("");
+  const [queuedQuestions, setQueuedQuestions] = useState([""]);
   const [addQuestionLoading, setAddQuestionLoading] = useState(false);
   const [addQuestionSuccess, setAddQuestionSuccess] = useState<string | null>(null);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<Record<string, string>>({});
@@ -546,14 +546,33 @@ export default function AgentDocketDetailPage({
     setSavingQuestions(false);
   }
 
-  async function sendAddedQuestion() {
+  function updateQueuedQuestion(index: number, value: string) {
+    setQueuedQuestions((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  }
+
+  function addQueuedQuestionField() {
+    setQueuedQuestions((prev) => {
+      if (prev.length >= MAX_QUESTIONS) {
+        return prev;
+      }
+
+      return [...prev, ""];
+    });
+  }
+
+  async function sendQueuedQuestions() {
     if (!isQuestionsLocked || addQuestionLoading) {
       return;
     }
 
-    const nextQuestion = addQuestionDraft.trim();
-    if (!nextQuestion) {
-      setError("Enter a question before sending.");
+    const cleanedQuestions = queuedQuestions.map((question) => question.trim()).filter(Boolean);
+
+    if (cleanedQuestions.length === 0) {
+      setError("Enter at least one question before sending.");
       return;
     }
 
@@ -569,7 +588,7 @@ export default function AgentDocketDetailPage({
       },
       body: JSON.stringify({
         docketId: id,
-        questions: [nextQuestion],
+        questions: cleanedQuestions,
       }),
     });
 
@@ -583,9 +602,9 @@ export default function AgentDocketDetailPage({
 
     await loadSentQuestions(id);
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
-    setAddQuestionDraft("");
+    setQueuedQuestions([""]);
     setAddingQuestion(false);
-    setAddQuestionSuccess("Question sent to customer");
+    setAddQuestionSuccess("Questions sent to customer");
     setAddQuestionLoading(false);
   }
 
@@ -1573,6 +1592,7 @@ export default function AgentDocketDetailPage({
                     disabled={addQuestionLoading}
                     onClick={() => {
                       setAddingQuestion((prev) => !prev);
+                      setQueuedQuestions((prev) => (prev.length > 0 ? prev : [""]));
                       setAddQuestionSuccess(null);
                     }}
                     type="button"
@@ -1583,24 +1603,36 @@ export default function AgentDocketDetailPage({
 
                 {addingQuestion ? (
                   <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-black/20 p-4">
-                    <label className="block text-sm text-white/85">
-                      New Question
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                        disabled={addQuestionLoading}
-                        onChange={(event) => setAddQuestionDraft(event.target.value)}
-                        placeholder="Enter an additional question"
-                        type="text"
-                        value={addQuestionDraft}
-                      />
-                    </label>
+                    <div className="space-y-3">
+                      {queuedQuestions.map((queuedQuestion, index) => (
+                        <label className="block text-sm text-white/85" key={`queued-question-${index + 1}`}>
+                          New Question {index + 1}
+                          <input
+                            className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                            disabled={addQuestionLoading}
+                            onChange={(event) => updateQueuedQuestion(index, event.target.value)}
+                            placeholder="Enter an additional question"
+                            type="text"
+                            value={queuedQuestion}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      className="text-sm font-medium text-[#E55125] underline underline-offset-2 transition hover:text-[#f47a55] disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={addQuestionLoading || queuedQuestions.length >= MAX_QUESTIONS}
+                      onClick={addQueuedQuestionField}
+                      type="button"
+                    >
+                      + Add Another
+                    </button>
                     <button
                       className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                       disabled={addQuestionLoading}
-                      onClick={sendAddedQuestion}
+                      onClick={sendQueuedQuestions}
                       type="button"
                     >
-                      {addQuestionLoading ? "Sending..." : "Send"}
+                      {addQuestionLoading ? "Sending..." : "Send Questions"}
                     </button>
                   </div>
                 ) : null}

@@ -28,7 +28,6 @@ type DocketRow = {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const JDM_LOGO_URL = 'https://www.jdmrushimports.ca/logo.png'
 const DEV_MODE = process.env.DEV_MODE === 'true'
 
 const SUBJECTS: Record<SequenceType, Record<1 | 2 | 3, string>> = {
@@ -148,7 +147,7 @@ function buildEmailContent({
           <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;background:#111111;border:1px solid #2a2a2a;border-radius:16px;overflow:hidden;">
             <tr>
               <td style="padding:20px 24px;border-bottom:1px solid #2a2a2a;">
-                <img src="${JDM_LOGO_URL}" alt="JDM Rush Imports" width="180" style="display:block;max-width:100%;height:auto;" />
+                <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
               </td>
             </tr>
             <tr>

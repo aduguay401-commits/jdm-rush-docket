@@ -130,18 +130,19 @@ export function CustomerQuestionsClient({
       <div className="mx-auto max-w-[680px]">
         <div className="text-center">
           <div className="inline-flex flex-col items-center">
-            <div className="text-4xl font-semibold tracking-[0.24em] sm:text-5xl">
-              <span className="text-[#E55125]">JDM</span>
-              <span className="ml-3 text-white">RUSH</span>
-            </div>
-            <p className="mt-2 text-xs tracking-[0.5em] text-white/45 sm:text-sm">IMPORTS</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt="JDM Rush Imports"
+              className="h-[50px] w-auto"
+              src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+            />
           </div>
         </div>
 
         <div className="mt-10 space-y-6">
           {answersSubmitted ? (
             <section className="rounded-lg border-l-4 border-[#E55125] bg-[#1a1a1a] p-6">
-              <p className="text-xl font-semibold text-white">Thanks {firstName}! We have got your answers.</p>
+              <p className="text-xl font-semibold text-white">Thanks {firstName}! We have received your answers.</p>
               <p className="mt-2 text-sm leading-6 text-white/78">
                 Our team is reviewing them now and will be in touch shortly with your custom report.
               </p>

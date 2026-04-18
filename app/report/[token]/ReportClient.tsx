@@ -498,11 +498,12 @@ export function ReportClient({
       <div className="mx-auto w-full max-w-[900px]">
         <header className="text-center">
           <div className="inline-flex flex-col items-center">
-            <div className="text-4xl font-semibold tracking-[0.24em] sm:text-5xl">
-              <span className="text-[#E55125]">JDM</span>
-              <span className="ml-3 text-white">RUSH</span>
-            </div>
-            <p className="mt-2 text-xs tracking-[0.5em] text-white/45 sm:text-sm">IMPORTS</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt="JDM Rush Imports"
+              className="h-[50px] w-auto"
+              src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+            />
           </div>
         </header>
 
