@@ -49,7 +49,7 @@ export function CustomerQuestionsClient({
   }
 
   async function submitAnswers() {
-    if (!hasUnansweredQuestions || answersSubmitted) {
+    if (!hasUnansweredQuestions || answersSubmitted || isSubmittingAnswers) {
       return;
     }
 
@@ -61,29 +61,35 @@ export function CustomerQuestionsClient({
     setIsSubmittingAnswers(true);
     setAnswerError(null);
 
-    const payload = unansweredQuestions.map((question) => ({
-      questionId: question.id,
-      answerText: answers[question.id].trim(),
-    }));
+    try {
+      const payload = unansweredQuestions.map((question) => ({
+        questionId: question.id,
+        answerText: answers[question.id].trim(),
+      }));
 
-    const response = await fetch(submitEndpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+      const response = await fetch(submitEndpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    const result = (await response.json()) as { error?: string; success?: boolean };
+      const result = (await response.json()) as { error?: string; success?: boolean };
 
-    if (!response.ok || !result.success) {
-      setAnswerError(result.error ?? "Failed to submit your answers.");
+      if (!response.ok || !result.success) {
+        setAnswerError(result.error ?? "Failed to submit your answers.");
+        setIsSubmittingAnswers(false);
+        return;
+      }
+
+      setAnswersSubmitted(true);
+      window.scrollTo({ top: 0, behavior: "smooth" });
       setIsSubmittingAnswers(false);
-      return;
+    } catch {
+      setAnswerError("Failed to submit your answers.");
+      setIsSubmittingAnswers(false);
     }
-
-    setAnswersSubmitted(true);
-    setIsSubmittingAnswers(false);
   }
 
   async function submitCustomerQuestion() {
@@ -133,6 +139,15 @@ export function CustomerQuestionsClient({
         </div>
 
         <div className="mt-10 space-y-6">
+          {answersSubmitted ? (
+            <section className="rounded-lg border-l-4 border-[#E55125] bg-[#1a1a1a] p-6">
+              <p className="text-xl font-semibold text-white">Thanks {firstName}! We have got your answers.</p>
+              <p className="mt-2 text-sm leading-6 text-white/78">
+                Our team is reviewing them now and will be in touch shortly with your custom report.
+              </p>
+            </section>
+          ) : null}
+
           <section className="rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] sm:p-8">
             <h1 className="text-3xl font-semibold text-white sm:text-[2.2rem]">
               A Few Quick Questions, {firstName}
@@ -153,36 +168,38 @@ export function CustomerQuestionsClient({
 
             {hasUnansweredQuestions ? (
               <div className="mt-6 space-y-5">
-                {unansweredQuestions.map((question, index) => (
-                  <label className="block" key={question.id}>
-                    <span className="text-sm font-medium text-white/80">
-                      {index + 1}. {question.question_text}
-                    </span>
-                    <textarea
-                      className="mt-3 min-h-20 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
-                      disabled={answersSubmitted || isSubmittingAnswers}
-                      onChange={(event) => updateAnswer(question.id, event.target.value)}
-                      placeholder="Type your answer here"
-                      value={answers[question.id] ?? ""}
-                    />
-                  </label>
-                ))}
-
                 {answerError ? <p className="text-sm text-red-400">{answerError}</p> : null}
-                {answersSubmitted ? (
-                  <p className="text-sm text-emerald-400">
-                    Thanks. Your answers were submitted successfully.
-                  </p>
-                ) : null}
+                {!answersSubmitted ? (
+                  <>
+                    {unansweredQuestions.map((question, index) => (
+                      <label className="block" key={question.id}>
+                        <span className="text-sm font-medium text-white/80">
+                          {index + 1}. {question.question_text}
+                        </span>
+                        <textarea
+                          className="mt-3 min-h-20 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                          disabled={answersSubmitted || isSubmittingAnswers}
+                          onChange={(event) => updateAnswer(question.id, event.target.value)}
+                          placeholder="Type your answer here"
+                          value={answers[question.id] ?? ""}
+                        />
+                      </label>
+                    ))}
 
-                <button
-                  className="w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={answersSubmitted || isSubmittingAnswers}
-                  onClick={submitAnswers}
-                  type="button"
-                >
-                  {isSubmittingAnswers ? "Submitting..." : "Submit Answers"}
-                </button>
+                    <button
+                      className="w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={answersSubmitted || isSubmittingAnswers}
+                      onClick={submitAnswers}
+                      type="button"
+                    >
+                      {isSubmittingAnswers ? "Submitting..." : "Submit Answers"}
+                    </button>
+                  </>
+                ) : (
+                  <p className="text-sm text-emerald-400">
+                    Your answers are in. You can still use the section below if you want to ask us anything else.
+                  </p>
+                )}
               </div>
             ) : (
               <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-400/8 p-4 text-sm text-emerald-300">

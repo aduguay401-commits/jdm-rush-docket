@@ -220,14 +220,20 @@ function FeeBreakdownTable({
     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
       <p className="mb-3 text-xs uppercase tracking-[0.15em] text-white/50">All amounts in CAD</p>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] border-collapse text-left text-sm text-white/85">
+        <table className="w-full min-w-[520px] border-collapse text-left text-[14px] text-white/85 sm:text-sm">
           <tbody>
             {rows.map(([label, value], index) => {
               const isTotal = label === "Total Delivered Price";
               return (
                 <tr className="border-b border-white/10 last:border-b-0" key={`${label}-${index}`}>
-                  <td className={`py-2 pr-4 ${isTotal ? "font-semibold text-white" : ""}`}>{label}</td>
-                  <td className={`py-2 text-right ${isTotal ? "font-semibold text-[#E55125]" : ""}`}>
+                  <td className={`py-2 pr-4 text-[14px] sm:text-sm ${isTotal ? "font-semibold text-white" : ""}`}>
+                    {label}
+                  </td>
+                  <td
+                    className={`py-2 text-right text-[14px] font-semibold sm:text-sm ${
+                      isTotal ? "text-[#E55125]" : ""
+                    }`}
+                  >
                     {formatCad(value)}
                   </td>
                 </tr>
@@ -623,7 +629,7 @@ export function ReportClient({
             </section>
 
             <section className="border-t border-white/10 pt-10">
-              <h2 className="text-2xl font-semibold text-white">Auction Sales History</h2>
+              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Sales History</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
                 <p className="text-sm text-white/65">Hammer Price Range</p>
                 <p className="mt-1 text-lg text-white">
@@ -643,7 +649,7 @@ export function ReportClient({
             </section>
 
             <section className="border-t border-white/10 pt-10">
-              <h2 className="text-2xl font-semibold text-white">Current Weekly Auction Listings</h2>
+              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Current Weekly Auction Listings</h2>
               {listings.length === 0 ? (
                 <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
                   No weekly listings were included in this report.
@@ -690,7 +696,7 @@ export function ReportClient({
             </section>
 
             <section className="border-t border-white/10 pt-10">
-              <h2 className="text-2xl font-semibold text-white">Auction Option</h2>
+              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Option</h2>
               <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
                 <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
                   <p>
@@ -742,7 +748,7 @@ export function ReportClient({
             </section>
 
             <section className="border-t border-white/10 pt-10">
-              <h2 className="text-2xl font-semibold text-white">Private Dealer Options</h2>
+              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Private Dealer Options</h2>
               {privateDealerOptions.length === 0 ? (
                 <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
                   No private dealer options were included in this report.
@@ -844,7 +850,7 @@ export function ReportClient({
             </section>
 
             <section className="border-t border-white/10 pt-10">
-              <h2 className="text-2xl font-semibold text-white">Ask Us Anything</h2>
+              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Ask Us Anything</h2>
               <p className="mt-2 text-sm leading-6 text-white/65">
                 Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
               </p>

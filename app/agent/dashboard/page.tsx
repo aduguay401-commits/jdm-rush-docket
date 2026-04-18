@@ -12,7 +12,7 @@ type Docket = {
   status: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
-  vehicle_year: string | null;
+  vehicle_year: string | number | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
   destination_city: string | null;
@@ -53,11 +53,18 @@ function formatStatus(status: string | null | undefined) {
 }
 
 function buildVehicleLabel(
-  year: string | null | undefined,
+  year: string | number | null | undefined,
   make: string | null | undefined,
   model: string | null | undefined
 ) {
-  return [year, make, model]
+  const normalizedYear =
+    typeof year === "number"
+      ? String(year)
+      : typeof year === "string" && year.trim().length > 0
+        ? year.trim()
+        : null;
+
+  return [normalizedYear, make, model]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
 }
