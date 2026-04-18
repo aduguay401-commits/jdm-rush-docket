@@ -156,7 +156,11 @@ export default function AgentManagementClient() {
     <main className="min-h-screen bg-[#0b0b0b] px-5 py-6 text-white sm:px-8">
       <div className="mx-auto w-full max-w-5xl">
         <header className="mb-6 border-b border-white/10 pb-4">
-          <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[#E55125]">JDM Rush</p>
+          <img
+            src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+            alt="JDM Rush Imports"
+            style={{ height: "36px", display: "block", marginBottom: "4px" }}
+          />
           <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-3xl font-semibold">Agent Management</h1>

@@ -172,7 +172,11 @@ export default function AgentDashboardPage() {
       <div className="mx-auto w-full max-w-6xl">
         <header className="relative mb-8 border-b border-white/10 pb-5">
           <div className="text-center">
-            <p className="text-sm font-medium uppercase tracking-[0.3em] text-[#E55125]">JDM Rush</p>
+            <img
+              src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+              alt="JDM Rush Imports"
+              style={{ height: "36px", display: "block", marginBottom: "4px" }}
+            />
             <h1 className="mt-2 text-3xl font-semibold">Export Agent Dashboard</h1>
           </div>
           <div className="mt-4 flex justify-center sm:absolute sm:right-0 sm:top-0 sm:mt-0">

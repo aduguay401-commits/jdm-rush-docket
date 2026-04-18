@@ -1051,7 +1051,11 @@ export default function AgentDocketDetailPage({
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <div className="mx-auto max-w-5xl space-y-8">
         <header className="border-b border-white/10 pb-5">
-          <p className="text-sm font-medium uppercase tracking-[0.3em] text-[#E55125]">JDM Rush</p>
+          <img
+            src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
+            alt="JDM Rush Imports"
+            style={{ height: "36px", display: "block", marginBottom: "4px" }}
+          />
           <h1 className="mt-2 text-3xl font-semibold">Docket Details</h1>
         </header>
 
