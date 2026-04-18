@@ -260,12 +260,32 @@ export async function POST(
       originalRecipient: customerEmail,
     });
 
-    await resend.emails.send({
-      from: fromEmail,
-      to: recipientEmail,
-      subject,
-      html,
-    });
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        html,
+      });
+
+      if (sendResult.error) {
+        console.error("[Email #5 Send Error]", {
+          docketId: docket.id,
+          token,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Email #5 Send Error]", {
+        docketId: docket.id,
+        token,
+        recipient: recipientEmail,
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
     const { error: emailLogError } = await supabase.from("email_log").insert({
       docket_id: docket.id,

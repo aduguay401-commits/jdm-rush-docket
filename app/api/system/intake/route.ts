@@ -133,11 +133,9 @@ export async function POST(request: Request) {
         : ''
 
     // Email 1: Customer Welcome
-    await resend.emails.send({
-      from: fromEmail,
-      to: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
-      subject: 'Welcome to JDM Rush Imports',
-      text: `${customerDevPrefix}Hi ${payload.customer_first_name ?? 'there'},
+    try {
+      const subject = 'Welcome to JDM Rush Imports'
+      const bodySnapshot = `${customerDevPrefix}Hi ${payload.customer_first_name ?? 'there'},
 
 Thanks for submitting your intake form with JDM Rush Imports.
 
@@ -146,16 +144,47 @@ We have created your docket (${docket.id}) and our team will review your request
 Vehicle: ${vehicle}
 
 Best,
-JDM Rush Imports`,
-    })
+JDM Rush Imports`
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        subject,
+        text: bodySnapshot,
+      })
+
+      if (sendResult.error) {
+        console.error('[Email #1 Send Error]', {
+          docketId: docket.id,
+          recipient: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+          error: sendResult.error,
+        })
+        return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+      }
+
+      const { error: emailLogError } = await supabase.from('email_log').insert({
+        docket_id: docket.id,
+        email_type: 'email_1_customer_welcome',
+        recipient_email: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        subject,
+        body_snapshot: bodySnapshot,
+      })
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 })
+      }
+    } catch (error) {
+      console.error('[Email #1 Send Error]', {
+        docketId: docket.id,
+        recipient: customerEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        error,
+      })
+      return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+    }
 
     // Email 2: Marcus Notification
-    await resend.emails.send({
-      from: fromEmail,
-      to: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
-      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
-      subject: `New Lead: ${fullName || 'Intake Submission'}`,
-      text: `${marcusDevPrefix}New intake submitted.
+    try {
+      const subject = `New Lead: ${fullName || 'Intake Submission'}`
+      const bodySnapshot = `${marcusDevPrefix}New intake submitted.
 
 Docket ID: ${docket.id}
 Customer: ${fullName}
@@ -164,23 +193,90 @@ Phone: ${payload.customer_phone ?? 'N/A'}
 Vehicle: ${vehicle}
 Timeline: ${payload.timeline ?? 'N/A'}
 
-Please review and begin follow-up.`,
-    })
+Please review and begin follow-up.`
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
+        subject,
+        text: bodySnapshot,
+      })
+
+      if (sendResult.error) {
+        console.error('[Intake Marcus Notification Send Error]', {
+          docketId: docket.id,
+          recipient: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+          error: sendResult.error,
+        })
+        return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+      }
+
+      const { error: emailLogError } = await supabase.from('email_log').insert({
+        docket_id: docket.id,
+        email_type: 'email_1_marcus_notification',
+        recipient_email: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        subject,
+        body_snapshot: bodySnapshot,
+      })
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 })
+      }
+    } catch (error) {
+      console.error('[Intake Marcus Notification Send Error]', {
+        docketId: docket.id,
+        recipient: marcusEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
+        error,
+      })
+      return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+    }
 
     // Email 3: Admin Notification
-    await resend.emails.send({
-      from: fromEmail,
-      to: adminEmail ?? 'adam@jdmrushimports.ca',
-      subject: `Admin Notification: New Intake ${docket.id}`,
-      text: `A new intake has been received and added to Supabase.
+    try {
+      const subject = `Admin Notification: New Intake ${docket.id}`
+      const bodySnapshot = `A new intake has been received and added to Supabase.
 
 Docket ID: ${docket.id}
 Customer: ${fullName}
 Email: ${payload.customer_email}
 Vehicle: ${vehicle}
 Exchange Rate (JPY/CAD): ${exchange.rate}
-Exchange Rate Date: ${exchange.date}`,
-    })
+Exchange Rate Date: ${exchange.date}`
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: adminEmail ?? 'adam@jdmrushimports.ca',
+        subject,
+        text: bodySnapshot,
+      })
+
+      if (sendResult.error) {
+        console.error('[Intake Admin Notification Send Error]', {
+          docketId: docket.id,
+          recipient: adminEmail ?? 'adam@jdmrushimports.ca',
+          error: sendResult.error,
+        })
+        return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+      }
+
+      const { error: emailLogError } = await supabase.from('email_log').insert({
+        docket_id: docket.id,
+        email_type: 'email_1_admin_notification',
+        recipient_email: adminEmail ?? 'adam@jdmrushimports.ca',
+        subject,
+        body_snapshot: bodySnapshot,
+      })
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 })
+      }
+    } catch (error) {
+      console.error('[Intake Admin Notification Send Error]', {
+        docketId: docket.id,
+        recipient: adminEmail ?? 'adam@jdmrushimports.ca',
+        error,
+      })
+      return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+    }
 
     return Response.json({ success: true, docketId: docket.id })
   } catch {

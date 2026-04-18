@@ -86,19 +86,54 @@ export async function POST(
         : "Auction";
 
     const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
-
-    await resend.emails.send({
-      from: fromEmail,
-      to: adminEmail ?? "adam@jdmrushimports.ca",
-      subject: `Customer decision made for docket ${docket.id}`,
-      text: `${devPrefix}A customer made their purchase decision.
+    const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
+    const subject = `Customer decision made for docket ${docket.id}`;
+    const bodySnapshot = `${devPrefix}A customer made their purchase decision.
 
 Docket: ${docket.id}
 Customer: ${customerName || "Unknown Customer"}
 Customer Email: ${docket.customer_email ?? "Unknown"}
 Vehicle: ${vehicle || "Unknown Vehicle"}
-Selected Path: ${selectionLabel}`,
-    });
+Selected Path: ${selectionLabel}`;
+
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        text: bodySnapshot,
+      });
+
+      if (sendResult.error) {
+        console.error("[Customer Decision Notification Send Error]", {
+          docketId: docket.id,
+          token,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+
+      const { error: emailLogError } = await supabase.from("email_log").insert({
+        docket_id: docket.id,
+        email_type: "report_decision_sent",
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: bodySnapshot,
+      });
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Customer Decision Notification Send Error]", {
+        docketId: docket.id,
+        token,
+        recipient: recipientEmail,
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
     return Response.json({ success: true });
   } catch {

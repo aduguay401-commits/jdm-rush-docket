@@ -46,14 +46,47 @@ export async function POST(request: Request) {
       devMode && marcusOriginalEmail
         ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
         : "";
+    const recipientEmail = marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca";
+    const subject = `Marcus is proceeding to research for docket ${docketId}`;
+    const bodySnapshot = `${marcusDevPrefix}Marcus confirmed there are no clarifying questions for docket ${docketId} and is now proceeding to research.`;
 
-    await resend.emails.send({
-      from: fromEmail,
-      to: marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
-      ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
-      subject: `Marcus is proceeding to research for docket ${docketId}`,
-      text: `${marcusDevPrefix}Marcus confirmed there are no clarifying questions for docket ${docketId} and is now proceeding to research.`,
-    });
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
+        subject,
+        text: bodySnapshot,
+      });
+
+      if (sendResult.error) {
+        console.error("[Email #4 Send Error]", {
+          docketId,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+
+      const { error: emailLogError } = await supabase.from("email_log").insert({
+        docket_id: docketId,
+        email_type: "email_4_proceed_to_research",
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: bodySnapshot,
+      });
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Email #4 Send Error]", {
+        docketId,
+        recipient: recipientEmail,
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
     return Response.json({ success: true });
   } catch {

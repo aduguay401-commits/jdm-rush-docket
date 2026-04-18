@@ -22,6 +22,61 @@ function normalizeAnswers(value: unknown): Array<{ answerText: string; questionI
     .filter((item) => item.answerText.length > 0 && item.questionId.length > 0);
 }
 
+function buildVehicleLabel(
+  year: string | null | undefined,
+  make: string | null | undefined,
+  model: string | null | undefined
+) {
+  return [year, make, model]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+}
+
+function buildAnswersReceivedEmailHtml({
+  firstName,
+  vehicle,
+  devMode,
+  originalRecipient,
+}: {
+  firstName: string;
+  vehicle: string;
+  devMode: boolean;
+  originalRecipient: string | null;
+}) {
+  const devBanner =
+    devMode && originalRecipient
+      ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${originalRecipient}</div>`
+      : "";
+
+  return `<!doctype html>
+<html lang="en">
+  <body style="margin:0;background:#0d0d0d;color:#ffffff;font-family:Arial,sans-serif;">
+    <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="background:#0d0d0d;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:640px;background:#111111;border:1px solid #2a2a2a;border-radius:16px;overflow:hidden;">
+            <tr>
+              <td style="padding:20px 24px;border-bottom:1px solid #2a2a2a;">
+                <img src="https://www.jdmrushimports.ca/logo.png" alt="JDM Rush Imports" width="180" style="display:block;max-width:100%;height:auto;" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px;">
+                ${devBanner}
+                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">Got your answers — we're on it, ${firstName}</h1>
+                <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Thanks for answering our questions. Our export agent Marcus is now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.</p>
+                <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ token: string }> }
@@ -42,7 +97,7 @@ export async function POST(
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model"
+        "id, customer_first_name, customer_email, vehicle_year, vehicle_make, vehicle_model"
       )
       .eq("questions_url_token", token)
       .maybeSingle();
@@ -105,6 +160,11 @@ export async function POST(
     const fromEmail = process.env.FROM_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
     const adminEmail = process.env.ADMIN_EMAIL;
+    const originalRecipient =
+      typeof docket.customer_email === "string" && docket.customer_email.trim().length > 0
+        ? docket.customer_email
+        : null;
+    const recipientEmail = devMode ? adminEmail : originalRecipient;
 
     if (!resendApiKey || !fromEmail) {
       return Response.json(
@@ -113,41 +173,74 @@ export async function POST(
       );
     }
 
+    const firstName =
+      typeof docket.customer_first_name === "string" && docket.customer_first_name.trim().length > 0
+        ? docket.customer_first_name.trim()
+        : "there";
+    const vehicle =
+      buildVehicleLabel(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model) || "vehicle";
+    const subject = `Got your answers — we're on it, ${firstName}`;
+    const html = buildAnswersReceivedEmailHtml({
+      firstName,
+      vehicle,
+      devMode,
+      originalRecipient,
+    });
+    const textDevPrefix =
+      devMode && originalRecipient
+        ? `[DEV MODE] This email would normally go to ${originalRecipient}\n\n`
+        : "";
+    const text = `${textDevPrefix}Hi ${firstName},
+
+Thanks for answering our questions. Our export agent Marcus is now pulling auction data and private dealer options for your ${vehicle}. We'll be in touch as soon as your custom report is ready - usually within a few business days.
+
+Adam & the JDM Rush Team
+support@jdmrushimports.ca`;
+
     const resend = new Resend(resendApiKey);
-    const customerName = [docket.customer_first_name, docket.customer_last_name]
-      .filter((value) => typeof value === "string" && value.trim().length > 0)
-      .join(" ");
-    const customerFirstName = docket.customer_first_name?.trim() || "Unknown";
-    const customerLastName = docket.customer_last_name?.trim() || "Customer";
-    const vehicle = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
-      .map((value) => (typeof value === "string" ? value.trim() : ""))
-      .filter(Boolean)
-      .join(" ");
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+        subject,
+        html,
+        text,
+      });
 
-    const notificationRecipients = devMode
-      ? [adminEmail ?? "adam@jdmrushimports.ca"]
-      : ["marcus@gemmytrading.com", ...(adminEmail ? [adminEmail] : [])];
+      if (sendResult.error) {
+        console.error("[Email #3 Send Error]", {
+          docketId: docket.id,
+          token,
+          recipient: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Email #3 Send Error]", {
+        docketId: docket.id,
+        token,
+        recipient: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
-    await resend.emails.send({
-      from: fromEmail,
-      to: notificationRecipients,
-      ...(!devMode ? { cc: "trade@gemmytrading.com" } : {}),
-      subject: `Customer Answers Received — ${customerFirstName} ${customerLastName} — ${vehicle || "Unknown Vehicle"}`,
-      text: `Hi Marcus,
-
-Great news — the customer has answered your clarifying questions. Please log in to the docket system to review their answers and proceed with your research.
-
-Customer: ${customerName || `${customerFirstName} ${customerLastName}`}
-Vehicle: ${vehicle || "Unknown Vehicle"}
-
-Log in here → https://jdm-rush-docket.vercel.app/agent/login
-
-Thanks,
-JDM Rush System`,
+    const { error: emailLogError } = await supabase.from("email_log").insert({
+      docket_id: docket.id,
+      email_type: "email_3_answers_received",
+      recipient_email: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
+      subject,
+      body_snapshot: html,
     });
 
+    if (emailLogError) {
+      return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+    }
+
     return Response.json({ success: true });
-  } catch {
+  } catch (error) {
+    console.error("[Email #3 Route Error]", { error });
     return Response.json({ success: false, error: "Invalid request body" }, { status: 400 });
   }
 }

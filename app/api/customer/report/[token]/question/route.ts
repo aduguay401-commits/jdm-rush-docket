@@ -58,19 +58,54 @@ export async function POST(
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
     const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
-
-    await resend.emails.send({
-      from: fromEmail,
-      to: adminEmail ?? "adam@jdmrushimports.ca",
-      subject: `New customer question on report docket ${docket.id}`,
-      text: `${devPrefix}A customer sent a question from the report page.
+    const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
+    const subject = `New customer question on report docket ${docket.id}`;
+    const bodySnapshot = `${devPrefix}A customer sent a question from the report page.
 
 Docket: ${docket.id}
 Customer: ${customerName || "Unknown Customer"}
 Customer Email: ${docket.customer_email ?? "Unknown"}
 
-Question:\n${questionText}`,
-    });
+Question:\n${questionText}`;
+
+    try {
+      const sendResult = await resend.emails.send({
+        from: fromEmail,
+        to: recipientEmail,
+        subject,
+        text: bodySnapshot,
+      });
+
+      if (sendResult.error) {
+        console.error("[Report Question Notification Send Error]", {
+          docketId: docket.id,
+          token,
+          recipient: recipientEmail,
+          error: sendResult.error,
+        });
+        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      }
+
+      const { error: emailLogError } = await supabase.from("email_log").insert({
+        docket_id: docket.id,
+        email_type: "report_question_sent",
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: bodySnapshot,
+      });
+
+      if (emailLogError) {
+        return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+      }
+    } catch (error) {
+      console.error("[Report Question Notification Send Error]", {
+        docketId: docket.id,
+        token,
+        recipient: recipientEmail,
+        error,
+      });
+      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+    }
 
     return Response.json({ success: true });
   } catch {
