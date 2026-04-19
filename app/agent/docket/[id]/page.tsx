@@ -41,6 +41,7 @@ type CustomerSubmittedQuestion = {
   id: string;
   question_text: string;
   created_at: string | null;
+  read_at: string | null;
 };
 
 type AuctionListingForm = {
@@ -288,6 +289,7 @@ export default function AgentDocketDetailPage({
     ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
     : null;
   const questionsSentAt = sentQuestions.length > 0 ? sentQuestions[0]?.created_at : null;
+  const unreadCustomerQuestionsCount = customerSubmittedQuestions.filter((question) => question.read_at === null).length;
 
   async function createSignedPreviewUrl(filePath: string) {
     const storagePath = extractStoragePath(filePath);
@@ -402,7 +404,7 @@ export default function AgentDocketDetailPage({
             .order("created_at", { ascending: true }),
           supabase
             .from("customer_questions")
-            .select("id, question_text, created_at")
+            .select("id, question_text, created_at, read_at")
             .eq("docket_id", id)
             .order("created_at", { ascending: true }),
         ]);
@@ -428,6 +430,16 @@ export default function AgentDocketDetailPage({
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setCustomerSubmittedQuestions((customerQuestionsData ?? []) as CustomerSubmittedQuestion[]);
+
+      const unreadQuestions = (customerQuestionsData ?? []).filter((question) => question.read_at === null);
+      if (unreadQuestions.length > 0) {
+        await supabase
+          .from("customer_questions")
+          .update({ read_at: new Date().toISOString() })
+          .eq("docket_id", id)
+          .is("read_at", null);
+      }
+
       setLoading(false);
     }
 
@@ -1148,7 +1160,14 @@ export default function AgentDocketDetailPage({
                 onClick={() => setIsCustomerCommunicationExpanded((prev) => !prev)}
                 type="button"
               >
-                <h2 className="text-xl font-semibold">Customer Communication</h2>
+                <h2 className="text-xl font-semibold">
+                  Customer Communication
+                  {unreadCustomerQuestionsCount > 0 ? (
+                    <span className="ml-2 inline-flex items-center rounded-full bg-[#E55125]/20 px-2 py-0.5 text-xs font-medium text-[#E55125]">
+                      {unreadCustomerQuestionsCount}
+                    </span>
+                  ) : null}
+                </h2>
                 <span
                   aria-hidden="true"
                   className={`text-xl text-[#E55125] transition-transform ${isCustomerCommunicationExpanded ? "rotate-180" : ""}`}
@@ -1327,13 +1346,25 @@ export default function AgentDocketDetailPage({
                   </div>
 
                   <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                    <h3 className="mb-3 text-lg font-medium">Customer Questions</h3>
+                    <h3 className="mb-3 text-lg font-medium">
+                      Customer Questions
+                      {unreadCustomerQuestionsCount > 0 ? (
+                        <span className="ml-2 text-sm font-medium text-[#E55125]">
+                          ({unreadCustomerQuestionsCount} new)
+                        </span>
+                      ) : null}
+                    </h3>
                     {customerSubmittedQuestions.length === 0 ? (
                       <p className="text-sm text-white/70">No customer questions submitted yet.</p>
                     ) : (
                       <ul className="space-y-3">
                         {customerSubmittedQuestions.map((question, index) => (
-                          <li className="rounded-lg border border-white/10 bg-black/25 p-3" key={question.id}>
+                          <li
+                            className={`rounded-lg border border-white/10 bg-black/25 p-3 ${
+                              question.read_at === null ? "border-l-4 border-l-[#E55125] bg-[#E55125]/5" : ""
+                            }`}
+                            key={question.id}
+                          >
                             <p className="text-sm text-white/90">
                               {index + 1}. {question.question_text}
                             </p>
