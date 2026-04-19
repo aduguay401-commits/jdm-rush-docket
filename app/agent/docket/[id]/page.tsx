@@ -37,6 +37,12 @@ type SentQuestion = {
   created_at: string;
 };
 
+type CustomerSubmittedQuestion = {
+  id: string;
+  question_text: string;
+  created_at: string | null;
+};
+
 type AuctionListingForm = {
   lotTitle: string;
   specs: string;
@@ -250,11 +256,13 @@ export default function AgentDocketDetailPage({
   const [proceedConfirmation, setProceedConfirmation] = useState<string | null>(null);
   const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
   const [sentQuestions, setSentQuestions] = useState<SentQuestion[]>([]);
+  const [customerSubmittedQuestions, setCustomerSubmittedQuestions] = useState<CustomerSubmittedQuestion[]>([]);
   const [addingQuestion, setAddingQuestion] = useState(false);
   const [queuedQuestions, setQueuedQuestions] = useState([""]);
   const [addQuestionLoading, setAddQuestionLoading] = useState(false);
   const [addQuestionSuccess, setAddQuestionSuccess] = useState<string | null>(null);
   const [photoPreviewUrls, setPhotoPreviewUrls] = useState<Record<string, string>>({});
+  const [isCustomerCommunicationExpanded, setIsCustomerCommunicationExpanded] = useState(true);
 
   const [hammerPriceLowJpy, setHammerPriceLowJpy] = useState("");
   const [hammerPriceHighJpy, setHammerPriceHighJpy] = useState("");
@@ -375,7 +383,11 @@ export default function AgentDocketDetailPage({
 
       setDocket(data as Docket);
 
-      const [{ data: sentQuestionsData, error: sentQuestionsError }, { data: answersData, error: answersError }] =
+      const [
+        { data: sentQuestionsData, error: sentQuestionsError },
+        { data: answersData, error: answersError },
+        { data: customerQuestionsData, error: customerQuestionsError },
+      ] =
         await Promise.all([
           supabase
             .from("marcus_questions")
@@ -387,6 +399,11 @@ export default function AgentDocketDetailPage({
             .select("id, question_text, answer_text")
             .eq("docket_id", id)
             .not("answered_at", "is", null)
+            .order("created_at", { ascending: true }),
+          supabase
+            .from("customer_questions")
+            .select("id, question_text, created_at")
+            .eq("docket_id", id)
             .order("created_at", { ascending: true }),
         ]);
 
@@ -402,8 +419,15 @@ export default function AgentDocketDetailPage({
         return;
       }
 
+      if (customerQuestionsError) {
+        setError(customerQuestionsError.message);
+        setLoading(false);
+        return;
+      }
+
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
+      setCustomerSubmittedQuestions((customerQuestionsData ?? []) as CustomerSubmittedQuestion[]);
       setLoading(false);
     }
 
@@ -1117,23 +1141,213 @@ export default function AgentDocketDetailPage({
               </div>
             </section>
 
-            {isAnswersReceived ? (
-              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="mb-4 text-xl font-semibold">Customer Answers</h2>
-                {customerAnswers.length === 0 ? (
-                  <p className="text-sm text-white/70">No customer answers found.</p>
-                ) : (
-                  <div className="divide-y divide-white/10">
-                    {customerAnswers.map((item) => (
-                      <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
-                        <p className="text-sm text-white">{item.question_text}</p>
-                        <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
-                      </div>
-                    ))}
+            <section className="rounded-xl border border-white/12 border-l-4 border-l-[#E55125] bg-[#171717] p-5">
+              <button
+                aria-expanded={isCustomerCommunicationExpanded}
+                className="flex w-full items-center justify-between text-left"
+                onClick={() => setIsCustomerCommunicationExpanded((prev) => !prev)}
+                type="button"
+              >
+                <h2 className="text-xl font-semibold">Customer Communication</h2>
+                <span
+                  aria-hidden="true"
+                  className={`text-xl text-[#E55125] transition-transform ${isCustomerCommunicationExpanded ? "rotate-180" : ""}`}
+                >
+                  v
+                </span>
+              </button>
+
+              {isCustomerCommunicationExpanded ? (
+                <div className="mt-5 space-y-6">
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <h3 className="mb-3 text-lg font-medium">Customer Answers</h3>
+                    {isAnswersReceived ? (
+                      customerAnswers.length === 0 ? (
+                        <p className="text-sm text-white/70">No customer answers found.</p>
+                      ) : (
+                        <div className="divide-y divide-white/10">
+                          {customerAnswers.map((item) => (
+                            <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
+                              <p className="text-sm text-white">{item.question_text}</p>
+                              <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )
+                    ) : (
+                      <p className="text-sm text-white/70">No customer answers found.</p>
+                    )}
                   </div>
-                )}
-              </section>
-            ) : null}
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <h3 className="mb-3 text-lg font-medium">Questions Sent to Customer</h3>
+                    {isQuestionsLocked ? (
+                      <>
+                        <p className="text-sm text-emerald-400">{QUESTIONS_SENT_SUCCESS_MESSAGE}</p>
+                        {questionsSentAt ? (
+                          <p className="mt-2 text-xs text-white/70">
+                            Sent: {new Date(questionsSentAt).toLocaleString()}
+                          </p>
+                        ) : null}
+                        {customerQuestionsLink ? (
+                          <p className="mt-1 text-xs text-white/80">
+                            Customer questions URL:{" "}
+                            <a
+                              className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
+                              href={customerQuestionsLink}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {customerQuestionsLink}
+                            </a>
+                          </p>
+                        ) : (
+                          <p className="mt-1 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
+                        )}
+
+                        <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
+                          <h4 className="text-sm font-medium text-white/90">Sent Questions</h4>
+                          {sentQuestions.length === 0 ? (
+                            <p className="mt-2 text-sm text-white/70">No sent questions found yet.</p>
+                          ) : (
+                            <ul className="mt-2 space-y-2 text-sm text-white/85">
+                              {sentQuestions.map((question, index) => (
+                                <li key={question.id}>
+                                  {index + 1}. {question.question_text}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+
+                        <div className="mt-4">
+                          <button
+                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={addQuestionLoading}
+                            onClick={() => {
+                              setAddingQuestion((prev) => !prev);
+                              setQueuedQuestions((prev) => (prev.length > 0 ? prev : [""]));
+                              setAddQuestionSuccess(null);
+                            }}
+                            type="button"
+                          >
+                            + Add a Question
+                          </button>
+                        </div>
+
+                        {addingQuestion ? (
+                          <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-black/20 p-4">
+                            <div className="space-y-3">
+                              {queuedQuestions.map((queuedQuestion, index) => (
+                                <label className="block text-sm text-white/85" key={`queued-question-${index + 1}`}>
+                                  New Question {index + 1}
+                                  <input
+                                    className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                    disabled={addQuestionLoading}
+                                    onChange={(event) => updateQueuedQuestion(index, event.target.value)}
+                                    placeholder="Enter an additional question"
+                                    type="text"
+                                    value={queuedQuestion}
+                                  />
+                                </label>
+                              ))}
+                            </div>
+                            <button
+                              className="text-sm font-medium text-[#E55125] underline underline-offset-2 transition hover:text-[#f47a55] disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={addQuestionLoading || queuedQuestions.length >= MAX_QUESTIONS}
+                              onClick={addQueuedQuestionField}
+                              type="button"
+                            >
+                              + Add Another
+                            </button>
+                            <button
+                              className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                              disabled={addQuestionLoading}
+                              onClick={sendQueuedQuestions}
+                              type="button"
+                            >
+                              {addQuestionLoading ? "Sending..." : "Send Questions"}
+                            </button>
+                          </div>
+                        ) : null}
+
+                        {addQuestionSuccess ? <p className="mt-3 text-sm text-emerald-400">{addQuestionSuccess}</p> : null}
+                      </>
+                    ) : !shouldHideQuestionsAndProceed ? (
+                      <>
+                        <div className="space-y-3">
+                          {questions.map((question, index) => (
+                            <label className="block text-sm text-white/85" key={`question-${index + 1}`}>
+                              Question {index + 1}
+                              <input
+                                className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                disabled={false}
+                                onChange={(event) => updateQuestion(index, event.target.value)}
+                                placeholder={`Question ${index + 1}`}
+                                type="text"
+                                value={question}
+                              />
+                            </label>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex flex-wrap gap-3">
+                          <button
+                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={questions.length >= MAX_QUESTIONS}
+                            onClick={addQuestionField}
+                            type="button"
+                          >
+                            + Add Question
+                          </button>
+                          <button
+                            className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={savingQuestions}
+                            onClick={sendQuestions}
+                            type="button"
+                          >
+                            {savingQuestions ? "Sending..." : "Send Questions to Customer"}
+                          </button>
+                        </div>
+
+                        <div className="mt-4 border-t border-white/10 pt-4">
+                          <h4 className="mb-3 text-sm font-medium text-white/90">Proceed Without Questions</h4>
+                          <button
+                            className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={proceeding}
+                            onClick={proceedWithoutQuestions}
+                            type="button"
+                          >
+                            {proceeding ? "Confirming..." : "I have all the information I need"}
+                          </button>
+                          {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
+                        </div>
+                      </>
+                    ) : null}
+                  </div>
+
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <h3 className="mb-3 text-lg font-medium">Customer Questions</h3>
+                    {customerSubmittedQuestions.length === 0 ? (
+                      <p className="text-sm text-white/70">No customer questions submitted yet.</p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {customerSubmittedQuestions.map((question, index) => (
+                          <li className="rounded-lg border border-white/10 bg-black/25 p-3" key={question.id}>
+                            <p className="text-sm text-white/90">
+                              {index + 1}. {question.question_text}
+                            </p>
+                            <p className="mt-1 text-xs text-white/60">
+                              {question.created_at ? new Date(question.created_at).toLocaleString() : "Unknown time"}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </section>
 
             {shouldShowResearchForm ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
@@ -1552,153 +1766,6 @@ export default function AgentDocketDetailPage({
               </section>
             ) : null}
 
-            {isQuestionsLocked ? (
-              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
-                <p className="text-sm text-emerald-400">{QUESTIONS_SENT_SUCCESS_MESSAGE}</p>
-                {questionsSentAt ? (
-                  <p className="mt-2 text-xs text-white/70">
-                    Sent: {new Date(questionsSentAt).toLocaleString()}
-                  </p>
-                ) : null}
-                {customerQuestionsLink ? (
-                  <p className="mt-1 text-xs text-white/80">
-                    Customer questions URL:{" "}
-                    <a
-                      className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
-                      href={customerQuestionsLink}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      {customerQuestionsLink}
-                    </a>
-                  </p>
-                ) : (
-                  <p className="mt-1 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
-                )}
-
-                <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-sm font-medium text-white/90">Sent Questions</h3>
-                  {sentQuestions.length === 0 ? (
-                    <p className="mt-2 text-sm text-white/70">No sent questions found yet.</p>
-                  ) : (
-                    <ul className="mt-2 space-y-2 text-sm text-white/85">
-                      {sentQuestions.map((question, index) => (
-                        <li key={question.id}>
-                          {index + 1}. {question.question_text}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-
-                <div className="mt-4">
-                  <button
-                    className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={addQuestionLoading}
-                    onClick={() => {
-                      setAddingQuestion((prev) => !prev);
-                      setQueuedQuestions((prev) => (prev.length > 0 ? prev : [""]));
-                      setAddQuestionSuccess(null);
-                    }}
-                    type="button"
-                  >
-                    + Add a Question
-                  </button>
-                </div>
-
-                {addingQuestion ? (
-                  <div className="mt-4 space-y-3 rounded-lg border border-white/10 bg-black/20 p-4">
-                    <div className="space-y-3">
-                      {queuedQuestions.map((queuedQuestion, index) => (
-                        <label className="block text-sm text-white/85" key={`queued-question-${index + 1}`}>
-                          New Question {index + 1}
-                          <input
-                            className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                            disabled={addQuestionLoading}
-                            onChange={(event) => updateQueuedQuestion(index, event.target.value)}
-                            placeholder="Enter an additional question"
-                            type="text"
-                            value={queuedQuestion}
-                          />
-                        </label>
-                      ))}
-                    </div>
-                    <button
-                      className="text-sm font-medium text-[#E55125] underline underline-offset-2 transition hover:text-[#f47a55] disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={addQuestionLoading || queuedQuestions.length >= MAX_QUESTIONS}
-                      onClick={addQueuedQuestionField}
-                      type="button"
-                    >
-                      + Add Another
-                    </button>
-                    <button
-                      className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                      disabled={addQuestionLoading}
-                      onClick={sendQueuedQuestions}
-                      type="button"
-                    >
-                      {addQuestionLoading ? "Sending..." : "Send Questions"}
-                    </button>
-                  </div>
-                ) : null}
-
-                {addQuestionSuccess ? <p className="mt-3 text-sm text-emerald-400">{addQuestionSuccess}</p> : null}
-              </section>
-            ) : !shouldHideQuestionsAndProceed ? (
-              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
-                <div className="space-y-3">
-                  {questions.map((question, index) => (
-                    <label className="block text-sm text-white/85" key={`question-${index + 1}`}>
-                      Question {index + 1}
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                        disabled={false}
-                        onChange={(event) => updateQuestion(index, event.target.value)}
-                        placeholder={`Question ${index + 1}`}
-                        type="text"
-                        value={question}
-                      />
-                    </label>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <button
-                    className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={questions.length >= MAX_QUESTIONS}
-                    onClick={addQuestionField}
-                    type="button"
-                  >
-                    + Add Question
-                  </button>
-                  <button
-                    className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                    disabled={savingQuestions}
-                    onClick={sendQuestions}
-                    type="button"
-                  >
-                    {savingQuestions ? "Sending..." : "Send Questions to Customer"}
-                  </button>
-                </div>
-              </section>
-            ) : null}
-
-            {!shouldHideQuestionsAndProceed ? (
-              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="mb-4 text-xl font-semibold">Proceed Without Questions</h2>
-                <button
-                  className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={proceeding}
-                  onClick={proceedWithoutQuestions}
-                  type="button"
-                >
-                  {proceeding ? "Confirming..." : "I have all the information I need"}
-                </button>
-                {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
-              </section>
-            ) : null}
           </>
         ) : null}
       </div>
