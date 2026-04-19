@@ -52,7 +52,6 @@ export async function POST(
     const marcusEmail = devMode ? process.env.ADMIN_EMAIL : process.env.MARCUS_EMAIL;
     const marcusCCEmail = devMode ? null : process.env.MARCUS_CC_EMAIL;
     const adminEmail = process.env.ADMIN_EMAIL;
-    console.log('[Ask Route Debug]', { devMode, marcusEmail: process.env.MARCUS_EMAIL, adminEmail: process.env.ADMIN_EMAIL, actualRecipient: marcusEmail ?? process.env.ADMIN_EMAIL ?? 'adam@jdmrushimports.ca', fromEmail });
 
     if (!fromEmail) {
       return Response.json(
