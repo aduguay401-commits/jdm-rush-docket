@@ -67,7 +67,7 @@ export async function POST(
       devMode && marcusOriginalEmail
         ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
         : "";
-    const recipientEmail = marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca";
+    const actualRecipientEmail = marcusEmail ?? adminEmail ?? "adam@jdmrushimports.ca";
     const subject = `Customer submitted a new question for docket ${docket.id}`;
     const bodySnapshot = `${marcusDevPrefix}Customer ${customerName || "Unknown Customer"} sent a question for docket ${docket.id}.
 
@@ -77,7 +77,7 @@ ${questionText}`;
     try {
       const sendResult = await sendEmail({
         from: fromEmail,
-        to: recipientEmail,
+        to: actualRecipientEmail,
         ...(marcusCCEmail ? { cc: marcusCCEmail } : {}),
         subject,
         text: bodySnapshot,
@@ -87,7 +87,7 @@ ${questionText}`;
         console.error("[Customer Follow-up Question Send Error]", {
           docketId: docket.id,
           token,
-          recipient: recipientEmail,
+          recipient: actualRecipientEmail,
           error: sendResult.error,
         });
         return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
@@ -96,7 +96,7 @@ ${questionText}`;
       const { error: emailLogError } = await supabase.from("email_log").insert({
         docket_id: docket.id,
         email_type: "customer_followup_question_sent",
-        recipient_email: recipientEmail,
+        recipient_email: actualRecipientEmail,
         subject,
         body_snapshot: bodySnapshot,
       });
@@ -108,7 +108,7 @@ ${questionText}`;
       console.error("[Customer Follow-up Question Send Error]", {
         docketId: docket.id,
         token,
-        recipient: recipientEmail,
+        recipient: actualRecipientEmail,
         error,
       });
       return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });

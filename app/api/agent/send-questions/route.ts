@@ -60,9 +60,9 @@ function buildQuestionsEmailHtml({
             <tr>
               <td style="padding:24px;">
                 ${devBanner}
-                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">A few quick questions about your ${vehicle}</h1>
+                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">A few quick questions about your JDM request</h1>
                 <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
-                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your ${vehicle}. Your answers help us find exactly the right car for you.</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your vehicle. Your answers help us find exactly the right car for you.</p>
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
                   <tr>
                     <td align="center" style="border-radius:999px;background:#E55125;">
@@ -189,7 +189,7 @@ export async function POST(request: Request) {
         ? docket.customer_first_name.trim()
         : "there";
     const questionsUrl = `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`;
-    const subject = `A few quick questions about your ${vehicle}`;
+    const subject = "A few quick questions about your JDM request";
     const html = buildQuestionsEmailHtml({
       firstName,
       vehicle,
@@ -203,7 +203,7 @@ export async function POST(request: Request) {
         : "";
     const text = `${textDevPrefix}Hi ${firstName},
 
-Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your ${vehicle}. Your answers help us find exactly the right car for you.
+Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your vehicle. Your answers help us find exactly the right car for you.
 
 Answer Questions → ${questionsUrl}
 

@@ -327,7 +327,7 @@ export async function POST(request: Request) {
       const bodySnapshot = `<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;'>
   ${devModeBannerHtml}
   <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
-  <h1 style='font-size: 24px; font-weight: 700; margin-bottom: 8px;'>You are in the queue, ${escapeHtml(customerFirstNameForEmail)}! 🇯🇵</h1>
+  <h1 style='font-size: 24px; font-weight: 700; margin-bottom: 8px;'>Your JDM search starts now… 🇯🇵</h1>
   <p style='color: #aaaaaa; font-size: 15px; margin-bottom: 24px;'>Hi ${escapeHtml(customerFirstNameForEmail)},</p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
     Thanks for reaching out to JDM Rush Imports. We have received your request and created your personal import docket. Our team is reviewing your submission now and will be in touch shortly.
@@ -350,7 +350,7 @@ export async function POST(request: Request) {
     <a href='mailto:support@jdmrushimports.ca' style='color: #E55125;'>support@jdmrushimports.ca</a>
   </p>
 </div>`
-      const textBody = `${customerDevPrefix}You are in the queue, ${customerFirstNameForEmail}!
+      const textBody = `${customerDevPrefix}Your JDM search starts now… 🇯🇵
 
 Hi ${customerFirstNameForEmail},
 

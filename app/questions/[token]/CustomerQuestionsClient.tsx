@@ -142,9 +142,8 @@ export function CustomerQuestionsClient({
         <div className="mt-10 space-y-6">
           {answersSubmitted ? (
             <section className="rounded-lg border-l-4 border-[#E55125] bg-[#1a1a1a] p-6">
-              <p className="text-xl font-semibold text-white">Thanks {firstName}! We have received your answers.</p>
-              <p className="mt-2 text-sm leading-6 text-white/78">
-                Our team is reviewing them now and will be in touch shortly with your custom report.
+              <p className="text-sm leading-7 text-white/88">
+                Your answers have been submitted! Our team in Japan is now on the hunt - searching auctions and private dealers to find your perfect match. We&apos;ll email you as soon as your personalized import report is ready. Your dream JDM is getting closer!
               </p>
             </section>
           ) : null}

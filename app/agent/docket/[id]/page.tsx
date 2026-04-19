@@ -66,6 +66,8 @@ const MAX_QUESTIONS = 10;
 const RESEARCH_SUBMIT_ERROR_MESSAGE =
   "Unable to submit research. Please check all fields and try again, or contact support at adam@jdmrushimports.ca";
 const QUESTIONS_BASE_STATUS = "questions_sent";
+const QUESTIONS_SENT_SUCCESS_MESSAGE =
+  "Questions sent to customer. You'll receive an email when the customer submits their answers. Once notified, log back in to review their responses and proceed with research.";
 const STATUS_ORDER = [
   "new",
   "questions_sent",
@@ -541,7 +543,7 @@ export default function AgentDocketDetailPage({
 
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
     await loadSentQuestions(id);
-    setQuestionsConfirmation("Questions sent to customer");
+    setQuestionsConfirmation(QUESTIONS_SENT_SUCCESS_MESSAGE);
     setAddQuestionSuccess(null);
     setSavingQuestions(false);
   }
@@ -604,7 +606,7 @@ export default function AgentDocketDetailPage({
     setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
     setQueuedQuestions([""]);
     setAddingQuestion(false);
-    setAddQuestionSuccess("Questions sent to customer");
+    setAddQuestionSuccess(QUESTIONS_SENT_SUCCESS_MESSAGE);
     setAddQuestionLoading(false);
   }
 
@@ -1553,7 +1555,7 @@ export default function AgentDocketDetailPage({
             {isQuestionsLocked ? (
               <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
                 <h2 className="mb-4 text-xl font-semibold">Questions for Customer</h2>
-                <p className="text-sm text-emerald-400">Questions sent to customer</p>
+                <p className="text-sm text-emerald-400">{QUESTIONS_SENT_SUCCESS_MESSAGE}</p>
                 {questionsSentAt ? (
                   <p className="mt-2 text-xs text-white/70">
                     Sent: {new Date(questionsSentAt).toLocaleString()}
