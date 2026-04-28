@@ -1,5 +1,5 @@
 import { createServerClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { getCurrentUserRole } from "@/lib/admin/auth";
 
 type PatchPayload = {
   status?: string | null;
@@ -11,19 +11,27 @@ type PatchPayload = {
   estimated_deal_value?: number | null;
   is_archived?: boolean | null;
   archived_at?: string | null;
+  research_draft?: Record<string, unknown> | null;
 };
 
 export async function PATCH(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  const auth = await getCurrentUserRole();
+  if (!auth.user || (auth.role !== "admin" && auth.role !== "agent")) {
     return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 
   try {
     const { id } = await context.params;
     const payload = (await request.json()) as PatchPayload;
+    const payloadKeys = Object.keys(payload);
+
+    if (auth.role === "agent" && !payloadKeys.every((key) => key === "research_draft")) {
+      return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
+    }
+
     const supabase = createServerClient();
 
     const { data: current, error: currentError } = await supabase
@@ -76,6 +84,10 @@ export async function PATCH(
 
     if (Object.prototype.hasOwnProperty.call(payload, "archived_at")) {
       updates.archived_at = payload.archived_at;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(payload, "research_draft")) {
+      updates.research_draft = payload.research_draft;
     }
 
     if (Object.keys(updates).length === 0) {

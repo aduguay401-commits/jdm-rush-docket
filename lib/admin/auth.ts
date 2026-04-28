@@ -23,7 +23,21 @@ export async function getCurrentUserRole() {
     return { user, role: null } as const;
   }
 
-  return { user, role: byId.data?.role ?? null } as const;
+  if (byId.data?.role) {
+    return { user, role: byId.data.role } as const;
+  }
+
+  const byUserId = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("user_id", user.id)
+    .maybeSingle<ProfileRoleRow>();
+
+  if (byUserId.error) {
+    return { user, role: null } as const;
+  }
+
+  return { user, role: byUserId.data?.role ?? null } as const;
 }
 
 export async function requireAdmin() {

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
@@ -23,6 +23,7 @@ type Docket = {
   destination_province: string | null;
   timeline: string | null;
   additional_notes: string | null;
+  research_draft: unknown | null;
 };
 
 type CustomerAnswer = {
@@ -67,6 +68,16 @@ type DealerOptionForm = {
   photos: string[];
   salesSheetUrl: string;
   notes: string;
+};
+
+type ResearchDraft = {
+  hammerPriceLowJpy: string;
+  hammerPriceHighJpy: string;
+  recommendedMaxBidJpy: string;
+  salesHistoryNotes: string;
+  overallNotes: string;
+  auctionListings: AuctionListingForm[];
+  dealerOptions: DealerOptionForm[];
 };
 
 const MAX_QUESTIONS = 10;
@@ -156,6 +167,105 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
     notes: "",
   },
 ];
+
+function createInitialAuctionListings() {
+  return [{ ...INITIAL_AUCTION_LISTING }];
+}
+
+function createInitialDealerOptions() {
+  return INITIAL_DEALER_OPTIONS.map((option) => ({
+    ...option,
+    photos: [...option.photos],
+  }));
+}
+
+function createEmptyResearchDraft(): ResearchDraft {
+  return {
+    hammerPriceLowJpy: "",
+    hammerPriceHighJpy: "",
+    recommendedMaxBidJpy: "",
+    salesHistoryNotes: "",
+    overallNotes: "",
+    auctionListings: createInitialAuctionListings(),
+    dealerOptions: createInitialDealerOptions(),
+  };
+}
+
+function toDraftString(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value) : "";
+}
+
+function normalizeDraftStringArray(value: unknown) {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function normalizeAuctionListingDraft(value: unknown): AuctionListingForm {
+  const listing = value && typeof value === "object" ? (value as Partial<AuctionListingForm>) : {};
+
+  return {
+    lotTitle: toDraftString(listing.lotTitle),
+    specs: toDraftString(listing.specs),
+    photos: normalizeDraftStringArray(listing.photos),
+  };
+}
+
+function normalizeDealerOptionDraft(value: unknown, fallback: DealerOptionForm): DealerOptionForm {
+  const option = value && typeof value === "object" ? (value as Partial<DealerOptionForm>) : {};
+  const rawOptionNumber =
+    typeof option.optionNumber === "number" && option.optionNumber >= 1 && option.optionNumber <= 3
+      ? option.optionNumber
+      : fallback.optionNumber;
+
+  return {
+    optionNumber: rawOptionNumber as 1 | 2 | 3,
+    expanded: typeof option.expanded === "boolean" ? option.expanded : fallback.expanded,
+    year: toDraftString(option.year),
+    make: toDraftString(option.make),
+    model: toDraftString(option.model),
+    grade: toDraftString(option.grade),
+    mileage: toDraftString(option.mileage),
+    colour: toDraftString(option.colour),
+    transmission: option.transmission === "Auto" || option.transmission === "Manual" ? option.transmission : "Manual",
+    trim: toDraftString(option.trim),
+    dealerPriceJpy: toDraftString(option.dealerPriceJpy),
+    photos: normalizeDraftStringArray(option.photos),
+    salesSheetUrl: toDraftString(option.salesSheetUrl),
+    notes: toDraftString(option.notes),
+  };
+}
+
+function normalizeResearchDraft(value: unknown): ResearchDraft | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const draft = value as Partial<ResearchDraft>;
+  const auctionListings = Array.isArray(draft.auctionListings)
+    ? draft.auctionListings.map(normalizeAuctionListingDraft)
+    : createInitialAuctionListings();
+  const dealerOptionDrafts = Array.isArray(draft.dealerOptions) ? draft.dealerOptions : [];
+  const dealerOptions = createInitialDealerOptions().map((fallback) => {
+    const savedOption = dealerOptionDrafts.find((option) => {
+      if (!option || typeof option !== "object") {
+        return false;
+      }
+
+      return (option as Partial<DealerOptionForm>).optionNumber === fallback.optionNumber;
+    });
+
+    return normalizeDealerOptionDraft(savedOption, fallback);
+  });
+
+  return {
+    hammerPriceLowJpy: toDraftString(draft.hammerPriceLowJpy),
+    hammerPriceHighJpy: toDraftString(draft.hammerPriceHighJpy),
+    recommendedMaxBidJpy: toDraftString(draft.recommendedMaxBidJpy),
+    salesHistoryNotes: toDraftString(draft.salesHistoryNotes),
+    overallNotes: toDraftString(draft.overallNotes),
+    auctionListings: auctionListings.length > 0 ? auctionListings : createInitialAuctionListings(),
+    dealerOptions,
+  };
+}
 
 async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
   const byId = await supabase
@@ -269,14 +379,17 @@ export default function AgentDocketDetailPage({
   const [hammerPriceHighJpy, setHammerPriceHighJpy] = useState("");
   const [recommendedMaxBidJpy, setRecommendedMaxBidJpy] = useState("");
   const [salesHistoryNotes, setSalesHistoryNotes] = useState("");
-  const [auctionListings, setAuctionListings] = useState<AuctionListingForm[]>([INITIAL_AUCTION_LISTING]);
-  const [dealerOptions, setDealerOptions] = useState<DealerOptionForm[]>(INITIAL_DEALER_OPTIONS);
+  const [auctionListings, setAuctionListings] = useState<AuctionListingForm[]>(createInitialAuctionListings);
+  const [dealerOptions, setDealerOptions] = useState<DealerOptionForm[]>(createInitialDealerOptions);
   const [overallNotes, setOverallNotes] = useState("");
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [submittingResearch, setSubmittingResearch] = useState(false);
   const [researchConfirmation, setResearchConfirmation] = useState<string | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
+  const [draftSavedVisible, setDraftSavedVisible] = useState(false);
+  const draftHydratedRef = useRef(false);
+  const lastSavedDraftRef = useRef<string | null>(null);
 
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
@@ -285,6 +398,26 @@ export default function AgentDocketDetailPage({
   const shouldShowResearchForm = isResearchInProgress || isAnswersReceived || researchLocked;
   const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
   const isFormDisabled = submittingResearch || researchLocked;
+  const researchDraft = useMemo<ResearchDraft>(
+    () => ({
+      hammerPriceLowJpy,
+      hammerPriceHighJpy,
+      recommendedMaxBidJpy,
+      salesHistoryNotes,
+      overallNotes,
+      auctionListings,
+      dealerOptions,
+    }),
+    [
+      auctionListings,
+      dealerOptions,
+      hammerPriceHighJpy,
+      hammerPriceLowJpy,
+      overallNotes,
+      recommendedMaxBidJpy,
+      salesHistoryNotes,
+    ]
+  );
   const customerQuestionsLink = docket?.questions_url_token
     ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
     : null;
@@ -351,6 +484,28 @@ export default function AgentDocketDetailPage({
     setSentQuestions((data ?? []) as SentQuestion[]);
   }
 
+  async function saveResearchDraft(draft: ResearchDraft | null, options?: { showIndicator?: boolean }) {
+    const response = await fetch(`/api/admin/dockets/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ research_draft: draft }),
+    });
+
+    const result = (await response.json()) as { success?: boolean; error?: string };
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error ?? "Failed to save research draft.");
+    }
+
+    lastSavedDraftRef.current = draft === null ? null : JSON.stringify(draft);
+
+    if (options?.showIndicator !== false) {
+      setDraftSavedVisible(true);
+    }
+  }
+
   useEffect(() => {
     async function loadDocket() {
       const { data: userResponse } = await supabase.auth.getUser();
@@ -372,7 +527,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes"
+          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
         )
         .eq("id", id)
         .maybeSingle();
@@ -383,7 +538,20 @@ export default function AgentDocketDetailPage({
         return;
       }
 
-      setDocket(data as Docket);
+      const loadedDocket = data as Docket;
+      const savedDraft = normalizeResearchDraft(loadedDocket.research_draft);
+      const initialDraft = savedDraft ?? createEmptyResearchDraft();
+
+      setDocket(loadedDocket);
+      setHammerPriceLowJpy(initialDraft.hammerPriceLowJpy);
+      setHammerPriceHighJpy(initialDraft.hammerPriceHighJpy);
+      setRecommendedMaxBidJpy(initialDraft.recommendedMaxBidJpy);
+      setSalesHistoryNotes(initialDraft.salesHistoryNotes);
+      setOverallNotes(initialDraft.overallNotes);
+      setAuctionListings(initialDraft.auctionListings);
+      setDealerOptions(initialDraft.dealerOptions);
+      lastSavedDraftRef.current = JSON.stringify(initialDraft);
+      draftHydratedRef.current = true;
 
       const [
         { data: sentQuestionsData, error: sentQuestionsError },
@@ -445,6 +613,50 @@ export default function AgentDocketDetailPage({
 
     void loadDocket();
   }, [id, router, supabase]);
+
+  useEffect(() => {
+    if (
+      !draftHydratedRef.current ||
+      !docket ||
+      !shouldShowResearchForm ||
+      isFormDisabled ||
+      currentStatus === "report_sent"
+    ) {
+      return;
+    }
+
+    const serializedDraft = JSON.stringify(researchDraft);
+    if (serializedDraft === lastSavedDraftRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      saveResearchDraft(researchDraft).catch((draftError) => {
+        console.error("[Research Draft] AUTO_SAVE_FAILED", {
+          docketId: id,
+          error: draftError instanceof Error ? draftError.message : draftError,
+        });
+      });
+    }, 5000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [currentStatus, docket, id, isFormDisabled, researchDraft, shouldShowResearchForm]);
+
+  useEffect(() => {
+    if (!draftSavedVisible) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setDraftSavedVisible(false);
+    }, 2500);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [draftSavedVisible]);
 
   useEffect(() => {
     if (!docket) {
@@ -1106,11 +1318,53 @@ export default function AgentDocketDetailPage({
       return;
     }
 
+    try {
+      await saveResearchDraft(null, { showIndicator: false });
+    } catch (draftError) {
+      console.error("[Research Draft] CLEAR_AFTER_SUBMIT_FAILED", {
+        docketId: id,
+        error: draftError instanceof Error ? draftError.message : draftError,
+      });
+    }
+
     setDocket((prev) => (prev ? { ...prev, status: "report_sent" } : prev));
     setResearchLocked(true);
     setRedirectCountdown(3);
     setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
     setSubmittingResearch(false);
+  }
+
+  async function resetResearchForm() {
+    if (isFormDisabled) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Are you sure? This will clear all research form fields and delete your saved draft."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    const emptyDraft = createEmptyResearchDraft();
+
+    setError(null);
+    setHammerPriceLowJpy(emptyDraft.hammerPriceLowJpy);
+    setHammerPriceHighJpy(emptyDraft.hammerPriceHighJpy);
+    setRecommendedMaxBidJpy(emptyDraft.recommendedMaxBidJpy);
+    setSalesHistoryNotes(emptyDraft.salesHistoryNotes);
+    setOverallNotes(emptyDraft.overallNotes);
+    setAuctionListings(emptyDraft.auctionListings);
+    setDealerOptions(emptyDraft.dealerOptions);
+    lastSavedDraftRef.current = JSON.stringify(emptyDraft);
+
+    try {
+      await saveResearchDraft(null, { showIndicator: false });
+      lastSavedDraftRef.current = JSON.stringify(emptyDraft);
+    } catch (draftError) {
+      setError(draftError instanceof Error ? draftError.message : "Failed to clear saved draft.");
+    }
   }
 
   return (
@@ -1410,7 +1664,12 @@ export default function AgentDocketDetailPage({
 
             {shouldShowResearchForm ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
-                <h2 className="text-xl font-semibold">Marcus Research Input Form</h2>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="text-xl font-semibold">Marcus Research Input Form</h2>
+                  {draftSavedVisible ? (
+                    <span className="text-xs font-medium text-emerald-300/90">Draft saved</span>
+                  ) : null}
+                </div>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
                   <h3 className="text-lg font-medium">Auction Sales History</h3>
@@ -1806,11 +2065,19 @@ export default function AgentDocketDetailPage({
                   </label>
                 </div>
 
-                <div className="flex items-center justify-end gap-4">
+                <div className="flex flex-wrap items-center justify-end gap-3">
+                  <button
+                    className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={isFormDisabled}
+                    onClick={() => void resetResearchForm()}
+                    type="button"
+                  >
+                    Reset Form
+                  </button>
                   <button
                     className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={isFormDisabled || uploadingTarget !== null}
-                    onClick={submitResearchReport}
+                    onClick={() => void submitResearchReport()}
                     type="button"
                   >
                     {submittingResearch ? "Sending..." : "Send to Customer"}
