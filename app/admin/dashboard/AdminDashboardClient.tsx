@@ -476,6 +476,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     const text = searchTerm.trim().toLowerCase();
 
     const filtered = dockets.filter((docket) => {
+      if (showArchived ? docket.is_archived !== true : docket.is_archived !== false) {
+        return false;
+      }
+
       const customerName = getCustomerName(docket).toLowerCase();
       const vehicle = getVehicleLabel(docket).toLowerCase();
       const textMatches = text.length === 0 || customerName.includes(text) || vehicle.includes(text);
@@ -522,7 +526,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     });
-  }, [dockets, flaggedOnly, searchTerm, statusFilter]);
+  }, [dockets, flaggedOnly, searchTerm, showArchived, statusFilter]);
 
   return (
     <main className="min-h-screen bg-[#0b0b0b] px-5 py-6 text-white sm:px-8">
