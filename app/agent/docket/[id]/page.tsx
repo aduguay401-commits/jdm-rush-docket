@@ -913,43 +913,71 @@ export default function AgentDocketDetailPage({
     const low = Number(hammerPriceLowJpy);
     const high = Number(hammerPriceHighJpy);
     const maxBid = Number(recommendedMaxBidJpy);
-
-    if (!Number.isFinite(low) || low <= 0) {
-      validationErrors.push("Hammer Price Low (JPY) is required and must be greater than 0.");
-    }
-
-    if (!Number.isFinite(high) || high <= 0) {
-      validationErrors.push("Hammer Price High (JPY) is required and must be greater than 0.");
-    }
-
-    if (Number.isFinite(low) && Number.isFinite(high) && high < low) {
-      validationErrors.push(
-        "Hammer Price High (JPY) must be greater than or equal to Hammer Price Low (JPY)."
+    const hasAuctionData =
+      hammerPriceLowJpy.trim().length > 0 ||
+      hammerPriceHighJpy.trim().length > 0 ||
+      recommendedMaxBidJpy.trim().length > 0 ||
+      auctionListings.some(
+        (listing) => listing.lotTitle.trim().length > 0 || listing.specs.trim().length > 0
       );
-    }
 
-    if (!Number.isFinite(maxBid) || maxBid <= 0) {
-      validationErrors.push("Recommended Max Bid (JPY) is required and must be greater than 0.");
-    }
+    if (hasAuctionData) {
+      if (!Number.isFinite(low) || low <= 0) {
+        validationErrors.push("Hammer Price Low (JPY) is required and must be greater than 0.");
+      }
 
-    for (let index = 0; index < auctionListings.length; index += 1) {
-      const listing = auctionListings[index];
+      if (!Number.isFinite(high) || high <= 0) {
+        validationErrors.push("Hammer Price High (JPY) is required and must be greater than 0.");
+      }
 
-      if (!listing.lotTitle.trim() || !listing.specs.trim()) {
-        validationErrors.push(`Auction Listing ${index + 1} requires Lot Title and Specs.`);
+      if (Number.isFinite(low) && Number.isFinite(high) && high < low) {
+        validationErrors.push(
+          "Hammer Price High (JPY) must be greater than or equal to Hammer Price Low (JPY)."
+        );
+      }
+
+      if (!Number.isFinite(maxBid) || maxBid <= 0) {
+        validationErrors.push("Recommended Max Bid (JPY) is required and must be greater than 0.");
+      }
+
+      for (let index = 0; index < auctionListings.length; index += 1) {
+        const listing = auctionListings[index];
+
+        if (!listing.lotTitle.trim() || !listing.specs.trim()) {
+          validationErrors.push(`Auction Listing ${index + 1} requires Lot Title and Specs.`);
+        }
       }
     }
 
     const primaryOption = dealerOptions.find((option) => option.optionNumber === 1);
+    const hasPrimaryDealerData =
+      Boolean(primaryOption) &&
+      [
+        primaryOption?.year,
+        primaryOption?.make,
+        primaryOption?.model,
+        primaryOption?.dealerPriceJpy,
+      ].some((value) => Boolean(value?.trim()));
+    const hasAdditionalDealerData = dealerOptions
+      .filter((item) => item.optionNumber !== 1)
+      .some((option) => hasAnyDealerData(option));
 
-    if (!primaryOption || !primaryOption.year.trim() || !primaryOption.make.trim() || !primaryOption.model.trim()) {
+    if (!hasAuctionData && !hasPrimaryDealerData && !hasAdditionalDealerData) {
+      validationErrors.push("You must provide at least one private dealer option or auction research data.");
+    }
+
+    if (
+      hasPrimaryDealerData &&
+      (!primaryOption || !primaryOption.year.trim() || !primaryOption.make.trim() || !primaryOption.model.trim())
+    ) {
       validationErrors.push("Private Dealer Option 1 requires Year, Make, and Model.");
     }
 
     if (
-      !primaryOption ||
-      !Number.isFinite(Number(primaryOption.dealerPriceJpy)) ||
-      Number(primaryOption.dealerPriceJpy) <= 0
+      hasPrimaryDealerData &&
+      (!primaryOption ||
+        !Number.isFinite(Number(primaryOption.dealerPriceJpy)) ||
+        Number(primaryOption.dealerPriceJpy) <= 0)
     ) {
       validationErrors.push("Private Dealer Option 1 requires a valid Dealer Price (JPY).");
     }
