@@ -1,6 +1,7 @@
 import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
+import { sendWhatsAppNotification } from "@/lib/whatsapp";
 
 type AskPayload = {
   questionText?: string;
@@ -92,6 +93,13 @@ ${questionText}`;
         });
         return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
       }
+
+      await sendWhatsAppNotification(
+        `❓ New question from ${customerName || "Unknown Customer"}: ${questionText.slice(
+          0,
+          100
+        )}. Log in to review: docket.jdmrushimports.ca/agent/login`
+      );
 
       const { error: emailLogError } = await supabase.from("email_log").insert({
         docket_id: docket.id,

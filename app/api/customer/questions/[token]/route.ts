@@ -1,6 +1,7 @@
 import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
+import { sendWhatsAppNotification } from "@/lib/whatsapp";
 
 type AnswerPayload = {
   answerText?: string;
@@ -224,6 +225,10 @@ support@jdmrushimports.ca`;
         });
         return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
       }
+
+      await sendWhatsAppNotification(
+        `✅ Customer ${firstName} submitted answers. Log in to review: docket.jdmrushimports.ca/agent/login`
+      );
     } catch (error) {
       console.error("[Email #3 Send Error]", {
         docketId: docket.id,
