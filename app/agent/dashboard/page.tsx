@@ -147,6 +147,7 @@ export default function AgentDashboardPage() {
         .select(
           "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline"
         )
+        .eq("is_archived", false)
         .order("created_at", { ascending: false });
 
       if (docketError) {
