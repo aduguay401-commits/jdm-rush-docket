@@ -238,6 +238,36 @@ function normalizeDealerOptions(value: unknown) {
   }>;
 }
 
+function getDealerOptionNumber(option: PrivateDealerOptionPayload) {
+  const optionNumberRaw = option.optionNumber ?? option.option_number;
+  const optionNumber =
+    typeof optionNumberRaw === "number"
+      ? optionNumberRaw
+      : typeof optionNumberRaw === "string"
+      ? Number(optionNumberRaw)
+      : null;
+
+  return Number.isInteger(optionNumber) ? optionNumber : null;
+}
+
+function hasAnyDealerOptionData(option: PrivateDealerOptionPayload) {
+  return [
+    option.year,
+    option.make,
+    option.model,
+    option.grade,
+    option.mileage,
+    option.colour,
+    option.trim,
+    option.dealerPriceJpy,
+    option.dealer_price_jpy,
+    option.salesSheetUrl,
+    option.sales_sheet_url,
+    option.notes,
+    option.marcus_notes,
+  ].some((value) => toNonEmptyString(value).length > 0 || toPositiveInteger(value) !== null);
+}
+
 function toErrorObject(error: unknown) {
   if (error instanceof Error) {
     return {
@@ -414,6 +444,24 @@ export async function POST(
     const overallNotes = toNonEmptyString(payload.overallNotes);
     const auctionListings = normalizeAuctionListings(payload.auctionListings);
     const privateDealerOptions = normalizeDealerOptions(payload.privateDealerOptions);
+    const rawDealerOptions = Array.isArray(payload.privateDealerOptions) ? payload.privateDealerOptions : [];
+    const rawPrimaryDealerOption = rawDealerOptions.find((item) => getDealerOptionNumber(item) === 1);
+    const hasAuctionData = [hammerPriceLowJpy, hammerPriceHighJpy, recommendedMaxBidJpy].some(
+      (value) => typeof value === "number" && value > 0
+    );
+    const hasPrimaryDealerData =
+      !!rawPrimaryDealerOption &&
+      [
+        rawPrimaryDealerOption.year,
+        rawPrimaryDealerOption.make,
+        rawPrimaryDealerOption.model,
+        rawPrimaryDealerOption.dealerPriceJpy,
+        rawPrimaryDealerOption.dealer_price_jpy,
+      ].some((value) => toNonEmptyString(value).length > 0 || toPositiveInteger(value) !== null);
+    const hasAdditionalDealerData = rawDealerOptions
+      .filter((item) => getDealerOptionNumber(item) !== 1)
+      .some((item) => hasAnyDealerOptionData(item));
+    const hasPrivateDealerData = privateDealerOptions.length > 0;
 
     logStep("handler.normalized_payload", {
       docketId: id,
@@ -424,32 +472,79 @@ export async function POST(
       overallNotesLength: overallNotes.length,
       auctionListingsCount: auctionListings.length,
       privateDealerOptionsCount: privateDealerOptions.length,
+      hasAuctionData,
+      hasPrivateDealerData,
       auctionListings,
       privateDealerOptions,
     });
 
     const validationErrors: string[] = [];
 
-    if (!hammerPriceLowJpy || !hammerPriceHighJpy || !recommendedMaxBidJpy) {
-      validationErrors.push(
-        "Auction pricing fields are required and must be valid numbers (hammerPriceLowJpy, hammerPriceHighJpy, recommendedMaxBidJpy)."
-      );
+    if (hasAuctionData) {
+      if (!hammerPriceLowJpy) {
+        validationErrors.push("Hammer Price Low (JPY) is required and must be greater than 0.");
+      }
+
+      if (!hammerPriceHighJpy) {
+        validationErrors.push("Hammer Price High (JPY) is required and must be greater than 0.");
+      }
+
+      if (hammerPriceLowJpy && hammerPriceHighJpy && hammerPriceHighJpy < hammerPriceLowJpy) {
+        validationErrors.push(
+          "Hammer Price High (JPY) must be greater than or equal to Hammer Price Low (JPY)."
+        );
+      }
+
+      if (!recommendedMaxBidJpy) {
+        validationErrors.push("Recommended Max Bid (JPY) is required and must be greater than 0.");
+      }
+
+      if (auctionListings.length === 0) {
+        validationErrors.push(
+          "At least one auction listing is required. Required listing fields: lotTitle and specs (or lot_title/specs)."
+        );
+      }
     }
 
-    if (hammerPriceLowJpy && hammerPriceHighJpy && hammerPriceHighJpy < hammerPriceLowJpy) {
-      validationErrors.push("Hammer high price must be greater than or equal to low price.");
+    if (!hasAuctionData && !hasPrimaryDealerData && !hasAdditionalDealerData) {
+      validationErrors.push("You must provide at least one private dealer option or auction research data.");
     }
 
-    if (auctionListings.length === 0) {
-      validationErrors.push(
-        "At least one auction listing is required. Required listing fields: lotTitle and specs (or lot_title/specs)."
-      );
+    if (
+      hasPrimaryDealerData &&
+      (!rawPrimaryDealerOption ||
+        !toNonEmptyString(rawPrimaryDealerOption.year) ||
+        !toNonEmptyString(rawPrimaryDealerOption.make) ||
+        !toNonEmptyString(rawPrimaryDealerOption.model))
+    ) {
+      validationErrors.push("Private Dealer Option 1 requires Year, Make, and Model.");
     }
 
-    if (!privateDealerOptions.some((item) => item.option_number === 1)) {
-      validationErrors.push(
-        "Private dealer option 1 is required. Required fields: optionNumber, year, make, model, dealerPriceJpy."
-      );
+    if (
+      hasPrimaryDealerData &&
+      (!rawPrimaryDealerOption ||
+        !toPositiveInteger(rawPrimaryDealerOption.dealerPriceJpy ?? rawPrimaryDealerOption.dealer_price_jpy))
+    ) {
+      validationErrors.push("Private Dealer Option 1 requires a valid Dealer Price (JPY).");
+    }
+
+    for (const option of rawDealerOptions.filter((item) => getDealerOptionNumber(item) !== 1)) {
+      if (!hasAnyDealerOptionData(option)) {
+        continue;
+      }
+
+      const optionNumber = getDealerOptionNumber(option);
+      if (!toNonEmptyString(option.year) || !toNonEmptyString(option.make) || !toNonEmptyString(option.model)) {
+        validationErrors.push(
+          `Private Dealer Option ${optionNumber ?? "unknown"} must include Year, Make, and Model when used.`
+        );
+      }
+
+      if (!toPositiveInteger(option.dealerPriceJpy ?? option.dealer_price_jpy)) {
+        validationErrors.push(
+          `Private Dealer Option ${optionNumber ?? "unknown"} must include a valid Dealer Price (JPY) when used.`
+        );
+      }
     }
 
     if (!overallNotes) {
@@ -484,9 +579,9 @@ export async function POST(
       });
     }
 
-    const validHammerPriceLowJpy = hammerPriceLowJpy as number;
-    const validHammerPriceHighJpy = hammerPriceHighJpy as number;
-    const validRecommendedMaxBidJpy = recommendedMaxBidJpy as number;
+    const validHammerPriceLowJpy = hasAuctionData ? (hammerPriceLowJpy as number) : null;
+    const validHammerPriceHighJpy = hasAuctionData ? (hammerPriceHighJpy as number) : null;
+    const validRecommendedMaxBidJpy = hasAuctionData ? (recommendedMaxBidJpy as number) : null;
     const auctionResearchNotes = [salesHistoryNotes, overallNotes]
       .filter((value, index, values) => value.length > 0 && values.indexOf(value) === index)
       .join("\n\n");
@@ -546,16 +641,22 @@ export async function POST(
       });
     }
 
-    const midpointHammerJpy = Math.round((validHammerPriceLowJpy + validHammerPriceHighJpy) / 2);
     const exchange = await fetchJPYtoCAD();
-    const auctionEstimateFees = calculateImportCost({
-      vehiclePriceJPY: midpointHammerJpy,
-      destinationCity,
-      vehicleType: vehicleTypeRaw,
-      dutyType: dutyTypeRaw,
-      exchangeRate: exchange.rate,
-    });
-    const midpointHammerCad = auctionEstimateFees.dealerPriceCAD;
+    const midpointHammerJpy =
+      validHammerPriceLowJpy !== null && validHammerPriceHighJpy !== null
+        ? Math.round((validHammerPriceLowJpy + validHammerPriceHighJpy) / 2)
+        : null;
+    const auctionEstimateFees =
+      midpointHammerJpy !== null
+        ? calculateImportCost({
+            vehiclePriceJPY: midpointHammerJpy,
+            destinationCity,
+            vehicleType: vehicleTypeRaw,
+            dutyType: dutyTypeRaw,
+            exchangeRate: exchange.rate,
+          })
+        : null;
+    const midpointHammerCad = auctionEstimateFees?.dealerPriceCAD ?? null;
     logStep("exchange.rate_fetched", {
       docketId: id,
       exchange,
@@ -584,27 +685,34 @@ export async function POST(
       });
     }
 
-    const { data: insertedAuctionResearch, error: auctionResearchError } = await supabase
-      .from("auction_research")
-      .insert({
-        docket_id: id,
-        hammer_price_low_jpy: validHammerPriceLowJpy,
-        hammer_price_high_jpy: validHammerPriceHighJpy,
-        recommended_max_bid_jpy: validRecommendedMaxBidJpy,
-        sales_history_notes: auctionResearchNotes,
-        auction_listings: auctionListings,
-      })
-      .select("id");
-    logStep("supabase.auction_research.insert.result", {
-      data: insertedAuctionResearch,
-      error: toSupabaseError(auctionResearchError),
-    });
+    if (hasAuctionData) {
+      const { data: insertedAuctionResearch, error: auctionResearchError } = await supabase
+        .from("auction_research")
+        .insert({
+          docket_id: id,
+          hammer_price_low_jpy: validHammerPriceLowJpy,
+          hammer_price_high_jpy: validHammerPriceHighJpy,
+          recommended_max_bid_jpy: validRecommendedMaxBidJpy,
+          sales_history_notes: auctionResearchNotes,
+          auction_listings: auctionListings,
+        })
+        .select("id");
+      logStep("supabase.auction_research.insert.result", {
+        data: insertedAuctionResearch,
+        error: toSupabaseError(auctionResearchError),
+      });
 
-    if (auctionResearchError) {
-      return errorResponse(500, "Failed to insert auction research.", {
-        operation: "auction_research.insert",
+      if (auctionResearchError) {
+        return errorResponse(500, "Failed to insert auction research.", {
+          operation: "auction_research.insert",
+          docketId: id,
+          supabase: toSupabaseError(auctionResearchError),
+        });
+      }
+    } else {
+      logStep("supabase.auction_research.insert.skipped", {
         docketId: id,
-        supabase: toSupabaseError(auctionResearchError),
+        reason: "No auction data provided.",
       });
     }
 
@@ -627,6 +735,13 @@ export async function POST(
     }
 
     const insertedDealerRows: Array<{ id: string; option_number: number }> = [];
+    if (!hasPrivateDealerData) {
+      logStep("supabase.private_dealer_options.insert.skipped", {
+        docketId: id,
+        reason: "No private dealer data provided.",
+      });
+    }
+
     for (const item of privateDealerOptions) {
       const dealerInsertPayload = {
         docket_id: id,
@@ -722,26 +837,33 @@ export async function POST(
       });
     }
 
-    const { data: insertedEstimateRows, error: estimateError } = await supabase
-      .from("auction_estimate")
-      .insert({
-        docket_id: id,
-        midpoint_hammer_jpy: midpointHammerJpy,
-        midpoint_hammer_cad: midpointHammerCad,
-        calculated_fees: auctionEstimateFees,
-        total_delivered_estimate_cad: auctionEstimateFees.totalDeliveredCAD,
-      })
-      .select("id");
-    logStep("supabase.auction_estimate.insert.result", {
-      data: insertedEstimateRows,
-      error: toSupabaseError(estimateError),
-    });
+    if (auctionEstimateFees && midpointHammerJpy !== null && midpointHammerCad !== null) {
+      const { data: insertedEstimateRows, error: estimateError } = await supabase
+        .from("auction_estimate")
+        .insert({
+          docket_id: id,
+          midpoint_hammer_jpy: midpointHammerJpy,
+          midpoint_hammer_cad: midpointHammerCad,
+          calculated_fees: auctionEstimateFees,
+          total_delivered_estimate_cad: auctionEstimateFees.totalDeliveredCAD,
+        })
+        .select("id");
+      logStep("supabase.auction_estimate.insert.result", {
+        data: insertedEstimateRows,
+        error: toSupabaseError(estimateError),
+      });
 
-    if (estimateError) {
-      return errorResponse(500, "Failed to insert auction estimate.", {
-        operation: "auction_estimate.insert",
+      if (estimateError) {
+        return errorResponse(500, "Failed to insert auction estimate.", {
+          operation: "auction_estimate.insert",
+          docketId: id,
+          supabase: toSupabaseError(estimateError),
+        });
+      }
+    } else {
+      logStep("supabase.auction_estimate.insert.skipped", {
         docketId: id,
-        supabase: toSupabaseError(estimateError),
+        reason: "No auction data provided.",
       });
     }
 
@@ -815,11 +937,17 @@ export async function POST(
 
 Customer: ${customerName || "Unknown Customer"}
 Vehicle: ${vehicleSummary || "Unknown Vehicle"}
-Hammer Range (JPY): ${validHammerPriceLowJpy.toLocaleString()} - ${validHammerPriceHighJpy.toLocaleString()}
-Recommended Max Bid (JPY): ${validRecommendedMaxBidJpy.toLocaleString()}
-Midpoint Hammer (JPY): ${midpointHammerJpy.toLocaleString()}
+Hammer Range (JPY): ${
+        validHammerPriceLowJpy !== null && validHammerPriceHighJpy !== null
+          ? `${validHammerPriceLowJpy.toLocaleString()} - ${validHammerPriceHighJpy.toLocaleString()}`
+          : "Not provided"
+      }
+Recommended Max Bid (JPY): ${
+        validRecommendedMaxBidJpy !== null ? validRecommendedMaxBidJpy.toLocaleString() : "Not provided"
+      }
+Midpoint Hammer (JPY): ${midpointHammerJpy !== null ? midpointHammerJpy.toLocaleString() : "Not provided"}
 FX (JPY->CAD): ${exchange.rate}
-Midpoint Hammer (CAD): ${midpointHammerCad.toLocaleString()}
+Midpoint Hammer (CAD): ${midpointHammerCad !== null ? midpointHammerCad.toLocaleString() : "Not provided"}
 Auction Listings: ${auctionListings.length}
 Private Dealer Options: ${privateDealerOptions.length}
 
