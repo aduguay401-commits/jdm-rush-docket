@@ -51,7 +51,7 @@ export async function fetchAdminDockets(options?: { archivedOnly?: boolean }) {
   const { data, error } = await supabase
     .from("dockets")
     .select(
-      "id, created_at, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, destination_city, destination_province, budget_bracket, timeline, additional_notes, admin_notes, is_flagged, is_paused, paused_until, lost_reason, estimated_deal_value, is_archived, archived_at, marcus_questions_count:marcus_questions(count), customer_questions_count:customer_questions(count), marcus_questions(id, question_text, answer_text, answered_at, created_at), auction_research(*), private_dealer_options(*), follow_up_sequences(*), email_log_count:email_log(count), email_log(*), docket_status_history(*)"
+      "id, created_at, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, destination_city, destination_province, budget_bracket, timeline, additional_notes, admin_notes, is_flagged, is_paused, paused_until, lost_reason, estimated_deal_value, is_archived, archived_at, report_url_token, questions_url_token, marcus_questions_count:marcus_questions(count), customer_questions_count:customer_questions(count), marcus_questions(id, question_text, answer_text, answered_at, created_at), auction_research(*), private_dealer_options(*), follow_up_sequences(*), email_log_count:email_log(count), email_log(*), docket_status_history(*)"
     )
     .eq("is_archived", archivedOnly)
     .order("created_at", { ascending: false });

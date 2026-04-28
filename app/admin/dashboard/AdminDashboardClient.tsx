@@ -899,6 +899,32 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                   <span className="text-white/60">Customer&apos;s Vehicle Request:</span> {selectedDocket.vehicle_description}
                 </p>
               ) : null}
+              {selectedDocket.report_url_token ? (
+                <p>
+                  <span className="text-white/60">Customer Report:</span>{" "}
+                  <a
+                    className="font-medium text-[#E55125] underline-offset-4 hover:underline"
+                    href={`https://docket.jdmrushimports.ca/report/${selectedDocket.report_url_token}`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Customer Report
+                  </a>
+                </p>
+              ) : null}
+              {selectedDocket.questions_url_token ? (
+                <p>
+                  <span className="text-white/60">Customer Questions:</span>{" "}
+                  <a
+                    className="font-medium text-[#E55125] underline-offset-4 hover:underline"
+                    href={`https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    Customer Questions
+                  </a>
+                </p>
+              ) : null}
             </section>
 
             <section className="mt-4 space-y-3 border-b border-white/10 pb-4">

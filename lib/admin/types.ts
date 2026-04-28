@@ -51,6 +51,8 @@ export type AdminDocket = {
   estimated_deal_value: number | null;
   is_archived: boolean | null;
   archived_at: string | null;
+  report_url_token: string | null;
+  questions_url_token: string | null;
   marcus_questions_count: CountRelation[] | null;
   customer_questions_count: CountRelation[] | null;
   email_log_count: CountRelation[] | null;
