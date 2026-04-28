@@ -195,6 +195,11 @@ function normalizeEmail(value: string | null | undefined) {
   return value?.trim().toLowerCase() ?? "";
 }
 
+function getDocketCustomerFirstName(docket: NormalizedAdminDocket) {
+  const possibleDocket = docket as NormalizedAdminDocket & { customerFirstName?: string | null };
+  return (possibleDocket.customer_first_name ?? possibleDocket.customerFirstName)?.trim() ?? "";
+}
+
 function getEmailRecipientLabel(docket: NormalizedAdminDocket, recipientEmail: string | null | undefined) {
   const normalized = normalizeEmail(recipientEmail);
 
@@ -210,7 +215,7 @@ function getEmailRecipientLabel(docket: NormalizedAdminDocket, recipientEmail: s
     return "Marcus (Agent)";
   }
 
-  const customerFirstName = docket.customer_first_name?.trim();
+  const customerFirstName = getDocketCustomerFirstName(docket);
   if (customerFirstName) {
     return `${customerFirstName} (Customer)`;
   }
@@ -1075,7 +1080,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       return (
                         <article className="rounded-md border border-white/10 bg-black/25" key={entry.id}>
                           <button
-                            className="grid w-full grid-cols-[auto_minmax(9rem,1fr)_minmax(8rem,max-content)_auto] items-center gap-2 px-3 py-2 text-left transition hover:bg-white/5"
+                            className="grid w-full grid-cols-[auto_minmax(0,1fr)_6.75rem] items-center gap-3 px-3 py-2 text-left transition hover:bg-white/5"
                             onClick={() => toggleEmailLogEntry(entry.id)}
                             type="button"
                           >
@@ -1085,11 +1090,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                                 hasError ? "bg-red-400" : "bg-emerald-400"
                               }`}
                             />
-                            <span className="min-w-0 truncate text-white/85">{getEmailTypeLabel(entry.email_type)}</span>
-                            <span className="whitespace-nowrap text-white/60">
-                              {getEmailRecipientLabel(selectedDocket, entry.recipient_email)}
+                            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+                              <span className="min-w-0 truncate text-white/85">{getEmailTypeLabel(entry.email_type)}</span>
+                              <span className="break-words text-white/60">
+                                {getEmailRecipientLabel(selectedDocket, entry.recipient_email)}
+                              </span>
                             </span>
-                            <span className="whitespace-nowrap text-xs text-white/50">
+                            <span className="justify-self-end whitespace-nowrap text-right text-xs text-white/50">
                               {formatEmailTimestamp(entry.sent_at)}
                             </span>
                           </button>
