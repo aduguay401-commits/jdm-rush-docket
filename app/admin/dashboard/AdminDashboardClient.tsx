@@ -629,7 +629,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                 <th className="px-3 py-3">Flag</th>
                 <th className="px-3 py-3">Customer</th>
                 <th className="px-3 py-3">Vehicle</th>
-                <th className="px-3 py-3">Status</th>
+                <th className="min-w-[150px] px-3 py-3">Status</th>
                 <th className="px-3 py-3">Days in status</th>
                 <th className="px-3 py-3">Reminders sent</th>
                 <th className="px-3 py-3">Est. deal value</th>
@@ -662,8 +662,8 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     <td className="px-3 py-3 text-white/85">
                       {truncate(docket.vehicle_description || docket.vehicle_make || "", 40) || "N/A"}
                     </td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
+                    <td className="min-w-[150px] px-3 py-3">
+                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
                         {formatStatus(docket.status)}
                       </span>
                     </td>
