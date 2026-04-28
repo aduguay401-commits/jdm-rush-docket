@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { UIEvent } from "react";
 
 type FeeBreakdown = {
   vehiclePriceCAD?: number;
@@ -160,6 +161,66 @@ function hasDisplayNotes(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0 && value.trim().toLowerCase() !== "n/a";
 }
 
+function hasPositiveNumber(value: number | null | undefined) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function hasFeeBreakdownData(breakdown: FeeBreakdown | null | undefined) {
+  if (!breakdown) {
+    return false;
+  }
+
+  return [
+    breakdown.vehiclePriceCAD,
+    breakdown.exportAgentFeeCAD,
+    breakdown.shippingInsuranceCAD,
+    breakdown.importDutyCAD,
+    breakdown.exciseTaxCAD,
+    breakdown.gstCAD,
+    breakdown.wwsTerminalFeeCAD,
+    breakdown.brokerageFeeCAD,
+    breakdown.networkFeeCAD,
+    breakdown.financeAdminFeeCAD,
+    breakdown.jdmRushFeeCAD,
+    breakdown.inlandTransportCAD,
+    breakdown.totalDeliveredCAD,
+    breakdown.dealerPriceCAD,
+    breakdown.vehicleValueCAD,
+    breakdown.dutyCAD,
+    breakdown.transportCostCAD,
+  ].some(hasPositiveNumber);
+}
+
+function hasAuctionListingData(listing: AuctionListing) {
+  return (
+    hasDisplayNotes(listing.lot_title) ||
+    hasDisplayNotes(listing.specs) ||
+    hasDisplayNotes(listing.auction_lot_link) ||
+    (Array.isArray(listing.photos) && listing.photos.some((photo) => hasDisplayNotes(photo)))
+  );
+}
+
+function hasAuctionSalesHistoryData(auctionResearch: AuctionResearchRecord | null) {
+  return (
+    !!auctionResearch &&
+    (hasPositiveNumber(auctionResearch.hammer_price_low_jpy) ||
+      hasPositiveNumber(auctionResearch.hammer_price_high_jpy) ||
+      hasPositiveNumber(auctionResearch.recommended_max_bid_jpy) ||
+      hasDisplayNotes(auctionResearch.sales_history_notes))
+  );
+}
+
+function hasAuctionEstimateData(auctionEstimate: AuctionEstimateRecord | null) {
+  return (
+    !!auctionEstimate &&
+    (hasPositiveNumber(auctionEstimate.midpoint_hammer_jpy) ||
+      hasPositiveNumber(auctionEstimate.midpoint_hammer_cad) ||
+      hasPositiveNumber(auctionEstimate.total_delivered_cad) ||
+      hasPositiveNumber(auctionEstimate.total_delivered_estimate_cad) ||
+      hasFeeBreakdownData(auctionEstimate.calculated_fees))
+  );
+}
+
 function formatExchangeDate(dateValue: string | null | undefined) {
   if (!dateValue) {
     return "latest available date";
@@ -175,6 +236,92 @@ function formatExchangeDate(dateValue: string | null | undefined) {
     month: "long",
     day: "numeric",
   });
+}
+
+function DealerPhotoGallery({
+  optionNumber,
+  photos,
+  onOpenLightbox,
+}: {
+  optionNumber: number;
+  photos: string[];
+  onOpenLightbox: (photos: string[], index: number, label: string) => void;
+}) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const label = `Dealer option ${optionNumber}`;
+
+  function updateActivePhoto(event: UIEvent<HTMLDivElement>) {
+    const container = event.currentTarget;
+    const nextIndex = Math.round(container.scrollLeft / Math.max(container.clientWidth, 1));
+    setActiveIndex(Math.min(Math.max(nextIndex, 0), photos.length - 1));
+  }
+
+  if (photos.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4">
+      <div className="sm:hidden">
+        <div
+          className="-mx-5 flex snap-x snap-mandatory overflow-x-auto px-5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          onScroll={updateActivePhoto}
+        >
+          {photos.map((photo, index) => (
+            <div className="w-full shrink-0 snap-center pr-3 last:pr-0" key={`${photo}-${index}`}>
+              <button
+                aria-label={`Open ${label} photo ${index + 1}`}
+                className="block w-full"
+                onClick={() => onOpenLightbox(photos, index, label)}
+                type="button"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  alt={`${label} photo ${index + 1}`}
+                  className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
+                  loading="lazy"
+                  src={photo}
+                />
+              </button>
+            </div>
+          ))}
+        </div>
+        {photos.length > 1 ? (
+          <div className="mt-3 flex justify-center gap-2">
+            {photos.map((photo, index) => (
+              <span
+                aria-hidden="true"
+                className={`h-2 w-2 rounded-full transition ${
+                  index === activeIndex ? "bg-[#E55125]" : "bg-white/25"
+                }`}
+                key={`dot-${photo}-${index}`}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="hidden grid-cols-3 gap-3 sm:grid">
+        {photos.map((photo, index) => (
+          <button
+            aria-label={`Open ${label} photo ${index + 1}`}
+            className="group block w-full overflow-hidden rounded-xl border border-white/10"
+            key={`${photo}-${index}`}
+            onClick={() => onOpenLightbox(photos, index, label)}
+            type="button"
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt={`${label} photo ${index + 1}`}
+              className="aspect-[4/3] w-full object-cover transition duration-200 group-hover:scale-[1.03]"
+              loading="lazy"
+              src={photo}
+            />
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function FeeBreakdownTable({
@@ -353,6 +500,11 @@ export function ReportClient({
   const [questionError, setQuestionError] = useState<string | null>(null);
   const [questionSuccess, setQuestionSuccess] = useState<string | null>(null);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
+  const [lightbox, setLightbox] = useState<{
+    photos: string[];
+    index: number;
+    label: string;
+  } | null>(null);
 
   const visibleName = useMemo(
     () => docket.customer_first_name?.trim() || "there",
@@ -453,8 +605,82 @@ export function ReportClient({
   }
 
   const listings = Array.isArray(auctionResearch?.auction_listings)
-    ? auctionResearch?.auction_listings
+    ? auctionResearch?.auction_listings.filter(hasAuctionListingData)
     : [];
+  const hasAuctionSalesHistory = hasAuctionSalesHistoryData(auctionResearch);
+  const hasAuctionListings = listings.length > 0;
+  const hasAuctionEstimate = hasAuctionEstimateData(auctionEstimate);
+  const hasAuctionOption = hasAuctionEstimate;
+
+  useEffect(() => {
+    if (!lightbox) {
+      return;
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setLightbox(null);
+        return;
+      }
+
+      if (event.key === "ArrowLeft") {
+        setLightbox((current) =>
+          current
+            ? {
+                ...current,
+                index: (current.index - 1 + current.photos.length) % current.photos.length,
+              }
+            : current
+        );
+      }
+
+      if (event.key === "ArrowRight") {
+        setLightbox((current) =>
+          current
+            ? {
+                ...current,
+                index: (current.index + 1) % current.photos.length,
+              }
+            : current
+        );
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [lightbox]);
+
+  function openLightbox(photos: string[], index: number, label: string) {
+    setLightbox({ photos, index, label });
+  }
+
+  function showPreviousLightboxPhoto() {
+    setLightbox((current) =>
+      current
+        ? {
+            ...current,
+            index: (current.index - 1 + current.photos.length) % current.photos.length,
+          }
+        : current
+    );
+  }
+
+  function showNextLightboxPhoto() {
+    setLightbox((current) =>
+      current
+        ? {
+            ...current,
+            index: (current.index + 1) % current.photos.length,
+          }
+        : current
+    );
+  }
+
   const confirmationSteps = [
     {
       number: 1,
@@ -629,33 +855,31 @@ export function ReportClient({
               {decisionError ? <p className="mt-4 text-sm text-red-400">{decisionError}</p> : null}
             </section>
 
-            <section className="border-t border-white/10 pt-10">
-              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Sales History</h2>
-              <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-                <p className="text-sm text-white/65">Hammer Price Range</p>
-                <p className="mt-1 text-lg text-white">
-                  {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
-                </p>
+            {hasAuctionSalesHistory ? (
+              <section className="border-t border-white/10 pt-10">
+                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Sales History</h2>
+                <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+                  <p className="text-sm text-white/65">Hammer Price Range</p>
+                  <p className="mt-1 text-lg text-white">
+                    {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+                  </p>
 
-                <p className="mt-5 text-sm text-white/65">Recommended Max Bid</p>
-                <p className="mt-1 text-xl font-semibold text-[#E55125]">
-                  {formatJpy(auctionResearch?.recommended_max_bid_jpy)}
-                </p>
+                  <p className="mt-5 text-sm text-white/65">Recommended Max Bid</p>
+                  <p className="mt-1 text-xl font-semibold text-[#E55125]">
+                    {formatJpy(auctionResearch?.recommended_max_bid_jpy)}
+                  </p>
 
-                <p className="mt-5 text-sm text-white/65">Sales Notes</p>
-                <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                  {renderText(auctionResearch?.sales_history_notes)}
-                </p>
-              </div>
-            </section>
-
-            <section className="border-t border-white/10 pt-10">
-              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Current Weekly Auction Listings</h2>
-              {listings.length === 0 ? (
-                <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
-                  No weekly listings were included in this report.
+                  <p className="mt-5 text-sm text-white/65">Sales Notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                    {renderText(auctionResearch?.sales_history_notes)}
+                  </p>
                 </div>
-              ) : (
+              </section>
+            ) : null}
+
+            {hasAuctionListings ? (
+              <section className="border-t border-white/10 pt-10">
+                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Current Weekly Auction Listings</h2>
                 <div className="mt-5 space-y-4">
                   {listings.map((listing, index) => (
                     <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={`${index}-${listing.lot_title ?? "lot"}`}>
@@ -693,60 +917,62 @@ export function ReportClient({
                     </article>
                   ))}
                 </div>
-              )}
-            </section>
+              </section>
+            ) : null}
 
-            <section className="border-t border-white/10 pt-10">
-              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Option</h2>
-              <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-                <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
-                  <p>
-                    <span className="text-white/45">Hammer Range:</span>{" "}
-                    {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+            {hasAuctionOption ? (
+              <section className="border-t border-white/10 pt-10">
+                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Option</h2>
+                <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+                  <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
+                    <p>
+                      <span className="text-white/45">Hammer Range:</span>{" "}
+                      {formatJpy(auctionResearch?.hammer_price_low_jpy)} - {formatJpy(auctionResearch?.hammer_price_high_jpy)}
+                    </p>
+                    <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
+                      Estimated hammer price is based on the midpoint of the 3-month sales range (
+                      {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
+                      {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
+                      actual winning hammer price at auction.
+                    </p>
+                    <p>
+                      <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
+                    </p>
+                    <p>
+                      <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
+                    </p>
+                    <p>
+                      <span className="text-white/45">Total Delivered Estimate:</span>{" "}
+                      {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
+                    </p>
+                  </div>
+
+                  <FeeBreakdownTable
+                    breakdown={auctionEstimate?.calculated_fees ?? null}
+                    destination={destination}
+                    exchangeRateAtReport={docket.exchange_rate_at_report}
+                    exchangeRateDate={docket.exchange_rate_date}
+                    networkFeeLabel="JPY Auction Fee"
+                  />
+
+                  <p className="mt-4 text-xs leading-5 text-white/55">
+                    Auction pricing is an estimate and final landed cost can change based on the final hammer result,
+                    exchange movement, and auction-side conditions.
                   </p>
-                  <p className="sm:col-span-2 -mt-1 text-xs leading-5 text-white/55">
-                    Estimated hammer price is based on the midpoint of the 3-month sales range (
-                    {formatJpyWithYenSign(auctionResearch?.hammer_price_low_jpy)} +{" "}
-                    {formatJpyWithYenSign(auctionResearch?.hammer_price_high_jpy)} ÷ 2). Final cost will vary based on
-                    actual winning hammer price at auction.
-                  </p>
-                  <p>
-                    <span className="text-white/45">Estimate Midpoint:</span> {formatJpy(auctionEstimate?.midpoint_hammer_jpy)}
-                  </p>
-                  <p>
-                    <span className="text-white/45">Estimate Midpoint (CAD):</span> {formatCad(auctionEstimate?.midpoint_hammer_cad)}
-                  </p>
-                  <p>
-                    <span className="text-white/45">Total Delivered Estimate:</span>{" "}
-                    {formatCad(auctionEstimate?.total_delivered_estimate_cad)}
-                  </p>
+
+                  {!hasDecision ? (
+                    <button
+                      className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={isDeciding}
+                      onClick={() => submitDecision("auction")}
+                      type="button"
+                    >
+                      {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
+                    </button>
+                  ) : null}
                 </div>
-
-                <FeeBreakdownTable
-                  breakdown={auctionEstimate?.calculated_fees ?? null}
-                  destination={destination}
-                  exchangeRateAtReport={docket.exchange_rate_at_report}
-                  exchangeRateDate={docket.exchange_rate_date}
-                  networkFeeLabel="JPY Auction Fee"
-                />
-
-                <p className="mt-4 text-xs leading-5 text-white/55">
-                  Auction pricing is an estimate and final landed cost can change based on the final hammer result,
-                  exchange movement, and auction-side conditions.
-                </p>
-
-                {!hasDecision ? (
-                  <button
-                    className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                    disabled={isDeciding}
-                    onClick={() => submitDecision("auction")}
-                    type="button"
-                  >
-                    {isDeciding ? "Saving your choice..." : "Approve for Purchase — Auction"}
-                  </button>
-                ) : null}
-              </div>
-            </section>
+              </section>
+            ) : null}
 
             <section className="border-t border-white/10 pt-10">
               <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Private Dealer Options</h2>
@@ -768,18 +994,11 @@ export function ReportClient({
                       </div>
 
                       {Array.isArray(option.photos) && option.photos.length > 0 ? (
-                        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                          {option.photos.map((photo, index) => (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              alt={`Dealer option ${option.option_number} photo ${index + 1}`}
-                              className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
-                              key={`${photo}-${index}`}
-                              loading="lazy"
-                              src={photo}
-                            />
-                          ))}
-                        </div>
+                        <DealerPhotoGallery
+                          onOpenLightbox={openLightbox}
+                          optionNumber={option.option_number}
+                          photos={option.photos}
+                        />
                       ) : null}
 
                       <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
@@ -881,6 +1100,68 @@ export function ReportClient({
           </>
         )}
       </div>
+
+      {lightbox ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 px-4 py-6 backdrop-blur-sm"
+          onClick={() => setLightbox(null)}
+          role="dialog"
+        >
+          <div className="relative flex h-full w-full max-w-6xl items-center justify-center">
+            <button
+              aria-label="Close photo viewer"
+              className="absolute right-0 top-0 z-10 flex h-11 w-11 items-center justify-center rounded-full border border-white/15 bg-black/70 text-2xl leading-none text-white transition hover:bg-white hover:text-black"
+              onClick={() => setLightbox(null)}
+              type="button"
+            >
+              ×
+            </button>
+
+            {lightbox.photos.length > 1 ? (
+              <button
+                aria-label="Previous photo"
+                className="absolute left-0 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/70 text-3xl leading-none text-white transition hover:bg-white hover:text-black"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showPreviousLightboxPhoto();
+                }}
+                type="button"
+              >
+                ‹
+              </button>
+            ) : null}
+
+            <div className="flex max-h-full max-w-full flex-col items-center" onClick={(event) => event.stopPropagation()}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                alt={`${lightbox.label} photo ${lightbox.index + 1}`}
+                className="max-h-[82vh] max-w-full rounded-xl border border-white/10 object-contain shadow-[0_30px_100px_rgba(0,0,0,0.55)]"
+                src={lightbox.photos[lightbox.index]}
+              />
+              {lightbox.photos.length > 1 ? (
+                <p className="mt-4 text-sm text-white/70">
+                  {lightbox.index + 1} / {lightbox.photos.length}
+                </p>
+              ) : null}
+            </div>
+
+            {lightbox.photos.length > 1 ? (
+              <button
+                aria-label="Next photo"
+                className="absolute right-0 z-10 flex h-12 w-12 items-center justify-center rounded-full border border-white/15 bg-black/70 text-3xl leading-none text-white transition hover:bg-white hover:text-black"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  showNextLightboxPhoto();
+                }}
+                type="button"
+              >
+                ›
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
