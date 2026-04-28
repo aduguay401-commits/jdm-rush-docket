@@ -15,6 +15,7 @@ export type EmailLogItem = {
   recipient_email: string | null;
   subject: string | null;
   body_snapshot: string | null;
+  error?: string | null;
 };
 
 export type MarcusQuestionItem = {

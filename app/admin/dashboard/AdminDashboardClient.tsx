@@ -11,6 +11,7 @@ type Props = {
 };
 
 type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost";
+type EmailStage = "Intake" | "Questions" | "Research" | "Decision" | "Follow-up";
 
 type PatchPayload = {
   status?: string | null;
@@ -45,6 +46,30 @@ const LOST_REASONS = [
   "Other",
 ];
 
+const EMAIL_TYPE_LABELS: Record<string, string> = {
+  email_1_customer_welcome: "Welcome Email",
+  email_1_admin_notification: "Admin Notification",
+  email_1_marcus_notification: "Agent Notification",
+  email_2_questions_sent: "Questions Sent",
+  email_3_answers_received: "Answers Received",
+  email_4_report_ready: "Report Ready",
+  email_5_customer_approval_next_steps: "Approval & Next Steps",
+  manual_reminder: "Manual Reminder",
+  customer_followup_question_sent: "Customer Question Alert",
+  report_question_sent: "Report Question Alert",
+  sequence_A_step_1: "Follow-up A (Step 1)",
+  sequence_A_step_2: "Follow-up A (Step 2)",
+  sequence_A_step_3: "Follow-up A (Step 3)",
+  sequence_B_step_1: "Follow-up B (Step 1)",
+  sequence_B_step_2: "Follow-up B (Step 2)",
+  sequence_B_step_3: "Follow-up B (Step 3)",
+  sequence_C_step_1: "Follow-up C (Step 1)",
+  sequence_C_step_2: "Follow-up C (Step 2)",
+  sequence_C_step_3: "Follow-up C (Step 3)",
+};
+
+const EMAIL_STAGE_ORDER: EmailStage[] = ["Intake", "Questions", "Research", "Decision", "Follow-up"];
+
 const STATUS_BADGE_STYLES: Record<string, string> = {
   new: "bg-orange-400/20 text-orange-300 ring-1 ring-orange-400/40",
   questions_sent: "bg-blue-400/20 text-blue-300 ring-1 ring-blue-400/40",
@@ -66,11 +91,17 @@ function formatDate(value: string | null | undefined) {
   return new Date(value).toLocaleString();
 }
 
-function formatSimpleDate(value: string | null | undefined) {
+function formatEmailTimestamp(value: string | null | undefined) {
   if (!value) {
     return "-";
   }
-  return new Date(value).toLocaleDateString();
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
 }
 
 function formatCurrencyCad(value: number | null | undefined) {
@@ -125,6 +156,80 @@ function getVehicleLabel(docket: NormalizedAdminDocket) {
 
 function truncate(str: string, max: number) {
   return str?.length > max ? str.substring(0, max) + "..." : str;
+}
+
+function getEmailTypeLabel(emailType: string | null | undefined) {
+  if (!emailType) {
+    return "Unknown Email";
+  }
+
+  return EMAIL_TYPE_LABELS[emailType] ?? emailType;
+}
+
+function getEmailStage(emailType: string | null | undefined): EmailStage {
+  if (!emailType) {
+    return "Follow-up";
+  }
+
+  if (emailType.startsWith("email_1_")) {
+    return "Intake";
+  }
+  if (
+    emailType.startsWith("email_2_") ||
+    emailType.startsWith("email_3_") ||
+    emailType === "customer_followup_question_sent"
+  ) {
+    return "Questions";
+  }
+  if (emailType.startsWith("email_4_")) {
+    return "Research";
+  }
+  if (emailType.startsWith("email_5_")) {
+    return "Decision";
+  }
+
+  return "Follow-up";
+}
+
+function normalizeEmail(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+
+function getEmailRecipientLabel(docket: NormalizedAdminDocket, recipientEmail: string | null | undefined) {
+  const normalized = normalizeEmail(recipientEmail);
+
+  if (!normalized) {
+    return "N/A";
+  }
+
+  if (normalized === "adam@jdmrushimports.ca") {
+    return "Adam (Admin)";
+  }
+
+  if (normalized === "marcus@gemmytrading.com" || normalized === "trade@gemmytrading.com") {
+    return "Marcus (Agent)";
+  }
+
+  const customerEmail = normalizeEmail(docket.customer_email);
+  const customerFirstName = docket.customer_first_name?.trim();
+  if (customerEmail && normalized === customerEmail && customerFirstName) {
+    return `${customerFirstName} (Customer)`;
+  }
+
+  return recipientEmail ?? "N/A";
+}
+
+function getEmailBodySnippet(bodySnapshot: string | null | undefined) {
+  if (!bodySnapshot) {
+    return "No body snapshot available.";
+  }
+
+  const plainText = bodySnapshot
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return truncate(plainText, 200);
 }
 
 function isPaused(docket: NormalizedAdminDocket) {
@@ -182,6 +287,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [selectedDocketId, setSelectedDocketId] = useState<string | null>(null);
   const [scrollToQuestionsOnOpen, setScrollToQuestionsOnOpen] = useState(false);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [expandedEmailLogIds, setExpandedEmailLogIds] = useState<Set<string>>(new Set());
   const customerQaRef = useRef<HTMLElement | null>(null);
 
   const [statusDraft, setStatusDraft] = useState("new");
@@ -196,6 +302,20 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     () => dockets.find((docket) => docket.id === selectedDocketId) ?? null,
     [dockets, selectedDocketId]
   );
+
+  const groupedEmailLog = useMemo(() => {
+    if (!selectedDocket) {
+      return [];
+    }
+
+    return EMAIL_STAGE_ORDER.map((stage) => {
+      const emails = selectedDocket.email_log
+        .filter((entry) => getEmailStage(entry.email_type) === stage)
+        .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime());
+
+      return { stage, emails };
+    }).filter((group) => group.emails.length > 0);
+  }, [selectedDocket]);
 
   useEffect(() => {
     if (!selectedDocket) {
@@ -247,6 +367,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     return () => {
       window.removeEventListener("keydown", onEscape);
     };
+  }, [selectedDocketId]);
+
+  useEffect(() => {
+    setExpandedEmailLogIds(new Set());
   }, [selectedDocketId]);
 
   async function refreshDockets(archivedOnly: boolean = showArchived) {
@@ -360,6 +484,18 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   function handleOpenDrawer(docketId: string, options?: { scrollToQuestions?: boolean }) {
     setSelectedDocketId(docketId);
     setScrollToQuestionsOnOpen(Boolean(options?.scrollToQuestions));
+  }
+
+  function toggleEmailLogEntry(entryId: string) {
+    setExpandedEmailLogIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(entryId)) {
+        next.delete(entryId);
+      } else {
+        next.add(entryId);
+      }
+      return next;
+    });
   }
 
   async function saveStatus() {
@@ -928,13 +1064,51 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
             <section className="mt-4">
               <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/70">Email log</h3>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-4 text-sm">
                 {selectedDocket.email_log.length === 0 ? <p className="text-white/50">No emails logged.</p> : null}
-                {selectedDocket.email_log.map((entry) => (
-                  <div className="rounded-md border border-white/10 bg-black/25 p-2" key={entry.id}>
-                    <p className="text-white/85">{entry.subject || "(No subject)"}</p>
-                    <p className="text-xs text-white/60">{entry.email_type || "unknown"} • {entry.recipient_email || "N/A"}</p>
-                    <p className="text-xs text-white/60">{formatSimpleDate(entry.sent_at)}</p>
+                {groupedEmailLog.map((group) => (
+                  <div className="space-y-2" key={group.stage}>
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-white/45">{group.stage}</h4>
+                    {group.emails.map((entry) => {
+                      const isExpanded = expandedEmailLogIds.has(entry.id);
+                      const hasError = Boolean(entry.error);
+
+                      return (
+                        <article className="rounded-md border border-white/10 bg-black/25" key={entry.id}>
+                          <button
+                            className="grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 px-3 py-2 text-left transition hover:bg-white/5"
+                            onClick={() => toggleEmailLogEntry(entry.id)}
+                            type="button"
+                          >
+                            <span
+                              aria-label={hasError ? "Email error" : "Email sent"}
+                              className={`h-2.5 w-2.5 rounded-full ${
+                                hasError ? "bg-red-400" : "bg-emerald-400"
+                              }`}
+                            />
+                            <span className="min-w-0 truncate text-white/85">
+                              {getEmailTypeLabel(entry.email_type)}
+                              <span className="mx-1 text-white/35">•</span>
+                              <span className="text-white/60">
+                                {getEmailRecipientLabel(selectedDocket, entry.recipient_email)}
+                              </span>
+                            </span>
+                            <span className="whitespace-nowrap text-xs text-white/50">
+                              {formatEmailTimestamp(entry.sent_at)}
+                            </span>
+                          </button>
+
+                          {isExpanded ? (
+                            <div className="border-t border-white/10 px-3 py-3 text-xs">
+                              <p className="font-medium text-white/80">{entry.subject || "(No subject)"}</p>
+                              <p className="mt-2 leading-relaxed text-white/55">
+                                {getEmailBodySnippet(entry.body_snapshot)}
+                              </p>
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
                   </div>
                 ))}
               </div>
