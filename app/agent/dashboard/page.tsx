@@ -35,21 +35,37 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
-  new: "bg-yellow-400/15 text-yellow-300 ring-1 ring-yellow-300/35",
-  questions_sent: "bg-sky-400/15 text-sky-300 ring-1 ring-sky-300/35",
-  answers_received: "bg-sky-400/15 text-sky-300 ring-1 ring-sky-300/35",
-  research_in_progress: "bg-orange-400/15 text-orange-300 ring-1 ring-orange-300/35",
-  report_sent: "bg-violet-400/15 text-violet-300 ring-1 ring-violet-300/35",
-  decision_made: "bg-green-400/15 text-green-300 ring-1 ring-green-300/35",
-  cleared: "bg-emerald-400/15 text-emerald-300 ring-1 ring-emerald-300/35",
-  lost: "bg-red-500/15 text-red-300 ring-1 ring-red-300/35",
+  new: "bg-blue-400/15 text-blue-300 ring-1 ring-blue-300/35",
+  questions_sent: "bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/35",
+  answers_received: "bg-green-500/10 text-[#22c55e] ring-1 ring-[#22c55e]/50",
+  research_in_progress: "bg-[#E55125]/15 text-[#ff8a65] ring-1 ring-[#E55125]/55",
+  report_sent: "bg-blue-400/10 text-blue-200/80 ring-1 ring-blue-300/25",
+  decision_made: "bg-green-400/15 text-green-300 ring-1 ring-green-300/40",
+  cleared: "bg-emerald-400/25 text-emerald-200 ring-1 ring-emerald-300/60",
+  lost: "bg-red-500/10 text-red-300/80 ring-1 ring-red-300/25",
   paused: "bg-zinc-400/20 text-zinc-300 ring-1 ring-zinc-300/35",
-  unresponsive: "bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/35",
+  unresponsive: "bg-zinc-400/15 text-zinc-300/80 ring-1 ring-zinc-300/25",
+};
+
+const STATUS_SORT_PRIORITY: Record<string, number> = {
+  answers_received: 0,
+  new: 1,
 };
 
 function formatStatus(status: string | null | undefined) {
   const normalized = status ?? "new";
   return STATUS_LABELS[normalized] ?? normalized;
+}
+
+function compareDocketsByUrgency(a: Docket, b: Docket) {
+  const aPriority = STATUS_SORT_PRIORITY[a.status ?? "new"] ?? 2;
+  const bPriority = STATUS_SORT_PRIORITY[b.status ?? "new"] ?? 2;
+
+  if (aPriority !== bPriority) {
+    return aPriority - bPriority;
+  }
+
+  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
 }
 
 function buildVehicleLabel(
@@ -156,7 +172,7 @@ export default function AgentDashboardPage() {
         return;
       }
 
-      setDockets((data as Docket[]) ?? []);
+      setDockets([...((data as Docket[]) ?? [])].sort(compareDocketsByUrgency));
       setLoading(false);
     }
 
@@ -251,9 +267,17 @@ export default function AgentDashboardPage() {
                       </div>
 
                       <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
-                        <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
-                          {badgeLabel}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
+                            {badgeLabel}
+                          </span>
+                          {status === "answers_received" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E55125]/45 bg-[#E55125]/12 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#ff8a65]">
+                              <span className="h-2 w-2 rounded-full bg-[#E55125] shadow-[0_0_10px_rgba(229,81,37,0.7)] motion-safe:animate-pulse" />
+                              Action Required
+                            </span>
+                          ) : null}
+                        </div>
                         <Link
                           className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
                           href={`/agent/docket/${docket.id}`}
