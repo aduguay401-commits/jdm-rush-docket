@@ -22,6 +22,8 @@ type DocketRow = {
   is_flagged: boolean | null
   customer_first_name: string | null
   customer_email: string | null
+  report_url_token: string | null
+  questions_url_token: string | null
   vehicle_year: string | null
   vehicle_make: string | null
   vehicle_model: string | null
@@ -32,19 +34,19 @@ const DEV_MODE = process.env.DEV_MODE === 'true'
 
 const SUBJECTS: Record<SequenceType, Record<1 | 2 | 3, string>> = {
   A: {
-    1: 'Quick question about your [vehicle]',
-    2: "Still here when you're ready — [vehicle]",
-    3: 'Last check-in on your [vehicle]',
+    1: 'Quick question about your JDM request',
+    2: "Still here when you're ready — JDM request",
+    3: 'Last check-in on your JDM request',
   },
   B: {
-    1: 'Your [vehicle] report is waiting',
-    2: "Don't miss your window — [vehicle]",
-    3: 'Final follow-up on your [vehicle]',
+    1: 'Your JDM request report is waiting',
+    2: "Don't miss your window — JDM request",
+    3: 'Final follow-up on your JDM request',
   },
   C: {
-    1: 'Complete your purchase — [vehicle]',
-    2: 'Your spot is still reserved — [vehicle]',
-    3: 'Last chance to lock in your [vehicle]',
+    1: 'Complete your purchase — JDM request',
+    2: 'Your spot is still reserved — JDM request',
+    3: 'Last chance to lock in your JDM request',
   },
 }
 
@@ -116,6 +118,9 @@ function buildEmailContent({
   step,
   firstName,
   vehicle,
+  docketStatus: _docketStatus,
+  reportUrlToken,
+  questionsUrlToken,
   devMode,
   originalRecipient,
 }: {
@@ -123,12 +128,37 @@ function buildEmailContent({
   step: 1 | 2 | 3
   firstName: string
   vehicle: string
+  docketStatus: string | null
+  reportUrlToken: string | null
+  questionsUrlToken: string | null
   devMode: boolean
   originalRecipient: string | null
 }) {
   const rawSubject = SUBJECTS[sequenceType][step]
   const subject = rawSubject.replace('[vehicle]', vehicle)
   const bodyLine = BODY_LINES[sequenceType][step]
+  const cta =
+    sequenceType === 'A' && questionsUrlToken
+      ? {
+          label: 'Answer Questions →',
+          url: `https://docket.jdmrushimports.ca/questions/${questionsUrlToken}`,
+        }
+      : (sequenceType === 'B' || sequenceType === 'C') && reportUrlToken
+        ? {
+            label: sequenceType === 'B' ? 'View Your Report →' : 'Complete Next Steps →',
+            url: `https://docket.jdmrushimports.ca/report/${reportUrlToken}`,
+          }
+        : null
+  const ctaButton = cta
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+                  <tr>
+                    <td align="center" style="border-radius:999px;background:#E55125;">
+                      <a href="${cta.url}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${cta.label}</a>
+                    </td>
+                  </tr>
+                </table>`
+    : ''
+  const textCta = cta ? `\n\n${cta.label} ${cta.url}` : ''
   const devBanner =
     devMode && originalRecipient
       ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${originalRecipient}</div>`
@@ -157,6 +187,7 @@ function buildEmailContent({
                 <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
                 <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;">${bodyLine}</p>
                 <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.</p>
+                ${ctaButton}
                 <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
               </td>
             </tr>
@@ -172,6 +203,7 @@ function buildEmailContent({
 ${bodyLine}
 
 If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.
+${textCta}
 
 Adam & the JDM Rush Team
 support@jdmrushimports.ca`
@@ -241,7 +273,7 @@ export async function POST(request: Request) {
   const { data: dockets, error: docketsError } = await supabase
     .from('dockets')
     .select(
-      'id, status, is_archived, is_flagged, customer_first_name, customer_email, vehicle_year, vehicle_make, vehicle_model'
+      'id, status, is_archived, is_flagged, customer_first_name, customer_email, report_url_token, questions_url_token, vehicle_year, vehicle_make, vehicle_model'
     )
     .in('id', docketIds)
 
@@ -304,6 +336,9 @@ export async function POST(request: Request) {
       step,
       firstName,
       vehicle,
+      docketStatus,
+      reportUrlToken: nonEmpty(docket.report_url_token),
+      questionsUrlToken: nonEmpty(docket.questions_url_token),
       devMode: DEV_MODE,
       originalRecipient,
     })
