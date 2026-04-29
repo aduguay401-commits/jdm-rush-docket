@@ -3,16 +3,6 @@ import { sendEmail } from '@/lib/email';
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdmin } from "@/lib/admin/auth";
 
-function buildVehicleDescription(
-  year: string | null | undefined,
-  make: string | null | undefined,
-  model: string | null | undefined
-) {
-  return [year, make, model]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join(" ");
-}
-
 function buildReminderEmailHtml({
   customerName,
   devMode,
@@ -69,16 +59,13 @@ export async function POST(
 
   const { data: docket, error: docketError } = await supabase
     .from("dockets")
-    .select("id, customer_first_name, customer_last_name, customer_email, vehicle_year, vehicle_make, vehicle_model")
+    .select("id, customer_first_name, customer_last_name, customer_email")
     .eq("id", id)
     .maybeSingle<{
       id: string;
       customer_first_name: string | null;
       customer_last_name: string | null;
       customer_email: string | null;
-      vehicle_year: string | null;
-      vehicle_make: string | null;
-      vehicle_model: string | null;
     }>();
 
   if (docketError) {
@@ -100,8 +87,6 @@ export async function POST(
     return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
   }
   const customerName = [docket.customer_first_name, docket.customer_last_name].filter(Boolean).join(" ") || "there";
-  const vehicleDescription =
-    buildVehicleDescription(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model) || "vehicle";
   const recipientEmail = devMode ? adminEmail : docket.customer_email;
   const subject = "Following up on your JDM request";
   const html = buildReminderEmailHtml({
@@ -116,7 +101,7 @@ export async function POST(
       to: recipientEmail,
       subject,
       html,
-      text: `Hi ${customerName},\n\nJust checking in on your ${vehicleDescription}. Reply to this email if anything has changed and we will update your docket right away.\n\nJDM Rush Imports`,
+      text: `Hi ${customerName},\n\nJust checking in on your docket. If anything has changed with your preferences, budget, or timing, reply to this email and we will adjust your search right away.\n\nJDM Rush Imports`,
     });
 
     if (sendResult.error) {
