@@ -26,6 +26,13 @@ export type MarcusQuestionItem = {
   created_at: string | null;
 };
 
+export type CustomerQuestionItem = {
+  id: string;
+  question_text: string | null;
+  created_at: string | null;
+  read_at: string | null;
+};
+
 export type AdminDocket = {
   id: string;
   created_at: string;
@@ -57,6 +64,7 @@ export type AdminDocket = {
   customer_questions_count: CountRelation[] | null;
   email_log_count: CountRelation[] | null;
   marcus_questions: MarcusQuestionItem[] | null;
+  customer_questions: CustomerQuestionItem[] | null;
   auction_research: Record<string, unknown>[] | null;
   private_dealer_options: Record<string, unknown>[] | null;
   follow_up_sequences: Record<string, unknown>[] | null;
@@ -69,6 +77,7 @@ export type NormalizedAdminDocket = AdminDocket & {
   customer_questions_total: number;
   reminders_sent_total: number;
   marcus_questions: MarcusQuestionItem[];
+  customer_questions: CustomerQuestionItem[];
   docket_status_history: DocketStatusHistoryItem[];
   email_log: EmailLogItem[];
 };
