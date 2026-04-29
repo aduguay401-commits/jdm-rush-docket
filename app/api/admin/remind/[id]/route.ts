@@ -15,12 +15,10 @@ function buildVehicleDescription(
 
 function buildReminderEmailHtml({
   customerName,
-  vehicleDescription,
   devMode,
   originalRecipient,
 }: {
   customerName: string;
-  vehicleDescription: string;
   devMode: boolean;
   originalRecipient: string;
 }) {
@@ -43,7 +41,7 @@ function buildReminderEmailHtml({
             <tr>
               <td style=\"padding:24px;\">
                 ${devBanner}
-                <h1 style=\"margin:0 0 12px;font-size:24px;line-height:1.3;color:#ffffff;\">Following up on your ${vehicleDescription}</h1>
+                <h1 style=\"margin:0 0 12px;font-size:24px;line-height:1.3;color:#ffffff;\">Following up on your JDM request</h1>
                 <p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">Hi ${customerName},</p>
                 <p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">Just checking in on your docket. If anything has changed with your preferences, budget, or timing, reply to this email and we will adjust your search right away.</p>
                 <p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">We are ready to keep moving your import forward.</p>
@@ -105,10 +103,9 @@ export async function POST(
   const vehicleDescription =
     buildVehicleDescription(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model) || "vehicle";
   const recipientEmail = devMode ? adminEmail : docket.customer_email;
-  const subject = `Following up on your ${vehicleDescription}`;
+  const subject = "Following up on your JDM request";
   const html = buildReminderEmailHtml({
     customerName,
-    vehicleDescription,
     devMode,
     originalRecipient: docket.customer_email,
   });
