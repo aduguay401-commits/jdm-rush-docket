@@ -231,7 +231,7 @@ export default function AgentDashboardPage() {
             <section className="pb-6">
               <h2 className="text-2xl font-semibold text-white">
                 Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention — let&apos;s
-                get these builds moving. 🇯🇵
+                get these deals moving. 🇯🇵
               </h2>
               <p className="mt-2 text-base text-[#888]">
                 Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
