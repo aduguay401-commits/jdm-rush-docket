@@ -25,8 +25,12 @@ export async function sendEmail({
   html?: string;
   text?: string;
 }) {
+  const formattedFrom = from.includes('<')
+    ? from
+    : `JDM Rush Imports <${from}>`;
+
   const result = await transporter.sendMail({
-    from,
+    from: formattedFrom,
     to,
     ...(cc ? { cc } : {}),
     subject,
