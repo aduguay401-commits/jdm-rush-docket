@@ -30,6 +30,7 @@ type CustomerAnswer = {
   id: string;
   question_text: string;
   answer_text: string | null;
+  answered_at: string | null;
 };
 
 type SentQuestion = {
@@ -44,6 +45,23 @@ type CustomerSubmittedQuestion = {
   created_at: string | null;
   read_at: string | null;
 };
+
+type CommunicationTimelineEntry =
+  | {
+      type: "AGENT_QUESTIONS";
+      timestamp: string;
+      questions: SentQuestion[];
+    }
+  | {
+      type: "CUSTOMER_ANSWERS";
+      timestamp: string;
+      answers: CustomerAnswer[];
+    }
+  | {
+      type: "CUSTOMER_QUESTION";
+      timestamp: string | null;
+      question: CustomerSubmittedQuestion;
+    };
 
 type AuctionListingForm = {
   lotTitle: string;
@@ -300,6 +318,10 @@ function formatStatus(status: string | null | undefined) {
   return STATUS_LABELS[normalized] ?? normalized;
 }
 
+function formatCommunicationTimestamp(timestamp: string | null) {
+  return timestamp ? new Date(timestamp).toLocaleString() : "Unknown time";
+}
+
 function isStatusAtOrAfter(status: string | null | undefined, baseStatus: string) {
   const normalized = status ?? "new";
   const currentIndex = STATUS_ORDER.indexOf(normalized as (typeof STATUS_ORDER)[number]);
@@ -421,8 +443,56 @@ export default function AgentDocketDetailPage({
   const customerQuestionsLink = docket?.questions_url_token
     ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
     : null;
-  const questionsSentAt = sentQuestions.length > 0 ? sentQuestions[0]?.created_at : null;
   const unreadCustomerQuestionsCount = customerSubmittedQuestions.filter((question) => question.read_at === null).length;
+  const unansweredQuestionsCount = Math.max(sentQuestions.length - customerAnswers.length, 0);
+  const communicationTimeline = useMemo<CommunicationTimelineEntry[]>(() => {
+    const agentQuestionBatches = new Map<string, SentQuestion[]>();
+    for (const question of sentQuestions) {
+      const batch = agentQuestionBatches.get(question.created_at) ?? [];
+      batch.push(question);
+      agentQuestionBatches.set(question.created_at, batch);
+    }
+
+    const customerAnswerBatches = new Map<string, CustomerAnswer[]>();
+    for (const answer of customerAnswers) {
+      if (!answer.answered_at) {
+        continue;
+      }
+
+      const batch = customerAnswerBatches.get(answer.answered_at) ?? [];
+      batch.push(answer);
+      customerAnswerBatches.set(answer.answered_at, batch);
+    }
+
+    return [
+      ...Array.from(agentQuestionBatches.entries()).map(
+        ([timestamp, questionsForBatch]): CommunicationTimelineEntry => ({
+          type: "AGENT_QUESTIONS",
+          timestamp,
+          questions: questionsForBatch,
+        })
+      ),
+      ...Array.from(customerAnswerBatches.entries()).map(
+        ([timestamp, answersForBatch]): CommunicationTimelineEntry => ({
+          type: "CUSTOMER_ANSWERS",
+          timestamp,
+          answers: answersForBatch,
+        })
+      ),
+      ...customerSubmittedQuestions.map(
+        (question): CommunicationTimelineEntry => ({
+          type: "CUSTOMER_QUESTION",
+          timestamp: question.created_at,
+          question,
+        })
+      ),
+    ].sort((left, right) => {
+      const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
+      const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
+
+      return leftTime - rightTime;
+    });
+  }, [customerAnswers, customerSubmittedQuestions, sentQuestions]);
 
   async function createSignedPreviewUrl(filePath: string) {
     const storagePath = extractStoragePath(filePath);
@@ -566,10 +636,10 @@ export default function AgentDocketDetailPage({
             .order("created_at", { ascending: true }),
           supabase
             .from("marcus_questions")
-            .select("id, question_text, answer_text")
+            .select("id, question_text, answer_text, answered_at")
             .eq("docket_id", id)
             .not("answered_at", "is", null)
-            .order("created_at", { ascending: true }),
+            .order("answered_at", { ascending: true }),
           supabase
             .from("customer_questions")
             .select("id, question_text, created_at, read_at")
@@ -1461,37 +1531,115 @@ export default function AgentDocketDetailPage({
               {isCustomerCommunicationExpanded ? (
                 <div className="mt-5 space-y-6">
                   <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                    <h3 className="mb-3 text-lg font-medium">Customer Answers</h3>
-                    {isAnswersReceived ? (
-                      customerAnswers.length === 0 ? (
-                        <p className="text-sm text-white/70">No customer answers found.</p>
-                      ) : (
-                        <div className="divide-y divide-white/10">
-                          {customerAnswers.map((item) => (
-                            <div className="py-4 first:pt-0 last:pb-0" key={item.id}>
-                              <p className="text-sm text-white">{item.question_text}</p>
-                              <p className="mt-2 text-sm text-[#E55125]">{item.answer_text || "No answer provided."}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )
+                    {communicationTimeline.length === 0 ? (
+                      <p className="text-sm text-white/70">No customer communication yet.</p>
                     ) : (
-                      <p className="text-sm text-white/70">No customer answers found.</p>
-                    )}
-                  </div>
+                      <div className="space-y-3">
+                        {communicationTimeline.map((entry) => {
+                          if (entry.type === "AGENT_QUESTIONS") {
+                            return (
+                              <article
+                                className="rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-4"
+                                key={`agent-questions-${entry.timestamp}`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <h3 className="text-sm font-medium text-white">
+                                    <span aria-hidden="true" className="mr-2">
+                                      📤
+                                    </span>
+                                    Agent sent {entry.questions.length}{" "}
+                                    {entry.questions.length === 1 ? "question" : "questions"}
+                                  </h3>
+                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
+                                    {formatCommunicationTimestamp(entry.timestamp)}
+                                  </time>
+                                </div>
+                                <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/85">
+                                  {entry.questions.map((question) => (
+                                    <li key={question.id}>{question.question_text}</li>
+                                  ))}
+                                </ol>
+                              </article>
+                            );
+                          }
 
-                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                    <h3 className="mb-3 text-lg font-medium">Questions Sent to Customer</h3>
+                          if (entry.type === "CUSTOMER_ANSWERS") {
+                            return (
+                              <article
+                                className="rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4"
+                                key={`customer-answers-${entry.timestamp}`}
+                              >
+                                <div className="flex flex-wrap items-start justify-between gap-3">
+                                  <h3 className="text-sm font-medium text-white">
+                                    <span aria-hidden="true" className="mr-2">
+                                      📥
+                                    </span>
+                                    Customer answered
+                                  </h3>
+                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
+                                    {formatCommunicationTimestamp(entry.timestamp)}
+                                  </time>
+                                </div>
+                                <div className="mt-3 space-y-4">
+                                  {entry.answers.map((answer) => (
+                                    <div key={answer.id}>
+                                      <p className="text-sm text-white">{answer.question_text}</p>
+                                      <p className="mt-1 text-sm text-[#E55125]">
+                                        {answer.answer_text || "No answer provided."}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              </article>
+                            );
+                          }
+
+                          return (
+                            <article
+                              className={`rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4 ${
+                                entry.question.read_at === null ? "border-l-[#E55125] bg-[#E55125]/5" : ""
+                              }`}
+                              key={`customer-question-${entry.question.id}`}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <h3 className="text-sm font-medium text-white">
+                                  <span aria-hidden="true" className="mr-2">
+                                    💬
+                                  </span>
+                                  Customer asked
+                                </h3>
+                                {entry.timestamp ? (
+                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
+                                    {formatCommunicationTimestamp(entry.timestamp)}
+                                  </time>
+                                ) : (
+                                  <span className="text-xs text-white/60">Unknown time</span>
+                                )}
+                              </div>
+                              <p className="mt-3 text-sm text-white/90">{entry.question.question_text}</p>
+                            </article>
+                          );
+                        })}
+
+                        {isQuestionsLocked && unansweredQuestionsCount > 0 ? (
+                          <article className="rounded-lg border border-white/10 border-l-4 border-l-white/20 bg-black/25 p-4">
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <h3 className="text-sm font-medium text-white/60">
+                                <span aria-hidden="true" className="mr-2">
+                                  ⏳
+                                </span>
+                                Awaiting customer response
+                              </h3>
+                            </div>
+                          </article>
+                        ) : null}
+                      </div>
+                    )}
+
                     {isQuestionsLocked ? (
                       <>
-                        <p className="text-sm text-emerald-400">{QUESTIONS_SENT_SUCCESS_MESSAGE}</p>
-                        {questionsSentAt ? (
-                          <p className="mt-2 text-xs text-white/70">
-                            Sent: {new Date(questionsSentAt).toLocaleString()}
-                          </p>
-                        ) : null}
                         {customerQuestionsLink ? (
-                          <p className="mt-1 text-xs text-white/80">
+                          <p className="mt-4 text-xs text-white/80">
                             Customer questions URL:{" "}
                             <a
                               className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
@@ -1503,23 +1651,8 @@ export default function AgentDocketDetailPage({
                             </a>
                           </p>
                         ) : (
-                          <p className="mt-1 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
+                          <p className="mt-4 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
                         )}
-
-                        <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                          <h4 className="text-sm font-medium text-white/90">Sent Questions</h4>
-                          {sentQuestions.length === 0 ? (
-                            <p className="mt-2 text-sm text-white/70">No sent questions found yet.</p>
-                          ) : (
-                            <ul className="mt-2 space-y-2 text-sm text-white/85">
-                              {sentQuestions.map((question, index) => (
-                                <li key={question.id}>
-                                  {index + 1}. {question.question_text}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
 
                         <div className="mt-4">
                           <button
@@ -1576,7 +1709,7 @@ export default function AgentDocketDetailPage({
                       </>
                     ) : !shouldHideQuestionsAndProceed ? (
                       <>
-                        <div className="space-y-3">
+                        <div className="mt-4 space-y-3 border-t border-white/10 pt-4">
                           {questions.map((question, index) => (
                             <label className="block text-sm text-white/85" key={`question-${index + 1}`}>
                               Question {index + 1}
@@ -1625,38 +1758,6 @@ export default function AgentDocketDetailPage({
                         </div>
                       </>
                     ) : null}
-                  </div>
-
-                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                    <h3 className="mb-3 text-lg font-medium">
-                      Customer Questions
-                      {unreadCustomerQuestionsCount > 0 ? (
-                        <span className="ml-2 text-sm font-medium text-[#E55125]">
-                          ({unreadCustomerQuestionsCount} new)
-                        </span>
-                      ) : null}
-                    </h3>
-                    {customerSubmittedQuestions.length === 0 ? (
-                      <p className="text-sm text-white/70">No customer questions submitted yet.</p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {customerSubmittedQuestions.map((question, index) => (
-                          <li
-                            className={`rounded-lg border border-white/10 bg-black/25 p-3 ${
-                              question.read_at === null ? "border-l-4 border-l-[#E55125] bg-[#E55125]/5" : ""
-                            }`}
-                            key={question.id}
-                          >
-                            <p className="text-sm text-white/90">
-                              {index + 1}. {question.question_text}
-                            </p>
-                            <p className="mt-1 text-xs text-white/60">
-                              {question.created_at ? new Date(question.created_at).toLocaleString() : "Unknown time"}
-                            </p>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
                   </div>
                 </div>
               ) : null}
