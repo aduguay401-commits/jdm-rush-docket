@@ -405,8 +405,7 @@ export default function AgentDashboardPage() {
                       </div>
                     </div>
                     <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-6">
-                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                        <p className="text-xs uppercase tracking-wider text-white/40">PIPELINE STATUS</p>
+                      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
                             {badgeLabel}
