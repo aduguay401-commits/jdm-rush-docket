@@ -1675,12 +1675,11 @@ export default function AgentDocketDetailPage({
                               {queuedQuestions.map((queuedQuestion, index) => (
                                 <label className="block text-sm text-white/85" key={`queued-question-${index + 1}`}>
                                   New Question {index + 1}
-                                  <input
-                                    className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                  <textarea
+                                    className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                                     disabled={addQuestionLoading}
                                     onChange={(event) => updateQueuedQuestion(index, event.target.value)}
-                                    placeholder="Enter an additional question"
-                                    type="text"
+                                    placeholder="Type your question here..."
                                     value={queuedQuestion}
                                   />
                                 </label>
@@ -1713,12 +1712,11 @@ export default function AgentDocketDetailPage({
                           {questions.map((question, index) => (
                             <label className="block text-sm text-white/85" key={`question-${index + 1}`}>
                               Question {index + 1}
-                              <input
-                                className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                              <textarea
+                                className="mt-1 min-h-[120px] w-full resize-y rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                                 disabled={false}
                                 onChange={(event) => updateQuestion(index, event.target.value)}
-                                placeholder={`Question ${index + 1}`}
-                                type="text"
+                                placeholder="Type your question here..."
                                 value={question}
                               />
                             </label>
