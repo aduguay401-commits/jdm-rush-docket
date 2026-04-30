@@ -13,19 +13,40 @@ type Docket = {
   docket_status_history: DocketStatusHistoryItem[] | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
-  vehicle_year: string | number | null;
-  vehicle_make: string | null;
-  vehicle_model: string | null;
-  destination_city: string | null;
-  destination_province: string | null;
-  budget_bracket: string | null;
-  timeline: string | null;
+  marcus_questions: MarcusQuestionItem[] | null;
+  customer_questions: CustomerQuestionItem[] | null;
+  email_log: EmailLogItem[] | null;
 };
 
 type DocketStatusHistoryItem = {
   old_status: string | null;
   new_status: string | null;
   changed_at: string | null;
+};
+
+type MarcusQuestionItem = {
+  question_text: string | null;
+  answer_text: string | null;
+  answered_at: string | null;
+  created_at: string | null;
+};
+
+type CustomerQuestionItem = {
+  question_text: string | null;
+  created_at: string | null;
+};
+
+type EmailLogItem = {
+  email_type: string | null;
+  subject: string | null;
+  body_snapshot: string | null;
+  sent_at: string | null;
+};
+
+type LastCommunication = {
+  directionLabel: string;
+  snippet: string | null;
+  timestamp: string;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -48,7 +69,7 @@ const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> =
   },
   questions_sent: {
     text: "⏳ Questions sent. Monitoring for answers.",
-    className: "font-normal text-[#888]",
+    className: "font-normal text-[#aaa]",
   },
   answers_received: {
     text: "🏎️ Customer answered — respond or pull research",
@@ -60,7 +81,7 @@ const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> =
   },
   report_sent: {
     text: "⏳ Report sent. Awaiting customer decision.",
-    className: "font-normal text-[#888]",
+    className: "font-normal text-[#aaa]",
   },
   decision_made: {
     text: "🏎️ Customer approved — handoff to Adam",
@@ -120,6 +141,39 @@ const CURRENT_STAGE_STYLES: Record<string, string> = {
 
 const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
 
+const STATUS_STRIPE_COLORS: Record<string, string> = {
+  new: "#4ade80",
+  questions_sent: "rgba(168,162,158,0.5)",
+  answers_received: "#4ade80",
+  research_in_progress: "#fb923c",
+  report_sent: "rgba(168,162,158,0.5)",
+  decision_made: "#4ade80",
+  cleared: "#4ade80",
+  unresponsive: "#fbbf24",
+  lost: "#525252",
+  paused: "#525252",
+};
+
+function getStatusStripeColor(status: string | null | undefined) {
+  return STATUS_STRIPE_COLORS[status ?? "new"] ?? "rgba(168,162,158,0.5)";
+}
+
+function withAlpha(color: string, alpha: number) {
+  if (color.startsWith("#") && color.length === 7) {
+    const red = Number.parseInt(color.slice(1, 3), 16);
+    const green = Number.parseInt(color.slice(3, 5), 16);
+    const blue = Number.parseInt(color.slice(5, 7), 16);
+    return `rgba(${red},${green},${blue},${alpha})`;
+  }
+
+  const rgbaMatch = color.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)$/);
+  if (rgbaMatch) {
+    return `rgba(${rgbaMatch[1]},${rgbaMatch[2]},${rgbaMatch[3]},${alpha})`;
+  }
+
+  return color;
+}
+
 function formatStatus(status: string | null | undefined) {
   const normalized = status ?? "new";
   return STATUS_LABELS[normalized] ?? normalized;
@@ -134,23 +188,6 @@ function compareDocketsByUrgency(a: Docket, b: Docket) {
   }
 
   return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-}
-
-function buildVehicleLabel(
-  year: string | number | null | undefined,
-  make: string | null | undefined,
-  model: string | null | undefined
-) {
-  const normalizedYear =
-    typeof year === "number"
-      ? String(year)
-      : typeof year === "string" && year.trim().length > 0
-        ? year.trim()
-        : null;
-
-  return [normalizedYear, make, model]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-    .join(" ");
 }
 
 function deriveDisplayNameFromEmail(email?: string | null) {
@@ -169,6 +206,123 @@ function deriveDisplayNameFromEmail(email?: string | null) {
   }
 
   return firstToken.charAt(0).toUpperCase() + firstToken.slice(1).toLowerCase();
+}
+
+function formatRelativeTime(timestamp: string) {
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) {
+    return "just now";
+  }
+
+  const diffMs = Date.now() - time;
+  if (diffMs < 60_000) {
+    return "just now";
+  }
+
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  if (hours < 48) {
+    return "yesterday";
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function truncateSnippet(value: string | null | undefined, maxLength = 100) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
+}
+
+function getEmailTypeLabel(emailType: string | null | undefined) {
+  if (!emailType) {
+    return "Email sent";
+  }
+
+  if (emailType.startsWith("email_1_")) {
+    return "Welcome email";
+  }
+
+  if (emailType.startsWith("email_2_")) {
+    return "Questions sent";
+  }
+
+  if (emailType.startsWith("email_4_")) {
+    return "Report sent";
+  }
+
+  if (emailType.startsWith("email_5_")) {
+    return "Approval next steps";
+  }
+
+  if (emailType === "manual_reminder") {
+    return "Manual reminder";
+  }
+
+  if (emailType.startsWith("sequence_")) {
+    return "Follow-up";
+  }
+
+  return "Email sent";
+}
+
+function getLastCommunication(docket: Docket): LastCommunication | null {
+  const customerFirstName = docket.customer_first_name?.trim() || "Customer";
+  const candidates: LastCommunication[] = [];
+
+  for (const question of docket.marcus_questions ?? []) {
+    if (question.answer_text?.trim() && question.answered_at) {
+      candidates.push({
+        directionLabel: `📥 ${customerFirstName}`,
+        snippet: truncateSnippet(question.answer_text),
+        timestamp: question.answered_at,
+      });
+      continue;
+    }
+
+    if (question.question_text?.trim() && question.created_at) {
+      candidates.push({
+        directionLabel: "📤 You",
+        snippet: truncateSnippet(question.question_text),
+        timestamp: question.created_at,
+      });
+    }
+  }
+
+  for (const question of docket.customer_questions ?? []) {
+    if (question.question_text?.trim() && question.created_at) {
+      candidates.push({
+        directionLabel: `📥 ${customerFirstName}`,
+        snippet: truncateSnippet(question.question_text),
+        timestamp: question.created_at,
+      });
+    }
+  }
+
+  for (const email of docket.email_log ?? []) {
+    if (email.sent_at) {
+      const label = getEmailTypeLabel(email.email_type);
+      candidates.push({
+        directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
+        snippet: truncateSnippet(email.subject || `${label} sent.`),
+        timestamp: email.sent_at,
+      });
+    }
+  }
+
+  return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
 }
 
 function sortStatusHistory(history: DocketStatusHistoryItem[] | null | undefined) {
@@ -323,7 +477,7 @@ export default function AgentDashboardPage() {
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline, docket_status_history(old_status, new_status, changed_at)"
+          "id, created_at, status, customer_first_name, customer_last_name, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
         )
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
@@ -407,39 +561,48 @@ export default function AgentDashboardPage() {
                   text: formatStatus(status),
                   className: "font-normal text-[#888]",
                 };
+                const stripeColor = getStatusStripeColor(status);
+                const lastCommunication = getLastCommunication(docket);
                 const customerName =
                   `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
                   "Unnamed Customer";
-                const vehicle = buildVehicleLabel(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model);
-                const destination = [docket.destination_city, docket.destination_province].filter(Boolean).join(", ");
 
                 return (
                   <article
                     className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg"
                     key={docket.id}
                   >
-                    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
-                      <div className="space-y-2">
+                    <div className="p-5">
+                      <div className="mb-4 flex items-start justify-between gap-4">
                         <h2 className="text-xl font-semibold text-white">{customerName}</h2>
-                        <p className={`mt-2 mb-3 w-full text-left text-sm ${statusLine.className}`}>
-                          {statusLine.text}
-                        </p>
-                        <p className="text-sm text-white/80">Vehicle: {vehicle || "N/A"}</p>
-                        <p className="text-sm text-white/80">Destination: {destination || "N/A"}</p>
-                        <p className="text-sm text-white/80">Budget: {docket.budget_bracket || "N/A"}</p>
-                        <p className="text-sm text-white/80">Timeline: {docket.timeline || "N/A"}</p>
-                      </div>
-
-                      <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
                         <Link
-                          className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                          className="shrink-0 rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
                           href={`/agent/docket/${docket.id}`}
                         >
                           Open Docket
                         </Link>
                       </div>
+                      <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
+                      <p className={`mb-4 text-sm ${statusLine.className}`}>{statusLine.text}</p>
+                      <div
+                        className="rounded bg-white/[0.03] px-[14px] py-2.5"
+                        style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
+                      >
+                        {lastCommunication ? (
+                          <>
+                            <p className="text-xs text-[#888]">
+                              {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
+                            </p>
+                            {lastCommunication.snippet ? (
+                              <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
+                            ) : null}
+                          </>
+                        ) : (
+                          <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
+                        )}
+                      </div>
                     </div>
-                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-6">
+                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
                       <DocketProgressBar docket={docket} />
                     </div>
                   </article>
