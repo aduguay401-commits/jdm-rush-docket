@@ -107,11 +107,6 @@ const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> =
   },
 };
 
-const STATUS_SORT_PRIORITY: Record<string, number> = {
-  answers_received: 0,
-  new: 1,
-};
-
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
   { label: "Communication", status: "communication" },
@@ -191,15 +186,88 @@ function formatStatus(status: string | null | undefined) {
   return STATUS_LABELS[normalized] ?? normalized;
 }
 
-function compareDocketsByUrgency(a: Docket, b: Docket) {
-  const aPriority = STATUS_SORT_PRIORITY[a.status ?? "new"] ?? 2;
-  const bPriority = STATUS_SORT_PRIORITY[b.status ?? "new"] ?? 2;
+type DocketWithLastCommunication = {
+  docket: Docket;
+  lastCommunication: LastCommunication | null;
+};
+
+const CLOSED_STATUS_PRIORITY: Record<string, number> = {
+  cleared: 0,
+  unresponsive: 1,
+  lost: 2,
+  paused: 2,
+};
+
+function getDocketUrgencyPriority({ docket, lastCommunication }: DocketWithLastCommunication) {
+  const status = docket.status ?? "new";
+  const sourceType = lastCommunication?.source_type;
+
+  if (sourceType === "customer_question") {
+    return 0;
+  }
+
+  if (status === "answers_received" && sourceType === "customer_answer") {
+    return 1;
+  }
+
+  if (status === "new") {
+    return 2;
+  }
+
+  if (status === "research_in_progress") {
+    return 3;
+  }
+
+  if (status === "decision_made") {
+    return 4;
+  }
+
+  if (status === "questions_sent" || status === "report_sent" || status === "answers_received") {
+    return 5;
+  }
+
+  if (status in CLOSED_STATUS_PRIORITY) {
+    return 6;
+  }
+
+  return 6;
+}
+
+function getDocketSortTimestamp({ docket, lastCommunication }: DocketWithLastCommunication) {
+  const timestamp = lastCommunication?.timestamp ?? docket.created_at;
+  const time = new Date(timestamp).getTime();
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+function compareDocketsByUrgency(a: DocketWithLastCommunication, b: DocketWithLastCommunication) {
+  const aPriority = getDocketUrgencyPriority(a);
+  const bPriority = getDocketUrgencyPriority(b);
 
   if (aPriority !== bPriority) {
     return aPriority - bPriority;
   }
 
-  return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  if (aPriority === 6) {
+    const aStatusPriority = CLOSED_STATUS_PRIORITY[a.docket.status ?? ""] ?? Number.MAX_SAFE_INTEGER;
+    const bStatusPriority = CLOSED_STATUS_PRIORITY[b.docket.status ?? ""] ?? Number.MAX_SAFE_INTEGER;
+
+    if (aStatusPriority !== bStatusPriority) {
+      return aStatusPriority - bStatusPriority;
+    }
+  }
+
+  return getDocketSortTimestamp(b) - getDocketSortTimestamp(a);
+}
+
+function sortDocketsByUrgency(dockets: Docket[]) {
+  return dockets
+    .map((docket) => ({
+      docket,
+      lastCommunication: getLastCommunication(docket),
+    }))
+    .sort(compareDocketsByUrgency)
+    .map(({ docket }) => docket);
 }
 
 function deriveDisplayNameFromEmail(email?: string | null) {
@@ -657,7 +725,7 @@ export default function AgentDashboardPage() {
     }
 
     setError(null);
-    setDockets([...((data as Docket[]) ?? [])].sort(compareDocketsByUrgency));
+    setDockets(sortDocketsByUrgency((data as Docket[]) ?? []));
     setLastRefreshedAt(new Date().toISOString());
     setLoading(false);
   }, [router, supabase]);
