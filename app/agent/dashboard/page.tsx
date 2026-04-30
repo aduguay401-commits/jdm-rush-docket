@@ -25,7 +25,7 @@ type Docket = {
 type DocketStatusHistoryItem = {
   old_status: string | null;
   new_status: string | null;
-  created_at: string | null;
+  changed_at: string | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -145,8 +145,8 @@ function deriveDisplayNameFromEmail(email?: string | null) {
 function sortStatusHistory(history: DocketStatusHistoryItem[] | null | undefined) {
   return Array.isArray(history)
     ? [...history].sort((a, b) => {
-        const aTime = new Date(a.created_at ?? 0).getTime();
-        const bTime = new Date(b.created_at ?? 0).getTime();
+        const aTime = new Date(a.changed_at ?? 0).getTime();
+        const bTime = new Date(b.changed_at ?? 0).getTime();
         return bTime - aTime;
       })
     : [];
@@ -294,7 +294,7 @@ export default function AgentDashboardPage() {
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline, docket_status_history(old_status, new_status, created_at)"
+          "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline, docket_status_history(old_status, new_status, changed_at)"
         )
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
