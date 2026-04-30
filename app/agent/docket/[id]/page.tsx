@@ -538,6 +538,7 @@ export default function AgentDocketDetailPage({
   const [draftSavedVisible, setDraftSavedVisible] = useState(false);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
+  const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
 
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
@@ -551,6 +552,7 @@ export default function AgentDocketDetailPage({
   const shouldShowResearchForm = isResearchInProgress || (isSubmittedStatus && isEditingSentReport);
   const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
   const isFormDisabled = submittingResearch || isFormReadOnly;
+  const isEditingSubmittedReport = isSubmittedStatus && isEditingSentReport;
   const smartProceedButtonLabel =
     currentStatus === "new"
       ? "Skip Questions — Proceed to Research"
@@ -1646,6 +1648,50 @@ export default function AgentDocketDetailPage({
     }
   }
 
+  function restoreResearchDraft(draft: ResearchDraft) {
+    setHammerPriceLowJpy(draft.hammerPriceLowJpy);
+    setHammerPriceHighJpy(draft.hammerPriceHighJpy);
+    setRecommendedMaxBidJpy(draft.recommendedMaxBidJpy);
+    setSalesHistoryNotes(draft.salesHistoryNotes);
+    setOverallNotes(draft.overallNotes);
+    setAuctionListings(draft.auctionListings.map((listing) => ({ ...listing, photos: [...listing.photos] })));
+    setDealerOptions(
+      draft.dealerOptions.map((option) => ({
+        ...option,
+        photos: [...option.photos],
+      }))
+    );
+  }
+
+  function startSentReportEdit() {
+    sentReportEditSnapshotRef.current = {
+      ...researchDraft,
+      auctionListings: researchDraft.auctionListings.map((listing) => ({ ...listing, photos: [...listing.photos] })),
+      dealerOptions: researchDraft.dealerOptions.map((option) => ({
+        ...option,
+        photos: [...option.photos],
+      })),
+    };
+    setIsEditingSentReport(true);
+    setResearchLocked(false);
+    setResearchConfirmation(null);
+    setRedirectCountdown(null);
+  }
+
+  function cancelSentReportEdit() {
+    if (sentReportEditSnapshotRef.current) {
+      restoreResearchDraft(sentReportEditSnapshotRef.current);
+      lastSavedDraftRef.current = JSON.stringify(sentReportEditSnapshotRef.current);
+    }
+
+    sentReportEditSnapshotRef.current = null;
+    setIsEditingSentReport(false);
+    setResearchLocked(true);
+    setResearchConfirmation(null);
+    setRedirectCountdown(null);
+    setError(null);
+  }
+
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <div className="mx-auto max-w-5xl space-y-8">
@@ -2119,12 +2165,7 @@ export default function AgentDocketDetailPage({
                 <div className="flex justify-end">
                   <button
                     className="rounded-lg border border-white/25 bg-transparent px-5 py-2.5 text-sm font-medium text-white/75 transition hover:border-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    onClick={() => {
-                      setIsEditingSentReport(true);
-                      setResearchLocked(false);
-                      setResearchConfirmation(null);
-                      setRedirectCountdown(null);
-                    }}
+                    onClick={startSentReportEdit}
                     type="button"
                   >
                     Edit &amp; Resend Report
@@ -2538,21 +2579,36 @@ export default function AgentDocketDetailPage({
 
                 {!isFormReadOnly ? (
                   <div className="flex flex-wrap items-center justify-end gap-3">
+                    {isEditingSubmittedReport ? (
+                      <button
+                        className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isFormDisabled}
+                        onClick={cancelSentReportEdit}
+                        type="button"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <button
+                        className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={isFormDisabled}
+                        onClick={() => void resetResearchForm()}
+                        type="button"
+                      >
+                        Reset Form
+                      </button>
+                    )}
                     <button
-                      className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isFormDisabled}
-                      onClick={() => void resetResearchForm()}
-                      type="button"
-                    >
-                      Reset Form
-                    </button>
-                    <button
-                      className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                       disabled={isFormDisabled || uploadingTarget !== null}
                       onClick={() => void submitResearchReport()}
                       type="button"
                     >
-                      {submittingResearch ? "Sending..." : "Send to Customer"}
+                      {submittingResearch
+                        ? "Sending..."
+                        : isEditingSubmittedReport
+                          ? "Save & Resend Report"
+                          : "Send to Customer"}
                     </button>
                   </div>
                 ) : null}
