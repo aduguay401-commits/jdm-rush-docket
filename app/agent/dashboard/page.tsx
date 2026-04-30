@@ -258,44 +258,67 @@ function truncateSnippet(value: string | null | undefined, maxLength = 100) {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
 }
 
-function getEmailTypeLabel(emailType: string | null | undefined) {
+function getCustomerFacingEmailCommunication(
+  email: EmailLogItem
+): Pick<LastCommunication, "directionLabel" | "snippet"> | null {
+  const emailType = email.email_type;
+
   if (!emailType) {
-    return "Email sent";
+    return null;
   }
 
-  if (emailType.startsWith("email_1_")) {
-    return "Welcome email";
+  const labelsByType: Record<string, Pick<LastCommunication, "directionLabel" | "snippet">> = {
+    email_1_customer_welcome: {
+      directionLabel: "📤 Welcome email sent",
+      snippet: "Welcome email sent to customer",
+    },
+    email_2_questions_sent: {
+      directionLabel: "📤 Questions sent",
+      snippet: truncateSnippet(email.subject) ?? "Research questions sent to customer",
+    },
+    email_4_report_ready: {
+      directionLabel: "📤 Report sent",
+      snippet: "Full research report sent to customer",
+    },
+    email_5_customer_approval_next_steps: {
+      directionLabel: "📤 Approval next steps sent",
+      snippet: "Deposit and agreement instructions sent",
+    },
+    manual_reminder: {
+      directionLabel: "📤 Manual reminder sent",
+      snippet: "Status reminder sent to customer",
+    },
+  };
+
+  if (labelsByType[emailType]) {
+    return labelsByType[emailType];
   }
 
-  if (emailType.startsWith("email_2_")) {
-    return "Questions sent";
+  const sequenceMatch = /^sequence_([ABC])_step_([123])$/.exec(emailType);
+  if (!sequenceMatch) {
+    return null;
   }
 
-  if (emailType.startsWith("email_4_")) {
-    return "Report sent";
+  const [, sequenceType, step] = sequenceMatch;
+
+  if (sequenceType === "A") {
+    return {
+      directionLabel: `📤 Follow-up #${step} sent`,
+      snippet: "Questions follow-up sent to customer",
+    };
   }
 
-  if (emailType.startsWith("email_5_")) {
-    return "Approval next steps";
+  if (sequenceType === "B") {
+    return {
+      directionLabel: `📤 Report follow-up #${step} sent`,
+      snippet: "Report follow-up sent to customer",
+    };
   }
 
-  if (emailType === "manual_reminder") {
-    return "Manual reminder";
-  }
-
-  if (emailType.startsWith("sequence_")) {
-    return "Follow-up";
-  }
-
-  return "Email sent";
-}
-
-function getEmailSourceType(emailType: string | null | undefined): LastCommunication["source_type"] {
-  if (emailType?.includes("_admin_notification") || emailType?.includes("_marcus_notification")) {
-    return "system_email";
-  }
-
-  return "agent_email";
+  return {
+    directionLabel: `📤 Approval follow-up #${step} sent`,
+    snippet: "Approval follow-up sent to customer",
+  };
 }
 
 function getLastCommunication(docket: Docket): LastCommunication | null {
@@ -338,18 +361,29 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
 
   for (const email of docket.email_log ?? []) {
     if (email.sent_at) {
-      const label = getEmailTypeLabel(email.email_type);
+      const emailCommunication = getCustomerFacingEmailCommunication(email);
+
+      if (!emailCommunication) {
+        continue;
+      }
+
       candidates.push({
         direction: "agent",
-        source_type: getEmailSourceType(email.email_type),
-        directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
-        snippet: truncateSnippet(email.subject || `${label} sent.`),
+        source_type: "agent_email",
+        directionLabel: emailCommunication.directionLabel,
+        snippet: emailCommunication.snippet,
         timestamp: email.sent_at,
       });
     }
   }
 
-  return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
+  return candidates.reduce<LastCommunication | null>((latest, candidate) => {
+    if (!latest) {
+      return candidate;
+    }
+
+    return new Date(candidate.timestamp).getTime() > new Date(latest.timestamp).getTime() ? candidate : latest;
+  }, null);
 }
 
 function isOutboundCommunication(sourceType: LastCommunication["source_type"] | undefined) {
