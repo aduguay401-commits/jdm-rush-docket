@@ -41,17 +41,47 @@ const STATUS_LABELS: Record<string, string> = {
   unresponsive: "Unresponsive",
 };
 
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  new: "bg-blue-400/15 text-blue-300 ring-1 ring-blue-300/35",
-  questions_sent: "bg-amber-400/15 text-amber-300 ring-1 ring-amber-300/35",
-  answers_received: "bg-green-500/10 text-[#22c55e] ring-1 ring-[#22c55e]/50",
-  research_in_progress: "bg-[#E55125]/15 text-[#ff8a65] ring-1 ring-[#E55125]/55",
-  report_sent: "bg-blue-400/10 text-blue-200/80 ring-1 ring-blue-300/25",
-  decision_made: "bg-green-400/15 text-green-300 ring-1 ring-green-300/40",
-  cleared: "bg-emerald-400/25 text-emerald-200 ring-1 ring-emerald-300/60",
-  lost: "bg-red-500/10 text-red-300/80 ring-1 ring-red-300/25",
-  paused: "bg-zinc-400/20 text-zinc-300 ring-1 ring-zinc-300/35",
-  unresponsive: "bg-zinc-400/15 text-zinc-300/80 ring-1 ring-zinc-300/25",
+const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> = {
+  new: {
+    text: "🏎️ New lead — send first questions",
+    className: "font-semibold text-[#4ade80]",
+  },
+  questions_sent: {
+    text: "⏳ Questions sent. Monitoring for answers.",
+    className: "font-normal text-[#888]",
+  },
+  answers_received: {
+    text: "🏎️ Customer answered — respond or pull research",
+    className: "font-semibold text-[#4ade80]",
+  },
+  research_in_progress: {
+    text: "🏎️ Research in progress",
+    className: "font-semibold text-[#fb923c]",
+  },
+  report_sent: {
+    text: "⏳ Report sent. Awaiting customer decision.",
+    className: "font-normal text-[#888]",
+  },
+  decision_made: {
+    text: "🏎️ Customer approved — handoff to Adam",
+    className: "font-semibold text-[#4ade80]",
+  },
+  cleared: {
+    text: "✅ Deal cleared",
+    className: "font-medium text-[#4ade80]",
+  },
+  unresponsive: {
+    text: "⚠️ No response after follow-ups",
+    className: "font-medium text-[#fbbf24]",
+  },
+  lost: {
+    text: "✕ Lost",
+    className: "font-normal text-[#666]",
+  },
+  paused: {
+    text: "⏸ Paused",
+    className: "font-normal text-[#666]",
+  },
 };
 
 const STATUS_SORT_PRIORITY: Record<string, number> = {
@@ -373,8 +403,10 @@ export default function AgentDashboardPage() {
             <div className="grid gap-4">
               {dockets.map((docket) => {
                 const status = docket.status ?? "new";
-                const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-white/10 text-white ring-1 ring-white/25";
-                const badgeLabel = formatStatus(status);
+                const statusLine = STATUS_LINE_CONTENT[status] ?? {
+                  text: formatStatus(status),
+                  className: "font-normal text-[#888]",
+                };
                 const customerName =
                   `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
                   "Unnamed Customer";
@@ -389,6 +421,9 @@ export default function AgentDashboardPage() {
                     <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
                         <h2 className="text-xl font-semibold text-white">{customerName}</h2>
+                        <p className={`mt-2 mb-3 w-full text-left text-sm ${statusLine.className}`}>
+                          {statusLine.text}
+                        </p>
                         <p className="text-sm text-white/80">Vehicle: {vehicle || "N/A"}</p>
                         <p className="text-sm text-white/80">Destination: {destination || "N/A"}</p>
                         <p className="text-sm text-white/80">Budget: {docket.budget_bracket || "N/A"}</p>
@@ -405,19 +440,6 @@ export default function AgentDashboardPage() {
                       </div>
                     </div>
                     <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-6">
-                      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
-                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
-                            {badgeLabel}
-                          </span>
-                          {status === "answers_received" ? (
-                            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E55125]/45 bg-[#E55125]/12 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#ff8a65]">
-                              <span className="h-2 w-2 rounded-full bg-[#E55125] shadow-[0_0_10px_rgba(229,81,37,0.7)] motion-safe:animate-pulse" />
-                              Action Required
-                            </span>
-                          ) : null}
-                        </div>
-                      </div>
                       <DocketProgressBar docket={docket} />
                     </div>
                   </article>
