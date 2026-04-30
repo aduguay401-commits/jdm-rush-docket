@@ -9,7 +9,10 @@ import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from
 type Docket = {
   id: string;
   questions_url_token: string | null;
+  report_url_token: string | null;
   status: string | null;
+  chosen_path: string | null;
+  selected_path: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_email: string | null;
@@ -24,6 +27,34 @@ type Docket = {
   timeline: string | null;
   additional_notes: string | null;
   research_draft: unknown | null;
+};
+
+type AuctionResearchRecord = {
+  hammer_price_low_jpy: number | string | null;
+  hammer_price_high_jpy: number | string | null;
+  recommended_max_bid_jpy: number | string | null;
+  sales_history_notes: string | null;
+  auction_listings: unknown;
+};
+
+type PrivateDealerOptionRecord = {
+  option_number: number | null;
+  year: string | null;
+  make: string | null;
+  model: string | null;
+  grade: string | null;
+  mileage: string | null;
+  colour: string | null;
+  transmission: string | null;
+  trim: string | null;
+  dealer_price_jpy: number | string | null;
+  photos: unknown;
+  sales_sheet_url: string | null;
+  marcus_notes: string | null;
+};
+
+type ReportEmailLog = {
+  sent_at: string | null;
 };
 
 type CustomerAnswer = {
@@ -285,6 +316,53 @@ function normalizeResearchDraft(value: unknown): ResearchDraft | null {
   };
 }
 
+function normalizeSubmittedResearchDraft(
+  auctionResearch: AuctionResearchRecord | null,
+  dealerOptionRows: PrivateDealerOptionRecord[]
+): ResearchDraft {
+  const dealerOptionsByNumber = new Map(
+    dealerOptionRows
+      .filter((option) => typeof option.option_number === "number")
+      .map((option) => [option.option_number, option])
+  );
+
+  return {
+    hammerPriceLowJpy: toDraftString(auctionResearch?.hammer_price_low_jpy),
+    hammerPriceHighJpy: toDraftString(auctionResearch?.hammer_price_high_jpy),
+    recommendedMaxBidJpy: toDraftString(auctionResearch?.recommended_max_bid_jpy),
+    salesHistoryNotes: toDraftString(auctionResearch?.sales_history_notes),
+    overallNotes: "",
+    auctionListings:
+      Array.isArray(auctionResearch?.auction_listings) && auctionResearch.auction_listings.length > 0
+        ? auctionResearch.auction_listings.map(normalizeAuctionListingDraft)
+        : createInitialAuctionListings(),
+    dealerOptions: createInitialDealerOptions().map((fallback) => {
+      const savedOption = dealerOptionsByNumber.get(fallback.optionNumber);
+
+      if (!savedOption) {
+        return fallback;
+      }
+
+      return {
+        optionNumber: fallback.optionNumber,
+        expanded: fallback.expanded,
+        year: toDraftString(savedOption.year),
+        make: toDraftString(savedOption.make),
+        model: toDraftString(savedOption.model),
+        grade: toDraftString(savedOption.grade),
+        mileage: toDraftString(savedOption.mileage),
+        colour: toDraftString(savedOption.colour),
+        transmission: savedOption.transmission === "Auto" || savedOption.transmission === "Manual" ? savedOption.transmission : "Manual",
+        trim: toDraftString(savedOption.trim),
+        dealerPriceJpy: toDraftString(savedOption.dealer_price_jpy),
+        photos: normalizeDraftStringArray(savedOption.photos),
+        salesSheetUrl: toDraftString(savedOption.sales_sheet_url),
+        notes: toDraftString(savedOption.marcus_notes),
+      };
+    }),
+  };
+}
+
 async function getUserRole(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
   const byId = await supabase
     .from("profiles")
@@ -320,6 +398,22 @@ function formatStatus(status: string | null | undefined) {
 
 function formatCommunicationTimestamp(timestamp: string | null) {
   return timestamp ? new Date(timestamp).toLocaleString() : "Unknown time";
+}
+
+function formatReportDate(timestamp: string | null) {
+  return timestamp ? new Date(timestamp).toLocaleString() : "an unknown date";
+}
+
+function formatChosenPath(path: string | null | undefined) {
+  if (path === "private_dealer") {
+    return "Private Dealer";
+  }
+
+  if (path === "auction") {
+    return "Auction";
+  }
+
+  return path ? path.replace(/_/g, " ") : "Path not specified";
 }
 
 function isStatusAtOrAfter(status: string | null | undefined, baseStatus: string) {
@@ -390,6 +484,7 @@ export default function AgentDocketDetailPage({
   const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
   const [sentQuestions, setSentQuestions] = useState<SentQuestion[]>([]);
   const [customerSubmittedQuestions, setCustomerSubmittedQuestions] = useState<CustomerSubmittedQuestion[]>([]);
+  const [reportSentAt, setReportSentAt] = useState<string | null>(null);
   const [addingQuestion, setAddingQuestion] = useState(false);
   const [queuedQuestions, setQueuedQuestions] = useState([""]);
   const [addQuestionLoading, setAddQuestionLoading] = useState(false);
@@ -418,12 +513,32 @@ export default function AgentDocketDetailPage({
   const isAnswersReceived = currentStatus === "answers_received";
   const canProceedWithoutQuestions =
     currentStatus === "new" || currentStatus === "questions_sent" || currentStatus === "answers_received";
-  const shouldShowStandaloneProceed =
-    currentStatus === "questions_sent" || currentStatus === "answers_received";
+  const shouldShowSmartProceedButton = canProceedWithoutQuestions && !researchLocked;
+  const isFormReadOnly = isStatusAtOrAfter(currentStatus, "report_sent") || researchLocked;
   const isQuestionsLocked = isStatusAtOrAfter(currentStatus, QUESTIONS_BASE_STATUS);
-  const shouldShowResearchForm = isResearchInProgress || isAnswersReceived || researchLocked;
+  const shouldShowResearchForm =
+    isResearchInProgress ||
+    isAnswersReceived ||
+    currentStatus === "report_sent" ||
+    currentStatus === "decision_made" ||
+    currentStatus === "cleared" ||
+    researchLocked;
   const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
-  const isFormDisabled = submittingResearch || researchLocked;
+  const isFormDisabled = submittingResearch || isFormReadOnly;
+  const smartProceedButtonLabel =
+    currentStatus === "new"
+      ? "Skip Questions — Proceed to Research"
+      : currentStatus === "answers_received"
+        ? "Proceed to Research"
+        : "I Have What I Need — Proceed to Research";
+  const smartProceedButtonClassName =
+    currentStatus === "answers_received"
+      ? "w-full rounded-lg bg-[#22c55e] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+      : "w-full rounded-lg bg-[#E55125] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70";
+  const reportUrl = docket?.report_url_token
+    ? `https://docket.jdmrushimports.ca/report/${docket.report_url_token}`
+    : null;
+  const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
   const researchDraft = useMemo<ResearchDraft>(
     () => ({
       hammerPriceLowJpy,
@@ -601,7 +716,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, status, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
+          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
         )
         .eq("id", id)
         .maybeSingle();
@@ -631,6 +746,9 @@ export default function AgentDocketDetailPage({
         { data: sentQuestionsData, error: sentQuestionsError },
         { data: answersData, error: answersError },
         { data: customerQuestionsData, error: customerQuestionsError },
+        { data: auctionResearchData, error: auctionResearchError },
+        { data: dealerOptionsData, error: dealerOptionsError },
+        { data: reportEmailLogData, error: reportEmailLogError },
       ] =
         await Promise.all([
           supabase
@@ -649,6 +767,29 @@ export default function AgentDocketDetailPage({
             .select("id, question_text, created_at, read_at")
             .eq("docket_id", id)
             .order("created_at", { ascending: true }),
+          supabase
+            .from("auction_research")
+            .select("hammer_price_low_jpy, hammer_price_high_jpy, recommended_max_bid_jpy, sales_history_notes, auction_listings")
+            .eq("docket_id", id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle<AuctionResearchRecord>(),
+          supabase
+            .from("private_dealer_options")
+            .select(
+              "option_number, year, make, model, grade, mileage, colour, transmission, trim, dealer_price_jpy, photos, sales_sheet_url, marcus_notes"
+            )
+            .eq("docket_id", id)
+            .order("option_number", { ascending: true })
+            .returns<PrivateDealerOptionRecord[]>(),
+          supabase
+            .from("email_log")
+            .select("sent_at")
+            .eq("docket_id", id)
+            .eq("email_type", "email_4_report_ready")
+            .order("sent_at", { ascending: false })
+            .limit(1)
+            .maybeSingle<ReportEmailLog>(),
         ]);
 
       if (sentQuestionsError) {
@@ -669,9 +810,33 @@ export default function AgentDocketDetailPage({
         return;
       }
 
+      if (auctionResearchError) {
+        setError(auctionResearchError.message);
+        setLoading(false);
+        return;
+      }
+
+      if (dealerOptionsError) {
+        setError(dealerOptionsError.message);
+        setLoading(false);
+        return;
+      }
+
+      const hydratedDraft =
+        savedDraft ?? normalizeSubmittedResearchDraft(auctionResearchData, dealerOptionsData ?? []);
+
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setCustomerSubmittedQuestions((customerQuestionsData ?? []) as CustomerSubmittedQuestion[]);
+      setReportSentAt(reportEmailLogError ? null : reportEmailLogData?.sent_at ?? null);
+      setHammerPriceLowJpy(hydratedDraft.hammerPriceLowJpy);
+      setHammerPriceHighJpy(hydratedDraft.hammerPriceHighJpy);
+      setRecommendedMaxBidJpy(hydratedDraft.recommendedMaxBidJpy);
+      setSalesHistoryNotes(hydratedDraft.salesHistoryNotes);
+      setOverallNotes(hydratedDraft.overallNotes);
+      setAuctionListings(hydratedDraft.auctionListings);
+      setDealerOptions(hydratedDraft.dealerOptions);
+      lastSavedDraftRef.current = JSON.stringify(hydratedDraft);
 
       const unreadQuestions = (customerQuestionsData ?? []).filter((question) => question.read_at === null);
       if (unreadQuestions.length > 0) {
@@ -694,7 +859,7 @@ export default function AgentDocketDetailPage({
       !docket ||
       !shouldShowResearchForm ||
       isFormDisabled ||
-      currentStatus === "report_sent"
+      isFormReadOnly
     ) {
       return;
     }
@@ -716,7 +881,7 @@ export default function AgentDocketDetailPage({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [currentStatus, docket, id, isFormDisabled, researchDraft, shouldShowResearchForm]);
+  }, [docket, id, isFormDisabled, isFormReadOnly, researchDraft, shouldShowResearchForm]);
 
   useEffect(() => {
     if (!draftSavedVisible) {
@@ -1402,6 +1567,7 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "report_sent" } : prev));
+    setReportSentAt(new Date().toISOString());
     setResearchLocked(true);
     setRedirectCountdown(3);
     setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
@@ -1745,19 +1911,6 @@ export default function AgentDocketDetailPage({
                             {savingQuestions ? "Sending..." : "Send Questions to Customer"}
                           </button>
                         </div>
-
-                        <div className="mt-4 border-t border-white/10 pt-4">
-                          <h4 className="mb-3 text-sm font-medium text-white/90">Proceed Without Questions</h4>
-                          <button
-                            className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white ring-1 ring-white/20 transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-70"
-                            disabled={proceeding}
-                            onClick={proceedWithoutQuestions}
-                            type="button"
-                          >
-                            {proceeding ? "Confirming..." : "I have all the information I need"}
-                          </button>
-                          {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
-                        </div>
                       </>
                     ) : null}
                   </div>
@@ -1765,18 +1918,43 @@ export default function AgentDocketDetailPage({
               ) : null}
             </section>
 
-            {shouldShowStandaloneProceed ? (
-              <section className="rounded-xl border border-[#E55125]/60 bg-[#171717] p-5">
-                <h2 className="mb-3 text-xl font-semibold">Proceed Without Questions</h2>
+            {shouldShowSmartProceedButton ? (
+              <section>
                 <button
-                  className="w-full rounded-lg bg-[#E55125] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                  className={smartProceedButtonClassName}
                   disabled={proceeding}
                   onClick={proceedWithoutQuestions}
                   type="button"
                 >
-                  {proceeding ? "Confirming..." : "I have all the information I need"}
+                  {proceeding ? "Confirming..." : smartProceedButtonLabel}
                 </button>
                 {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
+              </section>
+            ) : null}
+
+            {currentStatus === "report_sent" ? (
+              <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
+                <p className="text-sm font-medium text-white">
+                  Report sent to customer on {formatReportDate(reportSentAt)}.
+                </p>
+                {reportUrl ? (
+                  <a
+                    className="mt-2 inline-flex text-sm font-medium text-[#22c55e] underline underline-offset-2 hover:text-green-300"
+                    href={reportUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    View report
+                  </a>
+                ) : null}
+              </section>
+            ) : null}
+
+            {currentStatus === "decision_made" ? (
+              <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
+                <p className="text-sm font-medium text-white">
+                  Customer has approved — {formatChosenPath(chosenPath)}. Awaiting deposit and purchase agreement.
+                </p>
               </section>
             ) : null}
 
@@ -2183,24 +2361,26 @@ export default function AgentDocketDetailPage({
                   </label>
                 </div>
 
-                <div className="flex flex-wrap items-center justify-end gap-3">
-                  <button
-                    className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={isFormDisabled}
-                    onClick={() => void resetResearchForm()}
-                    type="button"
-                  >
-                    Reset Form
-                  </button>
-                  <button
-                    className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                    disabled={isFormDisabled || uploadingTarget !== null}
-                    onClick={() => void submitResearchReport()}
-                    type="button"
-                  >
-                    {submittingResearch ? "Sending..." : "Send to Customer"}
-                  </button>
-                </div>
+                {!isFormReadOnly ? (
+                  <div className="flex flex-wrap items-center justify-end gap-3">
+                    <button
+                      className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isFormDisabled}
+                      onClick={() => void resetResearchForm()}
+                      type="button"
+                    >
+                      Reset Form
+                    </button>
+                    <button
+                      className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-medium text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      disabled={isFormDisabled || uploadingTarget !== null}
+                      onClick={() => void submitResearchReport()}
+                      type="button"
+                    >
+                      {submittingResearch ? "Sending..." : "Send to Customer"}
+                    </button>
+                  </div>
+                ) : null}
                 {researchConfirmation && redirectCountdown !== null && redirectCountdown > 0 ? (
                   <p className="text-right text-sm text-emerald-400">
                     ✅ Research submitted successfully. Returning to your dockets in {redirectCountdown} second
