@@ -45,6 +45,7 @@ type EmailLogItem = {
 
 type LastCommunication = {
   direction: "agent" | "customer";
+  source_type: "customer_question" | "customer_answer" | "agent_question" | "agent_email" | "system_email";
   directionLabel: string;
   snippet: string | null;
   timestamp: string;
@@ -289,27 +290,36 @@ function getEmailTypeLabel(emailType: string | null | undefined) {
   return "Email sent";
 }
 
+function getEmailSourceType(emailType: string | null | undefined): LastCommunication["source_type"] {
+  if (emailType?.includes("_admin_notification") || emailType?.includes("_marcus_notification")) {
+    return "system_email";
+  }
+
+  return "agent_email";
+}
+
 function getLastCommunication(docket: Docket): LastCommunication | null {
   const customerFirstName = docket.customer_first_name?.trim() || "Customer";
   const candidates: LastCommunication[] = [];
 
   for (const question of docket.marcus_questions ?? []) {
-    if (question.answer_text?.trim() && question.answered_at) {
-      candidates.push({
-        direction: "customer",
-        directionLabel: `📥 ${customerFirstName}`,
-        snippet: truncateSnippet(question.answer_text),
-        timestamp: question.answered_at,
-      });
-      continue;
-    }
-
     if (question.question_text?.trim() && question.created_at) {
       candidates.push({
         direction: "agent",
+        source_type: "agent_question",
         directionLabel: "📤 You",
         snippet: truncateSnippet(question.question_text),
         timestamp: question.created_at,
+      });
+    }
+
+    if (question.answer_text?.trim() && question.answered_at) {
+      candidates.push({
+        direction: "customer",
+        source_type: "customer_answer",
+        directionLabel: `📥 ${customerFirstName}`,
+        snippet: truncateSnippet(question.answer_text),
+        timestamp: question.answered_at,
       });
     }
   }
@@ -318,6 +328,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
     if (question.question_text?.trim() && question.created_at) {
       candidates.push({
         direction: "customer",
+        source_type: "customer_question",
         directionLabel: `📥 ${customerFirstName}`,
         snippet: truncateSnippet(question.question_text),
         timestamp: question.created_at,
@@ -330,6 +341,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
       const label = getEmailTypeLabel(email.email_type);
       candidates.push({
         direction: "agent",
+        source_type: getEmailSourceType(email.email_type),
         directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
         snippet: truncateSnippet(email.subject || `${label} sent.`),
         timestamp: email.sent_at,
@@ -340,6 +352,10 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
   return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
 }
 
+function isOutboundCommunication(sourceType: LastCommunication["source_type"] | undefined) {
+  return sourceType === "agent_question" || sourceType === "agent_email" || sourceType === "system_email";
+}
+
 function getStatusDisplay(status: string | null | undefined, lastCommunication: LastCommunication | null): StatusDisplay {
   const normalizedStatus = status ?? "new";
   const defaultStatusLine = STATUS_LINE_CONTENT[normalizedStatus] ?? {
@@ -347,25 +363,62 @@ function getStatusDisplay(status: string | null | undefined, lastCommunication: 
     className: "font-normal text-[#888]",
   };
 
-  if (normalizedStatus === "answers_received" && lastCommunication?.direction === "agent") {
+  if (normalizedStatus === "report_sent" || normalizedStatus === "research_in_progress") {
+    if (lastCommunication?.source_type === "customer_question") {
+      return {
+        text: "🏎️ Customer asked a question — respond",
+        className: "font-semibold text-[#4ade80]",
+        stripeColor: ACTION_STRIPE_COLOR,
+      };
+    }
+
     return {
-      text: "⏳ Follow-up sent. Awaiting customer response.",
-      className: "font-normal text-[#aaa]",
-      stripeColor: WAITING_STRIPE_COLOR,
+      ...defaultStatusLine,
+      stripeColor: getStatusStripeColor(normalizedStatus),
     };
   }
 
-  if (
-    (normalizedStatus === "questions_sent" ||
-      normalizedStatus === "report_sent" ||
-      normalizedStatus === "research_in_progress") &&
-    lastCommunication?.direction === "customer"
-  ) {
-    return {
-      text: "🏎️ Customer asked a question — respond",
-      className: "font-semibold text-[#4ade80]",
-      stripeColor: ACTION_STRIPE_COLOR,
-    };
+  if (normalizedStatus === "questions_sent") {
+    if (lastCommunication?.source_type === "customer_question") {
+      return {
+        text: "🏎️ Customer asked a question — respond",
+        className: "font-semibold text-[#4ade80]",
+        stripeColor: ACTION_STRIPE_COLOR,
+      };
+    }
+
+    if (lastCommunication?.source_type === "customer_answer") {
+      return {
+        text: "🏎️ Customer answered — respond or pull research",
+        className: "font-semibold text-[#4ade80]",
+        stripeColor: ACTION_STRIPE_COLOR,
+      };
+    }
+  }
+
+  if (normalizedStatus === "answers_received") {
+    if (lastCommunication?.source_type === "customer_question") {
+      return {
+        text: "🏎️ Customer asked a question — respond",
+        className: "font-semibold text-[#4ade80]",
+        stripeColor: ACTION_STRIPE_COLOR,
+      };
+    }
+
+    if (lastCommunication?.source_type === "customer_answer") {
+      return {
+        ...defaultStatusLine,
+        stripeColor: getStatusStripeColor(normalizedStatus),
+      };
+    }
+
+    if (isOutboundCommunication(lastCommunication?.source_type)) {
+      return {
+        text: "⏳ Follow-up sent. Awaiting customer response.",
+        className: "font-normal text-[#aaa]",
+        stripeColor: WAITING_STRIPE_COLOR,
+      };
+    }
   }
 
   return {
