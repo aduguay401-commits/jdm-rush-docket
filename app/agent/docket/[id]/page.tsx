@@ -137,6 +137,7 @@ const RESEARCH_SUBMIT_ERROR_MESSAGE =
 const QUESTIONS_BASE_STATUS = "questions_sent";
 const QUESTIONS_SENT_SUCCESS_MESSAGE =
   "Questions sent to customer. You'll receive an email when the customer submits their answers. Once notified, log back in to review their responses and proceed with research.";
+const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
 const STATUS_ORDER = [
   "new",
   "questions_sent",
@@ -1101,6 +1102,7 @@ export default function AgentDocketDetailPage({
       return;
     }
 
+    window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
     setDocket((prev) => (prev?.status === "new" ? { ...prev, status: "questions_sent" } : prev));
     await loadSentQuestions(id);
     setQuestionsConfirmation(QUESTIONS_SENT_SUCCESS_MESSAGE);
@@ -1162,6 +1164,7 @@ export default function AgentDocketDetailPage({
       return;
     }
 
+    window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
     await loadSentQuestions(id);
     setDocket((prev) => (prev?.status === "new" ? { ...prev, status: "questions_sent" } : prev));
     setQueuedQuestions([""]);
@@ -1644,6 +1647,7 @@ export default function AgentDocketDetailPage({
     setReportSentAt(await loadLatestReportSentAt(id));
     setResearchLocked(true);
     setIsEditingSentReport(false);
+    window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
     setRedirectCountdown(3);
     setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
     setSubmittingResearch(false);

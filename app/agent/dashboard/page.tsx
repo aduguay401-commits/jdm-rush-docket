@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
@@ -140,6 +140,7 @@ const CURRENT_STAGE_STYLES: Record<string, string> = {
 };
 
 const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
+const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
 
 const STATUS_STRIPE_COLORS: Record<string, string> = {
   new: "#4ade80",
@@ -446,54 +447,91 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+
+  const loadDashboard = useCallback(async () => {
+    const { data: userResponse } = await supabase.auth.getUser();
+    const user = userResponse.user;
+
+    if (!user) {
+      router.replace("/agent/login");
+      return;
+    }
+
+    const profile = await getAgentProfile(user.id, supabase);
+    const role = profile.role;
+
+    if (role !== "agent" && role !== "admin") {
+      await supabase.auth.signOut();
+      router.replace("/agent/login");
+      return;
+    }
+
+    setRole(role);
+    setAgentDisplayName(deriveDisplayNameFromEmail(user.email) ?? "there");
+
+    if (role === "admin") {
+      router.replace("/admin/dashboard");
+      return;
+    }
+
+    const { data, error: docketError } = await supabase
+      .from("dockets")
+      .select(
+        "id, created_at, status, customer_first_name, customer_last_name, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
+      )
+      .eq("is_archived", false)
+      .order("created_at", { ascending: false });
+
+    if (docketError) {
+      setError(docketError.message);
+      setLoading(false);
+      return;
+    }
+
+    setError(null);
+    setDockets([...((data as Docket[]) ?? [])].sort(compareDocketsByUrgency));
+    setLastRefreshedAt(new Date().toISOString());
+    setLoading(false);
+  }, [router, supabase]);
 
   useEffect(() => {
-    async function loadDashboard() {
-      const { data: userResponse } = await supabase.auth.getUser();
-      const user = userResponse.user;
-
-      if (!user) {
-        router.replace("/agent/login");
-        return;
-      }
-
-      const profile = await getAgentProfile(user.id, supabase);
-      const role = profile.role;
-
-      if (role !== "agent" && role !== "admin") {
-        await supabase.auth.signOut();
-        router.replace("/agent/login");
-        return;
-      }
-
-      setRole(role);
-      setAgentDisplayName(deriveDisplayNameFromEmail(user.email) ?? "there");
-
-      if (role === "admin") {
-        router.replace("/admin/dashboard");
-        return;
-      }
-
-      const { data, error: docketError } = await supabase
-        .from("dockets")
-        .select(
-          "id, created_at, status, customer_first_name, customer_last_name, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
-        )
-        .eq("is_archived", false)
-        .order("created_at", { ascending: false });
-
-      if (docketError) {
-        setError(docketError.message);
-        setLoading(false);
-        return;
-      }
-
-      setDockets([...((data as Docket[]) ?? [])].sort(compareDocketsByUrgency));
-      setLoading(false);
+    if (window.sessionStorage.getItem(DASHBOARD_REFRESH_FLAG)) {
+      window.sessionStorage.removeItem(DASHBOARD_REFRESH_FLAG);
     }
 
     void loadDashboard();
-  }, [router, supabase]);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        if (window.sessionStorage.getItem(DASHBOARD_REFRESH_FLAG)) {
+          window.sessionStorage.removeItem(DASHBOARD_REFRESH_FLAG);
+        }
+
+        void loadDashboard();
+      }
+    }
+
+    function handleDashboardRefresh() {
+      if (window.sessionStorage.getItem(DASHBOARD_REFRESH_FLAG)) {
+        window.sessionStorage.removeItem(DASHBOARD_REFRESH_FLAG);
+      }
+
+      void loadDashboard();
+    }
+
+    window.addEventListener("focus", handleDashboardRefresh);
+    window.addEventListener("pageshow", handleDashboardRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleDashboardRefresh);
+      window.removeEventListener("pageshow", handleDashboardRefresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadDashboard]);
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -549,6 +587,9 @@ export default function AgentDashboardPage() {
                 Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention — let&apos;s
                 get these deals moving. 🇯🇵
               </h2>
+              {lastRefreshedAt ? (
+                <p className="mt-1 text-xs text-[#666]">Updated {formatRelativeTime(lastRefreshedAt)}</p>
+              ) : null}
               <p className="mt-2 text-base text-[#888]">
                 Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
                 pull your research, and let&apos;s get these deals moving. 🇯🇵
