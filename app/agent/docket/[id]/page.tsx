@@ -1067,7 +1067,7 @@ export default function AgentDocketDetailPage({
       return;
     }
 
-    setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
+    setDocket((prev) => (prev?.status === "new" ? { ...prev, status: "questions_sent" } : prev));
     await loadSentQuestions(id);
     setQuestionsConfirmation(QUESTIONS_SENT_SUCCESS_MESSAGE);
     setAddQuestionSuccess(null);
@@ -1129,7 +1129,7 @@ export default function AgentDocketDetailPage({
     }
 
     await loadSentQuestions(id);
-    setDocket((prev) => (prev ? { ...prev, status: "questions_sent" } : prev));
+    setDocket((prev) => (prev?.status === "new" ? { ...prev, status: "questions_sent" } : prev));
     setQueuedQuestions([""]);
     setAddingQuestion(false);
     setAddQuestionSuccess(QUESTIONS_SENT_SUCCESS_MESSAGE);

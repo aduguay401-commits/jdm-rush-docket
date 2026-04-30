@@ -124,24 +124,26 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: insertError.message }, { status: 500 });
     }
 
-    const { error: updateError } = await supabase
-      .from("dockets")
-      .update({ status: "questions_sent" })
-      .eq("id", docketId);
+    if (oldStatus === "new") {
+      const { error: updateError } = await supabase
+        .from("dockets")
+        .update({ status: "questions_sent" })
+        .eq("id", docketId);
 
-    if (updateError) {
-      return Response.json({ success: false, error: updateError.message }, { status: 500 });
-    }
+      if (updateError) {
+        return Response.json({ success: false, error: updateError.message }, { status: 500 });
+      }
 
-    const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
-      docket_id: docketId,
-      old_status: oldStatus,
-      new_status: "questions_sent",
-      changed_by: "agent",
-    });
+      const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
+        docket_id: docketId,
+        old_status: oldStatus,
+        new_status: "questions_sent",
+        changed_by: "agent",
+      });
 
-    if (statusHistoryError) {
-      return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
+      if (statusHistoryError) {
+        return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
+      }
     }
 
     const { data: docket, error: docketError } = await supabase

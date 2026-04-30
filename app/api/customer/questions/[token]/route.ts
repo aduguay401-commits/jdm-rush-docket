@@ -149,24 +149,26 @@ export async function POST(
       }
     }
 
-    const { error: statusError } = await supabase
-      .from("dockets")
-      .update({ status: "answers_received" })
-      .eq("id", docket.id);
+    if (docket.status === "questions_sent") {
+      const { error: statusError } = await supabase
+        .from("dockets")
+        .update({ status: "answers_received" })
+        .eq("id", docket.id);
 
-    if (statusError) {
-      return Response.json({ success: false, error: statusError.message }, { status: 500 });
-    }
+      if (statusError) {
+        return Response.json({ success: false, error: statusError.message }, { status: 500 });
+      }
 
-    const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
-      docket_id: docket.id,
-      old_status: docket.status,
-      new_status: "answers_received",
-      changed_by: "customer",
-    });
+      const { error: statusHistoryError } = await serviceRoleSupabase.from("docket_status_history").insert({
+        docket_id: docket.id,
+        old_status: docket.status,
+        new_status: "answers_received",
+        changed_by: "customer",
+      });
 
-    if (statusHistoryError) {
-      return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
+      if (statusHistoryError) {
+        return Response.json({ success: false, error: statusHistoryError.message }, { status: 500 });
+      }
     }
     const fromEmail = process.env.FROM_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
