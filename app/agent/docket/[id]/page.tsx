@@ -48,6 +48,7 @@ type PrivateDealerOptionRecord = {
   transmission: string | null;
   trim: string | null;
   dealer_price_jpy: number | string | null;
+  dealer_price_cad: number | string | null;
   photos: unknown;
   sales_sheet_url: string | null;
   marcus_notes: string | null;
@@ -114,6 +115,7 @@ type DealerOptionForm = {
   transmission: TransmissionType;
   trim: string;
   dealerPriceJpy: string;
+  dealerPriceCad: string;
   photos: string[];
   salesSheetUrl: string;
   notes: string;
@@ -179,6 +181,7 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
     transmission: "Manual",
     trim: "",
     dealerPriceJpy: "",
+    dealerPriceCad: "",
     photos: [],
     salesSheetUrl: "",
     notes: "",
@@ -195,6 +198,7 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
     transmission: "Manual",
     trim: "",
     dealerPriceJpy: "",
+    dealerPriceCad: "",
     photos: [],
     salesSheetUrl: "",
     notes: "",
@@ -211,6 +215,7 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
     transmission: "Manual",
     trim: "",
     dealerPriceJpy: "",
+    dealerPriceCad: "",
     photos: [],
     salesSheetUrl: "",
     notes: "",
@@ -277,9 +282,20 @@ function normalizeDealerOptionDraft(value: unknown, fallback: DealerOptionForm):
     transmission: option.transmission === "Auto" || option.transmission === "Manual" ? option.transmission : "Manual",
     trim: toDraftString(option.trim),
     dealerPriceJpy: toDraftString(option.dealerPriceJpy),
+    dealerPriceCad: toDraftString(option.dealerPriceCad),
     photos: normalizeDraftStringArray(option.photos),
     salesSheetUrl: toDraftString(option.salesSheetUrl),
     notes: toDraftString(option.notes),
+  };
+}
+
+function splitSubmittedResearchNotes(value: unknown) {
+  const notes = toDraftString(value);
+  const [salesHistoryNotes = "", ...recommendationParts] = notes.split(/\n{2,}/);
+
+  return {
+    salesHistoryNotes,
+    overallNotes: recommendationParts.join("\n\n"),
   };
 }
 
@@ -320,6 +336,7 @@ function normalizeSubmittedResearchDraft(
   auctionResearch: AuctionResearchRecord | null,
   dealerOptionRows: PrivateDealerOptionRecord[]
 ): ResearchDraft {
+  const submittedNotes = splitSubmittedResearchNotes(auctionResearch?.sales_history_notes);
   const dealerOptionsByNumber = new Map(
     dealerOptionRows
       .filter((option) => typeof option.option_number === "number")
@@ -330,8 +347,8 @@ function normalizeSubmittedResearchDraft(
     hammerPriceLowJpy: toDraftString(auctionResearch?.hammer_price_low_jpy),
     hammerPriceHighJpy: toDraftString(auctionResearch?.hammer_price_high_jpy),
     recommendedMaxBidJpy: toDraftString(auctionResearch?.recommended_max_bid_jpy),
-    salesHistoryNotes: toDraftString(auctionResearch?.sales_history_notes),
-    overallNotes: "",
+    salesHistoryNotes: submittedNotes.salesHistoryNotes,
+    overallNotes: submittedNotes.overallNotes,
     auctionListings:
       Array.isArray(auctionResearch?.auction_listings) && auctionResearch.auction_listings.length > 0
         ? auctionResearch.auction_listings.map(normalizeAuctionListingDraft)
@@ -355,6 +372,7 @@ function normalizeSubmittedResearchDraft(
         transmission: savedOption.transmission === "Auto" || savedOption.transmission === "Manual" ? savedOption.transmission : "Manual",
         trim: toDraftString(savedOption.trim),
         dealerPriceJpy: toDraftString(savedOption.dealer_price_jpy),
+        dealerPriceCad: toDraftString(savedOption.dealer_price_cad),
         photos: normalizeDraftStringArray(savedOption.photos),
         salesSheetUrl: toDraftString(savedOption.sales_sheet_url),
         notes: toDraftString(savedOption.marcus_notes),
@@ -414,6 +432,18 @@ function formatChosenPath(path: string | null | undefined) {
   }
 
   return path ? path.replace(/_/g, " ") : "Path not specified";
+}
+
+function formatJpy(value: string | number | null | undefined) {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) && amount > 0 ? `¥${amount.toLocaleString()}` : "N/A";
+}
+
+function formatCad(value: string | number | null | undefined) {
+  const amount = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(amount) && amount > 0
+    ? amount.toLocaleString("en-CA", { style: "currency", currency: "CAD" })
+    : "N/A";
 }
 
 function isStatusAtOrAfter(status: string | null | undefined, baseStatus: string) {
@@ -504,25 +534,21 @@ export default function AgentDocketDetailPage({
   const [researchConfirmation, setResearchConfirmation] = useState<string | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
+  const [isEditingSentReport, setIsEditingSentReport] = useState(false);
   const [draftSavedVisible, setDraftSavedVisible] = useState(false);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
 
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
-  const isAnswersReceived = currentStatus === "answers_received";
+  const isSubmittedStatus = isStatusAtOrAfter(currentStatus, "report_sent");
   const canProceedWithoutQuestions =
     currentStatus === "new" || currentStatus === "questions_sent" || currentStatus === "answers_received";
   const shouldShowSmartProceedButton = canProceedWithoutQuestions && !researchLocked;
-  const isFormReadOnly = isStatusAtOrAfter(currentStatus, "report_sent") || researchLocked;
+  const shouldShowResearchSummary = isSubmittedStatus && !isEditingSentReport;
+  const isFormReadOnly = shouldShowResearchSummary || (researchLocked && !isEditingSentReport);
   const isQuestionsLocked = isStatusAtOrAfter(currentStatus, QUESTIONS_BASE_STATUS);
-  const shouldShowResearchForm =
-    isResearchInProgress ||
-    isAnswersReceived ||
-    currentStatus === "report_sent" ||
-    currentStatus === "decision_made" ||
-    currentStatus === "cleared" ||
-    researchLocked;
+  const shouldShowResearchForm = isResearchInProgress || (isSubmittedStatus && isEditingSentReport);
   const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
   const isFormDisabled = submittingResearch || isFormReadOnly;
   const smartProceedButtonLabel =
@@ -539,6 +565,17 @@ export default function AgentDocketDetailPage({
     ? `https://docket.jdmrushimports.ca/report/${docket.report_url_token}`
     : null;
   const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
+  const hasAuctionListingSummary = auctionListings.some(
+    (listing) =>
+      listing.lotTitle.trim().length > 0 || listing.specs.trim().length > 0 || listing.photos.length > 0
+  );
+  const hasAuctionResearchSummary = [
+    hammerPriceLowJpy,
+    hammerPriceHighJpy,
+    recommendedMaxBidJpy,
+    salesHistoryNotes,
+  ].some((value) => value.trim().length > 0) || hasAuctionListingSummary;
+  const submittedDealerOptions = dealerOptions.filter((option) => hasAnyDealerData(option));
   const researchDraft = useMemo<ResearchDraft>(
     () => ({
       hammerPriceLowJpy,
@@ -777,7 +814,7 @@ export default function AgentDocketDetailPage({
           supabase
             .from("private_dealer_options")
             .select(
-              "option_number, year, make, model, grade, mileage, colour, transmission, trim, dealer_price_jpy, photos, sales_sheet_url, marcus_notes"
+              "option_number, year, make, model, grade, mileage, colour, transmission, trim, dealer_price_jpy, dealer_price_cad, photos, sales_sheet_url, marcus_notes"
             )
             .eq("docket_id", id)
             .order("option_number", { ascending: true })
@@ -1354,6 +1391,7 @@ export default function AgentDocketDetailPage({
       option.colour,
       option.trim,
       option.dealerPriceJpy,
+      option.dealerPriceCad,
       option.notes,
       option.salesSheetUrl,
     ].some((value) => value.trim().length > 0) || option.photos.length > 0;
@@ -1569,6 +1607,7 @@ export default function AgentDocketDetailPage({
     setDocket((prev) => (prev ? { ...prev, status: "report_sent" } : prev));
     setReportSentAt(new Date().toISOString());
     setResearchLocked(true);
+    setIsEditingSentReport(false);
     setRedirectCountdown(3);
     setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
     setSubmittingResearch(false);
@@ -1932,7 +1971,7 @@ export default function AgentDocketDetailPage({
               </section>
             ) : null}
 
-            {currentStatus === "report_sent" ? (
+            {isSubmittedStatus ? (
               <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
                 <p className="text-sm font-medium text-white">
                   Report sent to customer on {formatReportDate(reportSentAt)}.
@@ -1955,6 +1994,142 @@ export default function AgentDocketDetailPage({
                 <p className="text-sm font-medium text-white">
                   Customer has approved — {formatChosenPath(chosenPath)}. Awaiting deposit and purchase agreement.
                 </p>
+              </section>
+            ) : null}
+
+            {shouldShowResearchSummary ? (
+              <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
+                <div>
+                  <h2 className="text-xl font-semibold">Research Summary</h2>
+                  <p className="mt-1 text-sm text-white/60">Submitted report data for review.</p>
+                </div>
+
+                {hasAuctionResearchSummary ? (
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <h3 className="text-lg font-medium">Auction Research</h3>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                        <p className="text-xs uppercase tracking-wide text-white/45">Hammer Price Range</p>
+                        <p className="mt-1 text-sm font-semibold text-white">
+                          {formatJpy(hammerPriceLowJpy)} - {formatJpy(hammerPriceHighJpy)}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                        <p className="text-xs uppercase tracking-wide text-white/45">Recommended Max Bid</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{formatJpy(recommendedMaxBidJpy)}</p>
+                      </div>
+                      <div className="rounded-md border border-white/10 bg-black/25 p-3">
+                        <p className="text-xs uppercase tracking-wide text-white/45">Auction Lots</p>
+                        <p className="mt-1 text-sm font-semibold text-white">{auctionListings.length}</p>
+                      </div>
+                    </div>
+                    {salesHistoryNotes.trim() ? (
+                      <div className="mt-4">
+                        <p className="text-xs uppercase tracking-wide text-white/45">Sales History Notes</p>
+                        <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/85">{salesHistoryNotes}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {submittedDealerOptions.length > 0 ? (
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-medium">Private Dealer Options</h3>
+                    {submittedDealerOptions.map((option) => {
+                      const vehicleDetails = [
+                        option.year,
+                        option.make,
+                        option.model,
+                        option.grade,
+                        option.mileage,
+                        option.colour,
+                        option.transmission,
+                        option.trim,
+                      ].filter((value) => value.trim().length > 0);
+
+                      return (
+                        <article
+                          className="rounded-lg border border-white/10 bg-black/20 p-4"
+                          key={`summary-dealer-option-${option.optionNumber}`}
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <h4 className="text-base font-semibold text-white">Option {option.optionNumber}</h4>
+                              <p className="mt-1 text-sm text-white/70">
+                                {vehicleDetails.length > 0 ? vehicleDetails.join(" / ") : "Vehicle details not provided"}
+                              </p>
+                            </div>
+                            <div className="text-right text-sm">
+                              <p className="font-semibold text-white">{formatJpy(option.dealerPriceJpy)}</p>
+                              <p className="text-white/60">{formatCad(option.dealerPriceCad)}</p>
+                            </div>
+                          </div>
+
+                          {option.photos.length > 0 ? (
+                            <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
+                              {option.photos.map((photoPath, photoIndex) => {
+                                const previewUrl = photoPreviewUrls[photoPath];
+                                const fileName = extractOriginalFileName(photoPath);
+
+                                return (
+                                  <div
+                                    className="aspect-square overflow-hidden rounded-md border border-white/15 bg-black/35"
+                                    key={`${option.optionNumber}-${photoPath}-${photoIndex}`}
+                                    title={fileName}
+                                  >
+                                    {previewUrl ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img alt={fileName} className="h-full w-full object-cover" src={previewUrl} />
+                                    ) : (
+                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-white/45">
+                                        No preview
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          ) : null}
+
+                          {option.notes.trim() ? (
+                            <div className="mt-4">
+                              <p className="text-xs uppercase tracking-wide text-white/45">Notes</p>
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-white/85">{option.notes}</p>
+                            </div>
+                          ) : null}
+                        </article>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
+                {overallNotes.trim() ? (
+                  <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+                    <h3 className="text-lg font-medium">Overall Notes / Recommendation</h3>
+                    <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-white/85">{overallNotes}</p>
+                  </div>
+                ) : null}
+
+                {!hasAuctionResearchSummary && submittedDealerOptions.length === 0 && !overallNotes.trim() ? (
+                  <p className="rounded-lg border border-white/10 bg-black/20 p-4 text-sm text-white/65">
+                    No submitted research data was found for this docket.
+                  </p>
+                ) : null}
+
+                <div className="flex justify-end">
+                  <button
+                    className="rounded-lg border border-white/25 bg-transparent px-5 py-2.5 text-sm font-medium text-white/75 transition hover:border-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                    onClick={() => {
+                      setIsEditingSentReport(true);
+                      setResearchLocked(false);
+                      setResearchConfirmation(null);
+                      setRedirectCountdown(null);
+                    }}
+                    type="button"
+                  >
+                    Edit &amp; Resend Report
+                  </button>
+                </div>
               </section>
             ) : null}
 
