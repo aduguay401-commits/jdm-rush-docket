@@ -383,10 +383,10 @@ export default function AgentDashboardPage() {
 
                 return (
                   <article
-                    className="rounded-xl border border-white/12 bg-[#171717] p-5 shadow-lg"
+                    className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg"
                     key={docket.id}
                   >
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex flex-col gap-4 p-5 sm:flex-row sm:items-start sm:justify-between">
                       <div className="space-y-2">
                         <h2 className="text-xl font-semibold text-white">{customerName}</h2>
                         <p className="text-sm text-white/80">Vehicle: {vehicle || "N/A"}</p>
@@ -415,7 +415,10 @@ export default function AgentDashboardPage() {
                         </Link>
                       </div>
                     </div>
-                    <DocketProgressBar docket={docket} />
+                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 py-5">
+                      <p className="mb-2 text-xs uppercase tracking-wider text-white/40">PIPELINE STATUS</p>
+                      <DocketProgressBar docket={docket} />
+                    </div>
                   </article>
                 );
               })}
