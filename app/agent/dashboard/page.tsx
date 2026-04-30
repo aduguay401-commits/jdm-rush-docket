@@ -61,10 +61,9 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
 
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
-  { label: "Questions", status: "questions_sent" },
-  { label: "Answers", status: "answers_received" },
+  { label: "Communication", status: "communication" },
   { label: "Research", status: "research_in_progress" },
-  { label: "Report", status: "report_sent" },
+  { label: "Report Sent", status: "report_sent" },
   { label: "Decision", status: "decision_made" },
   { label: "Cleared", status: "cleared" },
 ] as const;
@@ -72,11 +71,11 @@ const PROGRESS_STAGES = [
 const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
   new: 0,
   questions_sent: 1,
-  answers_received: 2,
-  research_in_progress: 3,
-  report_sent: 4,
-  decision_made: 5,
-  cleared: 6,
+  answers_received: 1,
+  research_in_progress: 2,
+  report_sent: 3,
+  decision_made: 4,
+  cleared: 5,
 };
 
 const CURRENT_STAGE_STYLES: Record<string, string> = {
@@ -193,7 +192,7 @@ function DocketProgressBar({ docket }: { docket: Docket }) {
 
   return (
     <div aria-label={`Pipeline progress: ${formatStatus(status)}`} className="w-full py-3">
-      <div className="grid grid-cols-7 items-start">
+      <div className="grid grid-cols-6 items-start">
         {PROGRESS_STAGES.map((stage, index) => {
           const isCompleted = index < currentIndex;
           const isCurrent = index === currentIndex;
