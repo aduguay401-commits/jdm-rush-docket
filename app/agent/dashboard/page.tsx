@@ -323,7 +323,11 @@ function getCustomerFacingEmailCommunication(
 
 function getLastCommunication(docket: Docket): LastCommunication | null {
   const customerFirstName = docket.customer_first_name?.trim() || "Customer";
-  const candidates: LastCommunication[] = [];
+  type LastCommunicationCandidate = LastCommunication & {
+    email_type?: string | null;
+  };
+
+  const candidates: LastCommunicationCandidate[] = [];
 
   for (const question of docket.marcus_questions ?? []) {
     if (question.question_text?.trim() && question.created_at) {
@@ -370,6 +374,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
       candidates.push({
         direction: "agent",
         source_type: "agent_email",
+        email_type: email.email_type,
         directionLabel: emailCommunication.directionLabel,
         snippet: emailCommunication.snippet,
         timestamp: email.sent_at,
@@ -377,7 +382,34 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
     }
   }
 
-  return candidates.reduce<LastCommunication | null>((latest, candidate) => {
+  const dedupedCandidates = candidates.filter((candidate) => {
+    if (candidate.source_type !== "agent_email") {
+      return true;
+    }
+
+    const isPairedAgentQuestionEmail = candidate.email_type === "email_2_questions_sent";
+    const isPairedCustomerQuestionEmail =
+      candidate.email_type?.startsWith("customer_followup_question_sent") ||
+      candidate.email_type?.startsWith("report_question_sent");
+
+    if (!isPairedAgentQuestionEmail && !isPairedCustomerQuestionEmail) {
+      return true;
+    }
+
+    const pairedSourceType = isPairedAgentQuestionEmail ? "agent_question" : "customer_question";
+    const emailTime = new Date(candidate.timestamp).getTime();
+
+    return !candidates.some((otherCandidate) => {
+      if (otherCandidate.source_type !== pairedSourceType) {
+        return false;
+      }
+
+      const otherTime = new Date(otherCandidate.timestamp).getTime();
+      return Math.abs(emailTime - otherTime) < 60_000;
+    });
+  });
+
+  return dedupedCandidates.reduce<LastCommunication | null>((latest, candidate) => {
     if (!latest) {
       return candidate;
     }
