@@ -46,6 +46,12 @@ type CustomerCommunicationTimelineEntry =
       timestamp: null;
     };
 
+type LastCommunication = {
+  directionLabel: string;
+  snippet: string | null;
+  timestamp: string;
+};
+
 const STATUS_ORDER = [
   "new",
   "questions_sent",
@@ -104,6 +110,93 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   unresponsive: "bg-[#7a4f00] text-[#ffb347] ring-1 ring-[#7a4f00]",
   archived: "bg-zinc-700/60 text-zinc-200 ring-1 ring-zinc-600",
 };
+
+const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> = {
+  new: {
+    text: "🏎️ New lead — send first questions",
+    className: "font-semibold text-[#4ade80]",
+  },
+  questions_sent: {
+    text: "⏳ Questions sent. Monitoring for answers.",
+    className: "font-normal text-[#aaa]",
+  },
+  answers_received: {
+    text: "🏎️ Customer answered — respond or pull research",
+    className: "font-semibold text-[#4ade80]",
+  },
+  research_in_progress: {
+    text: "🏎️ Research in progress",
+    className: "font-semibold text-[#fb923c]",
+  },
+  report_sent: {
+    text: "⏳ Report sent. Awaiting customer decision.",
+    className: "font-normal text-[#aaa]",
+  },
+  decision_made: {
+    text: "🏎️ Customer approved — handoff to Adam",
+    className: "font-semibold text-[#4ade80]",
+  },
+  cleared: {
+    text: "✅ Deal cleared",
+    className: "font-medium text-[#4ade80]",
+  },
+  unresponsive: {
+    text: "⚠️ No response after follow-ups",
+    className: "font-medium text-[#fbbf24]",
+  },
+  lost: {
+    text: "✕ Lost",
+    className: "font-normal text-[#666]",
+  },
+  paused: {
+    text: "⏸ Paused",
+    className: "font-normal text-[#666]",
+  },
+};
+
+const STATUS_STRIPE_COLORS: Record<string, string> = {
+  new: "#4ade80",
+  questions_sent: "rgba(168,162,158,0.5)",
+  answers_received: "#4ade80",
+  research_in_progress: "#fb923c",
+  report_sent: "rgba(168,162,158,0.5)",
+  decision_made: "#4ade80",
+  cleared: "#4ade80",
+  unresponsive: "#fbbf24",
+  lost: "#525252",
+  paused: "#525252",
+};
+
+const PROGRESS_STAGES = [
+  { label: "New", status: "new" },
+  { label: "Communication", status: "communication" },
+  { label: "Research", status: "research_in_progress" },
+  { label: "Report Sent", status: "report_sent" },
+  { label: "Decision", status: "decision_made" },
+  { label: "Cleared", status: "cleared" },
+] as const;
+
+const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
+  new: 0,
+  questions_sent: 1,
+  answers_received: 1,
+  research_in_progress: 2,
+  report_sent: 3,
+  decision_made: 4,
+  cleared: 5,
+};
+
+const CURRENT_STAGE_STYLES: Record<string, string> = {
+  new: "border-blue-300 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.6)]",
+  questions_sent: "border-amber-200 bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.55)]",
+  answers_received: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
+  research_in_progress: "border-[#ffb197] bg-[#E55125] shadow-[0_0_12px_rgba(229,81,37,0.6)]",
+  report_sent: "border-blue-200 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.55)]",
+  decision_made: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
+  cleared: "border-emerald-200 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.65)]",
+};
+
+const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -185,6 +278,143 @@ function getEmailTypeLabel(emailType: string | null | undefined) {
   }
 
   return EMAIL_TYPE_LABELS[emailType] ?? emailType;
+}
+
+function getLatestCommunicationEmailLabel(emailType: string | null | undefined) {
+  if (!emailType) {
+    return "Email sent";
+  }
+
+  if (emailType.startsWith("email_1_")) {
+    return "Welcome email";
+  }
+
+  if (emailType.startsWith("email_2_")) {
+    return "Questions sent";
+  }
+
+  if (emailType.startsWith("email_4_")) {
+    return "Report sent";
+  }
+
+  if (emailType.startsWith("email_5_")) {
+    return "Approval next steps";
+  }
+
+  if (emailType === "manual_reminder") {
+    return "Manual reminder";
+  }
+
+  if (emailType.startsWith("sequence_")) {
+    return "Follow-up";
+  }
+
+  return "Email sent";
+}
+
+function getStatusStripeColor(status: string | null | undefined) {
+  return STATUS_STRIPE_COLORS[status ?? "new"] ?? "rgba(168,162,158,0.5)";
+}
+
+function withAlpha(color: string, alpha: number) {
+  if (color.startsWith("#") && color.length === 7) {
+    const red = Number.parseInt(color.slice(1, 3), 16);
+    const green = Number.parseInt(color.slice(3, 5), 16);
+    const blue = Number.parseInt(color.slice(5, 7), 16);
+    return `rgba(${red},${green},${blue},${alpha})`;
+  }
+
+  const rgbaMatch = color.match(/^rgba\((\d+),\s*(\d+),\s*(\d+),\s*[\d.]+\)$/);
+  if (rgbaMatch) {
+    return `rgba(${rgbaMatch[1]},${rgbaMatch[2]},${rgbaMatch[3]},${alpha})`;
+  }
+
+  return color;
+}
+
+function formatRelativeTime(timestamp: string) {
+  const time = new Date(timestamp).getTime();
+  if (!Number.isFinite(time)) {
+    return "just now";
+  }
+
+  const diffMs = Date.now() - time;
+  if (diffMs < 60_000) {
+    return "just now";
+  }
+
+  const minutes = Math.floor(diffMs / 60_000);
+  if (minutes < 60) {
+    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+  }
+
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+  }
+
+  if (hours < 48) {
+    return "yesterday";
+  }
+
+  const days = Math.floor(hours / 24);
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function truncateSnippet(value: string | null | undefined, maxLength = 100) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
+}
+
+function getLastCommunication(docket: NormalizedAdminDocket): LastCommunication | null {
+  const customerFirstName = docket.customer_first_name?.trim() || "Customer";
+  const candidates: LastCommunication[] = [];
+
+  for (const question of docket.marcus_questions) {
+    if (question.answer_text?.trim() && question.answered_at) {
+      candidates.push({
+        directionLabel: `📥 ${customerFirstName}`,
+        snippet: truncateSnippet(question.answer_text),
+        timestamp: question.answered_at,
+      });
+      continue;
+    }
+
+    if (question.question_text?.trim() && question.created_at) {
+      candidates.push({
+        directionLabel: "📤 Marcus",
+        snippet: truncateSnippet(question.question_text),
+        timestamp: question.created_at,
+      });
+    }
+  }
+
+  for (const question of docket.customer_questions) {
+    if (question.question_text?.trim() && question.created_at) {
+      candidates.push({
+        directionLabel: `📥 ${customerFirstName}`,
+        snippet: truncateSnippet(question.question_text),
+        timestamp: question.created_at,
+      });
+    }
+  }
+
+  for (const email of docket.email_log) {
+    if (email.sent_at) {
+      const label = getLatestCommunicationEmailLabel(email.email_type);
+      candidates.push({
+        directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
+        snippet: truncateSnippet(email.subject || `${label} sent.`),
+        timestamp: email.sent_at,
+      });
+    }
+  }
+
+  return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
 }
 
 function getEmailStage(emailType: string | null | undefined): EmailStage {
@@ -297,6 +527,98 @@ function getAgentStatus(docket: NormalizedAdminDocket) {
 
 function getReminderCount(docket: NormalizedAdminDocket) {
   return docket.email_log.filter((entry) => entry.email_type === "manual_reminder").length;
+}
+
+function sortStatusHistory(docket: NormalizedAdminDocket) {
+  return [...docket.docket_status_history].sort((a, b) => {
+    const aTime = new Date(a.created_at ?? 0).getTime();
+    const bTime = new Date(b.created_at ?? 0).getTime();
+    return bTime - aTime;
+  });
+}
+
+function findPreviousPipelineStage(docket: NormalizedAdminDocket, status: string) {
+  for (const item of sortStatusHistory(docket)) {
+    if (item.new_status === status && item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
+    }
+
+    if (item.new_status && item.new_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.new_status];
+    }
+
+    if (item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
+    }
+  }
+
+  return 0;
+}
+
+function getProgressState(docket: NormalizedAdminDocket) {
+  const status = docket.status ?? "new";
+
+  if (status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+    return {
+      currentIndex: PROGRESS_STAGE_INDEX_BY_STATUS[status],
+      isDimmedCurrent: false,
+      status,
+    };
+  }
+
+  return {
+    currentIndex: DIMMED_STATUS_SET.has(status) ? findPreviousPipelineStage(docket, status) : 0,
+    isDimmedCurrent: DIMMED_STATUS_SET.has(status),
+    status,
+  };
+}
+
+function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
+  const { currentIndex, isDimmedCurrent, status } = getProgressState(docket);
+
+  return (
+    <div aria-label={`Pipeline progress: ${formatStatus(status)}`} className="w-full py-3">
+      <div className="grid grid-cols-6 items-start">
+        {PROGRESS_STAGES.map((stage, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isFuture = index > currentIndex;
+          const dotClass = isCurrent
+            ? isDimmedCurrent
+              ? "border-zinc-500 bg-zinc-600"
+              : (CURRENT_STAGE_STYLES[status] ?? "border-white/50 bg-white/60")
+            : isCompleted
+              ? "border-white bg-white"
+              : "border-zinc-700 bg-zinc-800";
+          const leftLineClass = isCompleted || isCurrent ? "bg-white/65" : "bg-zinc-800";
+          const rightLineClass = isCompleted ? "bg-white/65" : "bg-zinc-800";
+
+          return (
+            <div className="min-w-0" key={stage.status}>
+              <div className="flex items-center">
+                <div className={`h-0.5 flex-1 ${index === 0 ? "bg-transparent" : leftLineClass}`} />
+                <span
+                  aria-current={isCurrent ? "step" : undefined}
+                  className={`h-3 w-3 shrink-0 rounded-full border ${dotClass}`}
+                  title={stage.label}
+                />
+                <div
+                  className={`h-0.5 flex-1 ${index === PROGRESS_STAGES.length - 1 ? "bg-transparent" : rightLineClass}`}
+                />
+              </div>
+              <p
+                className={`mt-2 truncate text-center text-[10px] font-medium sm:text-xs ${
+                  isCurrent ? "text-white" : isFuture ? "text-[#666]" : "text-[#888]"
+                }`}
+              >
+                {stage.label}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 export default function AdminDashboardClient({ initialDockets }: Props) {
@@ -850,104 +1172,59 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
         {error ? <p className="mb-4 text-sm text-red-400">{error}</p> : null}
 
-        <section className="overflow-x-auto rounded-xl border border-white/10 bg-[#131313]">
-          <table className="min-w-full text-left text-sm">
-            <thead className="bg-white/5 text-xs uppercase tracking-wider text-white/60">
-              <tr>
-                <th className="px-3 py-3">Flag</th>
-                <th className="px-3 py-3">Customer</th>
-                <th className="px-3 py-3">Vehicle</th>
-                <th className="min-w-[150px] px-3 py-3">Status</th>
-                <th className="px-3 py-3">Days in status</th>
-                <th className="px-3 py-3">Reminders sent</th>
-                <th className="px-3 py-3">Est. deal value</th>
-                <th className="px-3 py-3">AGENT STATUS</th>
-                <th className="px-3 py-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredDockets.map((docket) => {
-                const status = docket.status ?? "new";
-                const badgeClass = STATUS_BADGE_STYLES[status] ?? "bg-zinc-700 text-zinc-100";
-                const pausedRow = isPaused(docket);
-                const reminderCount = getReminderCount(docket);
+        <section className="grid gap-4">
+          {filteredDockets.map((docket) => {
+            const status = docket.status ?? "new";
+            const statusLine = STATUS_LINE_CONTENT[status] ?? {
+              text: formatStatus(status),
+              className: "font-normal text-[#888]",
+            };
+            const stripeColor = getStatusStripeColor(status);
+            const lastCommunication = getLastCommunication(docket);
 
-                return (
-                  <tr
-                    key={docket.id}
-                    className={`border-t border-white/5 align-top ${pausedRow ? "opacity-50" : "opacity-100"}`}
+            return (
+              <article className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg" key={docket.id}>
+                <div className="p-5">
+                  <div className="mb-4 flex items-start justify-between gap-4">
+                    <h2 className="text-xl font-semibold text-white">{getCustomerName(docket)}</h2>
+                    <button
+                      className="shrink-0 rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                      onClick={() => handleOpenDrawer(docket.id)}
+                      type="button"
+                    >
+                      Open Docket
+                    </button>
+                  </div>
+                  <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
+                  <p className={`mb-4 text-sm ${statusLine.className}`}>{statusLine.text}</p>
+                  <div
+                    className="rounded bg-white/[0.03] px-[14px] py-2.5"
+                    style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
                   >
-                    <td className="px-3 py-3">
-                      <button
-                        className="text-lg"
-                        onClick={() => void handleToggleFlag(docket.id, docket.is_flagged)}
-                        type="button"
-                      >
-                        {docket.is_flagged ? "🚩" : "⚐"}
-                      </button>
-                    </td>
-                    <td className="px-3 py-3 font-medium">{getCustomerName(docket)}</td>
-                    <td className="px-3 py-3 text-white/85">
-                      {truncate(docket.vehicle_description || docket.vehicle_make || "", 40) || "N/A"}
-                    </td>
-                    <td className="min-w-[150px] px-3 py-3">
-                      <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${badgeClass}`}>
-                        {formatStatus(docket.status)}
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-white/80">{getDaysInStatus(docket)}</td>
-                    <td className="px-3 py-3 text-white/80">{reminderCount}</td>
-                    <td className="px-3 py-3 text-white/85">{formatCurrencyCad(docket.estimated_deal_value)}</td>
-                    <td className="px-3 py-3 text-white/80">{getAgentStatus(docket)}</td>
-                    <td className="px-3 py-3">
-                      <div className="flex flex-wrap gap-2">
-                        {status === "questions_sent" ||
-                        status === "research_in_progress" ||
-                        status === "report_sent" ||
-                        status === "decision_made" ? (
-                          <button
-                            className="rounded-md border border-[#E55125]/70 px-2 py-1 text-xs text-[#E55125] hover:bg-[#E55125]/10"
-                            disabled={sendingReminderId === docket.id}
-                            onClick={() => void handleSendReminder(docket.id)}
-                            type="button"
-                          >
-                            {sendingReminderId === docket.id ? "Sending..." : "Send Reminder"}
-                          </button>
+                    {lastCommunication ? (
+                      <>
+                        <p className="text-xs text-[#888]">
+                          {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
+                        </p>
+                        {lastCommunication.snippet ? (
+                          <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
                         ) : null}
-                        {status === "answers_received" ? (
-                          <button
-                            className="rounded-md border border-orange-400/80 px-2 py-1 text-xs text-orange-300 hover:bg-orange-400/10"
-                            onClick={() => handleOpenDrawer(docket.id, { scrollToQuestions: true })}
-                            type="button"
-                          >
-                            View Answers
-                          </button>
-                        ) : null}
-                        <button
-                          className="rounded-md border border-white/20 px-2 py-1 text-xs text-white hover:bg-white/10"
-                          onClick={() => handleOpenDrawer(docket.id)}
-                          type="button"
-                        >
-                          View
-                        </button>
-                        {showArchived ? (
-                          <button
-                            className="rounded-md border border-orange-400/60 px-2 py-1 text-xs text-orange-300 hover:bg-orange-400/10"
-                            onClick={() => void handleUnarchiveDocket(docket.id)}
-                            type="button"
-                          >
-                            Unarchive
-                          </button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </>
+                    ) : (
+                      <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
+                  <DocketProgressBar docket={docket} />
+                </div>
+              </article>
+            );
+          })}
           {filteredDockets.length === 0 ? (
-            <div className="p-6 text-center text-sm text-white/60">No dockets match your filters.</div>
+            <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
+              No dockets match your filters.
+            </div>
           ) : null}
         </section>
 
