@@ -416,6 +416,10 @@ export default function AgentDocketDetailPage({
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
   const isAnswersReceived = currentStatus === "answers_received";
+  const canProceedWithoutQuestions =
+    currentStatus === "new" || currentStatus === "questions_sent" || currentStatus === "answers_received";
+  const shouldShowStandaloneProceed =
+    currentStatus === "questions_sent" || currentStatus === "answers_received";
   const isQuestionsLocked = isStatusAtOrAfter(currentStatus, QUESTIONS_BASE_STATUS);
   const shouldShowResearchForm = isResearchInProgress || isAnswersReceived || researchLocked;
   const shouldHideQuestionsAndProceed = isQuestionsLocked || researchLocked;
@@ -929,7 +933,7 @@ export default function AgentDocketDetailPage({
   }
 
   async function proceedWithoutQuestions() {
-    if (shouldHideQuestionsAndProceed || proceeding) {
+    if (!canProceedWithoutQuestions || proceeding) {
       return;
     }
 
@@ -1760,6 +1764,21 @@ export default function AgentDocketDetailPage({
                 </div>
               ) : null}
             </section>
+
+            {shouldShowStandaloneProceed ? (
+              <section className="rounded-xl border border-[#E55125]/60 bg-[#171717] p-5">
+                <h2 className="mb-3 text-xl font-semibold">Proceed Without Questions</h2>
+                <button
+                  className="w-full rounded-lg bg-[#E55125] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                  disabled={proceeding}
+                  onClick={proceedWithoutQuestions}
+                  type="button"
+                >
+                  {proceeding ? "Confirming..." : "I have all the information I need"}
+                </button>
+                {proceedConfirmation ? <p className="mt-3 text-sm text-emerald-400">{proceedConfirmation}</p> : null}
+              </section>
+            ) : null}
 
             {shouldShowResearchForm ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
