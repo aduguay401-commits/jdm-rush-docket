@@ -419,7 +419,26 @@ function formatCommunicationTimestamp(timestamp: string | null) {
 }
 
 function formatReportDate(timestamp: string | null) {
-  return timestamp ? new Date(timestamp).toLocaleString() : "an unknown date";
+  if (!timestamp) {
+    return null;
+  }
+
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
+}
+
+function formatReportSentMessage(timestamp: string | null) {
+  const formattedDate = formatReportDate(timestamp);
+  return formattedDate ? `Report sent to customer on ${formattedDate}.` : "Report sent to customer.";
 }
 
 function formatChosenPath(path: string | null | undefined) {
@@ -712,6 +731,28 @@ export default function AgentDocketDetailPage({
     setSentQuestions((data ?? []) as SentQuestion[]);
   }
 
+  async function loadLatestReportSentAt(docketId: string) {
+    const { data, error } = await supabase
+      .from("email_log")
+      .select("sent_at")
+      .eq("docket_id", docketId)
+      .eq("email_type", "email_4_report_ready")
+      .not("sent_at", "is", null)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<ReportEmailLog>();
+
+    if (error) {
+      console.error("[Email Log] Failed to load report sent timestamp", {
+        docketId,
+        error: error.message,
+      });
+      return null;
+    }
+
+    return data?.sent_at ?? null;
+  }
+
   async function saveResearchDraft(draft: ResearchDraft | null, options?: { showIndicator?: boolean }) {
     const response = await fetch(`/api/admin/dockets/${id}`, {
       method: "PATCH",
@@ -787,7 +828,7 @@ export default function AgentDocketDetailPage({
         { data: customerQuestionsData, error: customerQuestionsError },
         { data: auctionResearchData, error: auctionResearchError },
         { data: dealerOptionsData, error: dealerOptionsError },
-        { data: reportEmailLogData, error: reportEmailLogError },
+        latestReportSentAt,
       ] =
         await Promise.all([
           supabase
@@ -821,14 +862,7 @@ export default function AgentDocketDetailPage({
             .eq("docket_id", id)
             .order("option_number", { ascending: true })
             .returns<PrivateDealerOptionRecord[]>(),
-          supabase
-            .from("email_log")
-            .select("sent_at")
-            .eq("docket_id", id)
-            .eq("email_type", "email_4_report_ready")
-            .order("sent_at", { ascending: false })
-            .limit(1)
-            .maybeSingle<ReportEmailLog>(),
+          loadLatestReportSentAt(id),
         ]);
 
       if (sentQuestionsError) {
@@ -867,7 +901,7 @@ export default function AgentDocketDetailPage({
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setCustomerSubmittedQuestions((customerQuestionsData ?? []) as CustomerSubmittedQuestion[]);
-      setReportSentAt(reportEmailLogError ? null : reportEmailLogData?.sent_at ?? null);
+      setReportSentAt(latestReportSentAt);
       setHammerPriceLowJpy(hydratedDraft.hammerPriceLowJpy);
       setHammerPriceHighJpy(hydratedDraft.hammerPriceHighJpy);
       setRecommendedMaxBidJpy(hydratedDraft.recommendedMaxBidJpy);
@@ -1607,7 +1641,7 @@ export default function AgentDocketDetailPage({
     }
 
     setDocket((prev) => (prev ? { ...prev, status: "report_sent" } : prev));
-    setReportSentAt(new Date().toISOString());
+    setReportSentAt(await loadLatestReportSentAt(id));
     setResearchLocked(true);
     setIsEditingSentReport(false);
     setRedirectCountdown(3);
@@ -2019,9 +2053,7 @@ export default function AgentDocketDetailPage({
 
             {isSubmittedStatus ? (
               <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
-                <p className="text-sm font-medium text-white">
-                  Report sent to customer on {formatReportDate(reportSentAt)}.
-                </p>
+                <p className="text-sm font-medium text-white">{formatReportSentMessage(reportSentAt)}</p>
                 {reportUrl ? (
                   <a
                     className="mt-2 inline-flex text-sm font-medium text-[#22c55e] underline underline-offset-2 hover:text-green-300"
