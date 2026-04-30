@@ -1208,14 +1208,17 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                           </h4>
                           <span className="text-xs text-white/50">{formatDate(entry.timestamp)}</span>
                         </div>
-                        <div className="mt-3 space-y-3">
-                          {entry.answers.map((question) => (
-                            <div key={question.id}>
-                              <p className="text-white">{question.question_text || "Untitled question"}</p>
-                              <p className="mt-1 text-[#E55125]">{question.answer_text}</p>
-                            </div>
-                          ))}
-                        </div>
+                        {entry.answers.length > 1 ? (
+                          <ol className="mt-3 list-decimal space-y-2 pl-5 text-[#E55125]">
+                            {entry.answers.map((question) => (
+                              <li key={question.id}>{question.answer_text || "No answer provided."}</li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <p className="mt-3 text-[#E55125]">
+                            {entry.answers[0]?.answer_text || "No answer provided."}
+                          </p>
+                        )}
                       </article>
                     );
                   }

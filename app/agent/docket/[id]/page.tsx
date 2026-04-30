@@ -1869,16 +1869,17 @@ export default function AgentDocketDetailPage({
                                     {formatCommunicationTimestamp(entry.timestamp)}
                                   </time>
                                 </div>
-                                <div className="mt-3 space-y-4">
-                                  {entry.answers.map((answer) => (
-                                    <div key={answer.id}>
-                                      <p className="text-sm text-white">{answer.question_text}</p>
-                                      <p className="mt-1 text-sm text-[#E55125]">
-                                        {answer.answer_text || "No answer provided."}
-                                      </p>
-                                    </div>
-                                  ))}
-                                </div>
+                                {entry.answers.length > 1 ? (
+                                  <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-[#E55125]">
+                                    {entry.answers.map((answer) => (
+                                      <li key={answer.id}>{answer.answer_text || "No answer provided."}</li>
+                                    ))}
+                                  </ol>
+                                ) : (
+                                  <p className="mt-3 text-sm text-[#E55125]">
+                                    {entry.answers[0]?.answer_text || "No answer provided."}
+                                  </p>
+                                )}
                               </article>
                             );
                           }
