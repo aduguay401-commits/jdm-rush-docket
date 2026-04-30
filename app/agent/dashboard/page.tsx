@@ -396,6 +396,17 @@ export default function AgentDashboardPage() {
                       </div>
 
                       <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+                        <Link
+                          className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                          href={`/agent/docket/${docket.id}`}
+                        >
+                          Open Docket
+                        </Link>
+                      </div>
+                    </div>
+                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-6">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-xs uppercase tracking-wider text-white/40">PIPELINE STATUS</p>
                         <div className="flex flex-wrap items-center gap-2 sm:justify-end">
                           <span className={`rounded-full px-3 py-1 text-xs font-semibold ${badgeClass}`}>
                             {badgeLabel}
@@ -407,16 +418,7 @@ export default function AgentDashboardPage() {
                             </span>
                           ) : null}
                         </div>
-                        <Link
-                          className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-                          href={`/agent/docket/${docket.id}`}
-                        >
-                          Open Docket
-                        </Link>
                       </div>
-                    </div>
-                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 py-5">
-                      <p className="mb-2 text-xs uppercase tracking-wider text-white/40">PIPELINE STATUS</p>
                       <DocketProgressBar docket={docket} />
                     </div>
                   </article>
