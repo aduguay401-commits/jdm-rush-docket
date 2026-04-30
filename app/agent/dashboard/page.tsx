@@ -416,9 +416,6 @@ export default function AgentDashboardPage() {
                       </div>
                     </div>
                     <DocketProgressBar docket={docket} />
-                    <p className="text-sm text-white/70">
-                      Created: {new Date(docket.created_at).toLocaleDateString()}
-                    </p>
                   </article>
                 );
               })}
