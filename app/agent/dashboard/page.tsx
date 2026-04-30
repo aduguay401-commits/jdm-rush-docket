@@ -44,6 +44,7 @@ type EmailLogItem = {
 };
 
 type LastCommunication = {
+  direction: "agent" | "customer";
   directionLabel: string;
   snippet: string | null;
   timestamp: string;
@@ -155,8 +156,17 @@ const STATUS_STRIPE_COLORS: Record<string, string> = {
   paused: "#525252",
 };
 
+type StatusDisplay = {
+  text: string;
+  className: string;
+  stripeColor: string;
+};
+
+const ACTION_STRIPE_COLOR = "#4ade80";
+const WAITING_STRIPE_COLOR = "rgba(168,162,158,0.5)";
+
 function getStatusStripeColor(status: string | null | undefined) {
-  return STATUS_STRIPE_COLORS[status ?? "new"] ?? "rgba(168,162,158,0.5)";
+  return STATUS_STRIPE_COLORS[status ?? "new"] ?? WAITING_STRIPE_COLOR;
 }
 
 function withAlpha(color: string, alpha: number) {
@@ -286,6 +296,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
   for (const question of docket.marcus_questions ?? []) {
     if (question.answer_text?.trim() && question.answered_at) {
       candidates.push({
+        direction: "customer",
         directionLabel: `📥 ${customerFirstName}`,
         snippet: truncateSnippet(question.answer_text),
         timestamp: question.answered_at,
@@ -295,6 +306,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
 
     if (question.question_text?.trim() && question.created_at) {
       candidates.push({
+        direction: "agent",
         directionLabel: "📤 You",
         snippet: truncateSnippet(question.question_text),
         timestamp: question.created_at,
@@ -305,6 +317,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
   for (const question of docket.customer_questions ?? []) {
     if (question.question_text?.trim() && question.created_at) {
       candidates.push({
+        direction: "customer",
         directionLabel: `📥 ${customerFirstName}`,
         snippet: truncateSnippet(question.question_text),
         timestamp: question.created_at,
@@ -316,6 +329,7 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
     if (email.sent_at) {
       const label = getEmailTypeLabel(email.email_type);
       candidates.push({
+        direction: "agent",
         directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
         snippet: truncateSnippet(email.subject || `${label} sent.`),
         timestamp: email.sent_at,
@@ -324,6 +338,40 @@ function getLastCommunication(docket: Docket): LastCommunication | null {
   }
 
   return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
+}
+
+function getStatusDisplay(status: string | null | undefined, lastCommunication: LastCommunication | null): StatusDisplay {
+  const normalizedStatus = status ?? "new";
+  const defaultStatusLine = STATUS_LINE_CONTENT[normalizedStatus] ?? {
+    text: formatStatus(normalizedStatus),
+    className: "font-normal text-[#888]",
+  };
+
+  if (normalizedStatus === "answers_received" && lastCommunication?.direction === "agent") {
+    return {
+      text: "⏳ Follow-up sent. Awaiting customer response.",
+      className: "font-normal text-[#aaa]",
+      stripeColor: WAITING_STRIPE_COLOR,
+    };
+  }
+
+  if (
+    (normalizedStatus === "questions_sent" ||
+      normalizedStatus === "report_sent" ||
+      normalizedStatus === "research_in_progress") &&
+    lastCommunication?.direction === "customer"
+  ) {
+    return {
+      text: "🏎️ Customer asked a question — respond",
+      className: "font-semibold text-[#4ade80]",
+      stripeColor: ACTION_STRIPE_COLOR,
+    };
+  }
+
+  return {
+    ...defaultStatusLine,
+    stripeColor: getStatusStripeColor(normalizedStatus),
+  };
 }
 
 function sortStatusHistory(history: DocketStatusHistoryItem[] | null | undefined) {
@@ -588,7 +636,7 @@ export default function AgentDashboardPage() {
                 get these deals moving. 🇯🇵
               </h2>
               {lastRefreshedAt ? (
-                <p className="mt-1 text-xs text-[#666]">Updated {formatRelativeTime(lastRefreshedAt)}</p>
+                <p className="mt-1 text-[13px] text-[#888]">Updated {formatRelativeTime(lastRefreshedAt)}</p>
               ) : null}
               <p className="mt-2 text-base text-[#888]">
                 Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
@@ -598,12 +646,9 @@ export default function AgentDashboardPage() {
             <div className="grid gap-4">
               {dockets.map((docket) => {
                 const status = docket.status ?? "new";
-                const statusLine = STATUS_LINE_CONTENT[status] ?? {
-                  text: formatStatus(status),
-                  className: "font-normal text-[#888]",
-                };
-                const stripeColor = getStatusStripeColor(status);
                 const lastCommunication = getLastCommunication(docket);
+                const statusDisplay = getStatusDisplay(status, lastCommunication);
+                const stripeColor = statusDisplay.stripeColor;
                 const customerName =
                   `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
                   "Unnamed Customer";
@@ -624,7 +669,7 @@ export default function AgentDashboardPage() {
                         </Link>
                       </div>
                       <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
-                      <p className={`mb-4 text-sm ${statusLine.className}`}>{statusLine.text}</p>
+                      <p className={`mb-4 text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
                       <div
                         className="rounded bg-white/[0.03] px-[14px] py-2.5"
                         style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
