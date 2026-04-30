@@ -10,6 +10,7 @@ type Docket = {
   id: string;
   created_at: string;
   status: string | null;
+  docket_status_history: DocketStatusHistoryItem[] | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
   vehicle_year: string | number | null;
@@ -19,6 +20,12 @@ type Docket = {
   destination_province: string | null;
   budget_bracket: string | null;
   timeline: string | null;
+};
+
+type DocketStatusHistoryItem = {
+  old_status: string | null;
+  new_status: string | null;
+  created_at: string | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,6 +58,38 @@ const STATUS_SORT_PRIORITY: Record<string, number> = {
   answers_received: 0,
   new: 1,
 };
+
+const PROGRESS_STAGES = [
+  { label: "New", status: "new" },
+  { label: "Questions", status: "questions_sent" },
+  { label: "Answers", status: "answers_received" },
+  { label: "Research", status: "research_in_progress" },
+  { label: "Report", status: "report_sent" },
+  { label: "Decision", status: "decision_made" },
+  { label: "Cleared", status: "cleared" },
+] as const;
+
+const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
+  new: 0,
+  questions_sent: 1,
+  answers_received: 2,
+  research_in_progress: 3,
+  report_sent: 4,
+  decision_made: 5,
+  cleared: 6,
+};
+
+const CURRENT_STAGE_STYLES: Record<string, string> = {
+  new: "border-blue-300 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.6)]",
+  questions_sent: "border-amber-200 bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.55)]",
+  answers_received: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
+  research_in_progress: "border-[#ffb197] bg-[#E55125] shadow-[0_0_12px_rgba(229,81,37,0.6)]",
+  report_sent: "border-blue-200 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.55)]",
+  decision_made: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
+  cleared: "border-emerald-200 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.65)]",
+};
+
+const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
 
 function formatStatus(status: string | null | undefined) {
   const normalized = status ?? "new";
@@ -101,6 +140,100 @@ function deriveDisplayNameFromEmail(email?: string | null) {
   }
 
   return firstToken.charAt(0).toUpperCase() + firstToken.slice(1).toLowerCase();
+}
+
+function sortStatusHistory(history: DocketStatusHistoryItem[] | null | undefined) {
+  return Array.isArray(history)
+    ? [...history].sort((a, b) => {
+        const aTime = new Date(a.created_at ?? 0).getTime();
+        const bTime = new Date(b.created_at ?? 0).getTime();
+        return bTime - aTime;
+      })
+    : [];
+}
+
+function findPreviousPipelineStage(status: string, history: DocketStatusHistoryItem[] | null | undefined) {
+  for (const item of sortStatusHistory(history)) {
+    if (item.new_status === status && item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
+    }
+
+    if (item.new_status && item.new_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.new_status];
+    }
+
+    if (item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
+    }
+  }
+
+  return 0;
+}
+
+function getProgressState(docket: Docket) {
+  const status = docket.status ?? "new";
+
+  if (status in PROGRESS_STAGE_INDEX_BY_STATUS) {
+    return {
+      currentIndex: PROGRESS_STAGE_INDEX_BY_STATUS[status],
+      isDimmedCurrent: false,
+      status,
+    };
+  }
+
+  return {
+    currentIndex: DIMMED_STATUS_SET.has(status) ? findPreviousPipelineStage(status, docket.docket_status_history) : 0,
+    isDimmedCurrent: DIMMED_STATUS_SET.has(status),
+    status,
+  };
+}
+
+function DocketProgressBar({ docket }: { docket: Docket }) {
+  const { currentIndex, isDimmedCurrent, status } = getProgressState(docket);
+
+  return (
+    <div aria-label={`Pipeline progress: ${formatStatus(status)}`} className="w-full py-3">
+      <div className="grid grid-cols-7 items-start">
+        {PROGRESS_STAGES.map((stage, index) => {
+          const isCompleted = index < currentIndex;
+          const isCurrent = index === currentIndex;
+          const isFuture = index > currentIndex;
+          const dotClass = isCurrent
+            ? isDimmedCurrent
+              ? "border-zinc-500 bg-zinc-600"
+              : (CURRENT_STAGE_STYLES[status] ?? "border-white/50 bg-white/60")
+            : isCompleted
+              ? "border-white bg-white"
+              : "border-zinc-700 bg-zinc-800";
+          const leftLineClass = isCompleted || isCurrent ? "bg-white/65" : "bg-zinc-800";
+          const rightLineClass = isCompleted ? "bg-white/65" : "bg-zinc-800";
+
+          return (
+            <div className="min-w-0" key={stage.status}>
+              <div className="flex items-center">
+                <div className={`h-0.5 flex-1 ${index === 0 ? "bg-transparent" : leftLineClass}`} />
+                <span
+                  aria-current={isCurrent ? "step" : undefined}
+                  className={`h-3 w-3 shrink-0 rounded-full border ${dotClass}`}
+                  title={stage.label}
+                />
+                <div
+                  className={`h-0.5 flex-1 ${index === PROGRESS_STAGES.length - 1 ? "bg-transparent" : rightLineClass}`}
+                />
+              </div>
+              <p
+                className={`mt-2 truncate text-center text-[10px] font-medium sm:text-xs ${
+                  isCurrent ? "text-white" : isFuture ? "text-[#666]" : "text-[#888]"
+                }`}
+              >
+                {stage.label}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 async function getAgentProfile(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
@@ -161,7 +294,7 @@ export default function AgentDashboardPage() {
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline"
+          "id, created_at, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, budget_bracket, timeline, docket_status_history(old_status, new_status, created_at)"
         )
         .eq("is_archived", false)
         .order("created_at", { ascending: false });
@@ -261,9 +394,6 @@ export default function AgentDashboardPage() {
                         <p className="text-sm text-white/80">Destination: {destination || "N/A"}</p>
                         <p className="text-sm text-white/80">Budget: {docket.budget_bracket || "N/A"}</p>
                         <p className="text-sm text-white/80">Timeline: {docket.timeline || "N/A"}</p>
-                        <p className="text-sm text-white/70">
-                          Created: {new Date(docket.created_at).toLocaleDateString()}
-                        </p>
                       </div>
 
                       <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
@@ -286,6 +416,10 @@ export default function AgentDashboardPage() {
                         </Link>
                       </div>
                     </div>
+                    <DocketProgressBar docket={docket} />
+                    <p className="text-sm text-white/70">
+                      Created: {new Date(docket.created_at).toLocaleDateString()}
+                    </p>
                   </article>
                 );
               })}
