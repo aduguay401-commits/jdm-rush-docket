@@ -156,6 +156,10 @@ function getLastReminder(docket: NormalizedAdminDocket) {
     .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime())[0] ?? null;
 }
 
+function hasUnansweredMarcusQuestions(docket: NormalizedAdminDocket) {
+  return docket.marcus_questions.some((question) => !question.answer_text?.trim());
+}
+
 function isExpandableActivityEvent(event: DocketActivityEvent) {
   return event.category === "customer_message" || event.category === "agent_message";
 }
@@ -673,6 +677,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             const vehicleDescription = selectedDocket.vehicle_description?.trim() || getVehicleLabel(selectedDocket);
             const isArchived = selectedDocket.is_archived === true;
             const isLost = selectedDocket.status === "lost";
+            const hasUnansweredQuestions = hasUnansweredMarcusQuestions(selectedDocket);
+            const conversationLink = hasUnansweredQuestions
+              ? selectedDocket.questions_url_token
+                ? `https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`
+                : null
+              : `/admin/conversation/${selectedDocket.id}`;
+            const conversationLinkLabel = hasUnansweredQuestions ? "View Questions" : "View Conversation";
 
             return (
               <div className="fixed inset-0 z-30 bg-black/55" onClick={() => setSelectedDocketId(null)}>
@@ -705,15 +716,15 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                             View Report
                           </a>
                         ) : null}
-                        {selectedDocket.questions_url_token ? (
+                        {conversationLink ? (
                           <a
                             className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-[#E55125] hover:text-[#E55125]"
-                            href={`https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`}
+                            href={conversationLink}
                             rel="noreferrer"
                             target="_blank"
                           >
                             <span aria-hidden="true">💬</span>
-                            View Questions
+                            {conversationLinkLabel}
                           </a>
                         ) : null}
                         <button
@@ -760,32 +771,37 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                   {activeDrawerTab === "activity" ? (
                     <section className="py-4">
                       {activityFeed.length === 0 ? <p className="text-sm text-white/50">No activity yet</p> : null}
-                      <div className="space-y-1">
+                      <div className="relative space-y-3 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-[#444]">
                         {activityFeed.map((event) => {
                           const expandable = isExpandableActivityEvent(event) && event.expandable_content;
                           const expanded = expandedActivityEventIds.has(event.id);
                           const RowElement = expandable ? "button" : "div";
 
                           return (
-                            <article className="rounded-md border border-white/10 bg-black/20" key={event.id}>
-                              <RowElement
-                                className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left ${
-                                  expandable ? "transition hover:bg-white/5" : ""
-                                }`}
-                                onClick={expandable ? () => toggleActivityEvent(event) : undefined}
-                                type={expandable ? "button" : undefined}
+                            <article className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={event.id}>
+                              <span
+                                aria-hidden="true"
+                                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-base ${event.colorClass}`}
                               >
-                                <span aria-hidden="true" className="text-base">
-                                  {event.icon}
-                                </span>
-                                <span className="min-w-0 truncate text-sm text-white/85">{event.title}</span>
-                                <span className="whitespace-nowrap text-xs text-white/45">{formatDate(event.timestamp)}</span>
-                              </RowElement>
+                                {event.icon}
+                              </span>
+                              <div className="rounded-md border border-white/10 bg-black/20">
+                                <RowElement
+                                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left ${
+                                    expandable ? "transition hover:bg-white/5" : ""
+                                  }`}
+                                  onClick={expandable ? () => toggleActivityEvent(event) : undefined}
+                                  type={expandable ? "button" : undefined}
+                                >
+                                  <span className="min-w-0 truncate text-sm text-white/85">{event.title}</span>
+                                  <span className="whitespace-nowrap text-xs text-white/45">{formatDate(event.timestamp)}</span>
+                                </RowElement>
                               {expanded && event.expandable_content ? (
                                 <div className="border-t border-white/10 px-3 py-3 text-sm leading-6 text-white/70">
                                   <p className="whitespace-pre-line">{event.expandable_content}</p>
                                 </div>
                               ) : null}
+                              </div>
                             </article>
                           );
                         })}

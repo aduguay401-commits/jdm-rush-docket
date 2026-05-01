@@ -12,6 +12,7 @@ export type DocketActivityEvent = {
   timestamp: string;
   category: DocketActivityEventCategory;
   icon: string;
+  colorClass: string;
   title: string;
   subtitle?: string;
   expandable_content?: string;
@@ -217,6 +218,22 @@ function buildEmailTitle(
   return `${getEmailTypeLabel(email.email_type)} sent to ${recipientLabel}`;
 }
 
+function getEmailEventVisual(emailType: string | null | undefined) {
+  if (emailType === "email_1_customer_welcome") {
+    return { icon: "👋", colorClass: "text-[#888]" };
+  }
+
+  if (emailType === "email_4_report_ready") {
+    return { icon: "📄", colorClass: "text-[#E55125]" };
+  }
+
+  if (emailType === "manual_reminder") {
+    return { icon: "🔔", colorClass: "text-[#f59e0b]" };
+  }
+
+  return { icon: "📧", colorClass: "text-[#888]" };
+}
+
 function buildEmailEvent(
   docket: ActivityFeedDocket,
   email: EmailLogInput,
@@ -228,11 +245,14 @@ function buildEmailEvent(
     return null;
   }
 
+  const visual = getEmailEventVisual(email.email_type);
+
   return {
     id: `email:${email.id ?? `${email.email_type ?? "unknown"}:${timestamp}:${index}`}`,
     timestamp,
     category: "email",
-    icon: email.error ? "⚠️" : "✉️",
+    icon: visual.icon,
+    colorClass: visual.colorClass,
     title: buildEmailTitle(docket, email, isFirstReportReadyEmail),
     subtitle: email.subject?.trim() || undefined,
     expandable_content: email.body_snapshot?.trim() || undefined,
@@ -273,7 +293,8 @@ function buildAgentMessageEvent(question: MarcusQuestionInput, index: number): D
     id: `agent_message:${question.id ?? `${timestamp}:${index}`}`,
     timestamp,
     category: "agent_message",
-    icon: "💬",
+    icon: "📤",
+    colorClass: "text-[#E55125]",
     title: "Agent message sent",
     subtitle: question.question_text?.trim() || undefined,
     expandable_content: question.question_text?.trim() || undefined,
@@ -299,7 +320,8 @@ function buildCustomerMessageEvent(question: CustomerQuestionInput, index: numbe
     id: `customer_message:${question.id ?? `${timestamp}:${index}`}`,
     timestamp,
     category: "customer_message",
-    icon: "📥",
+    icon: "💬",
+    colorClass: "text-[#22c55e]",
     title: "Customer message received",
     subtitle: answerText ? "Answered" : "awaiting answer",
     expandable_content: buildCustomerMessageContent(question),
@@ -317,6 +339,7 @@ function buildStatusEvent(statusHistory: DocketStatusHistoryInput, index: number
     timestamp,
     category: "status",
     icon: "🔄",
+    colorClass: "text-[#3b82f6]",
     title: `Status changed to ${getStatusLabel(statusHistory.new_status)}`,
     subtitle: `${getStatusLabel(statusHistory.old_status)} → ${getStatusLabel(statusHistory.new_status)}`,
   };

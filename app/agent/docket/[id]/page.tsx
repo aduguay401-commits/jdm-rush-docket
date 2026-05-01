@@ -4,6 +4,10 @@ import Link from "next/link";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import CustomerCommunicationTimeline, {
+  type TimelineCustomerQuestion,
+  type TimelineMarcusQuestion,
+} from "@/components/CustomerCommunicationTimeline";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 
 type Docket = {
@@ -77,23 +81,6 @@ type CustomerSubmittedQuestion = {
   created_at: string | null;
   read_at: string | null;
 };
-
-type CommunicationTimelineEntry =
-  | {
-      type: "AGENT_QUESTIONS";
-      timestamp: string;
-      questions: SentQuestion[];
-    }
-  | {
-      type: "CUSTOMER_ANSWERS";
-      timestamp: string;
-      answers: CustomerAnswer[];
-    }
-  | {
-      type: "CUSTOMER_QUESTION";
-      timestamp: string | null;
-      question: CustomerSubmittedQuestion;
-    };
 
 type AuctionListingForm = {
   lotTitle: string;
@@ -415,10 +402,6 @@ function formatStatus(status: string | null | undefined) {
   return STATUS_LABELS[normalized] ?? normalized;
 }
 
-function formatCommunicationTimestamp(timestamp: string | null) {
-  return timestamp ? new Date(timestamp).toLocaleString() : "Unknown time";
-}
-
 function formatReportDate(timestamp: string | null) {
   if (!timestamp) {
     return null;
@@ -626,55 +609,19 @@ export default function AgentDocketDetailPage({
     ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
     : null;
   const unreadCustomerQuestionsCount = customerSubmittedQuestions.filter((question) => question.read_at === null).length;
-  const unansweredQuestionsCount = Math.max(sentQuestions.length - customerAnswers.length, 0);
-  const communicationTimeline = useMemo<CommunicationTimelineEntry[]>(() => {
-    const agentQuestionBatches = new Map<string, SentQuestion[]>();
-    for (const question of sentQuestions) {
-      const batch = agentQuestionBatches.get(question.created_at) ?? [];
-      batch.push(question);
-      agentQuestionBatches.set(question.created_at, batch);
-    }
+  const timelineMarcusQuestions = useMemo<TimelineMarcusQuestion[]>(() => {
+    const answersById = new Map(customerAnswers.map((answer) => [answer.id, answer]));
 
-    const customerAnswerBatches = new Map<string, CustomerAnswer[]>();
-    for (const answer of customerAnswers) {
-      if (!answer.answered_at) {
-        continue;
-      }
+    return sentQuestions.map((question) => {
+      const answer = answersById.get(question.id);
 
-      const batch = customerAnswerBatches.get(answer.answered_at) ?? [];
-      batch.push(answer);
-      customerAnswerBatches.set(answer.answered_at, batch);
-    }
-
-    return [
-      ...Array.from(agentQuestionBatches.entries()).map(
-        ([timestamp, questionsForBatch]): CommunicationTimelineEntry => ({
-          type: "AGENT_QUESTIONS",
-          timestamp,
-          questions: questionsForBatch,
-        })
-      ),
-      ...Array.from(customerAnswerBatches.entries()).map(
-        ([timestamp, answersForBatch]): CommunicationTimelineEntry => ({
-          type: "CUSTOMER_ANSWERS",
-          timestamp,
-          answers: answersForBatch,
-        })
-      ),
-      ...customerSubmittedQuestions.map(
-        (question): CommunicationTimelineEntry => ({
-          type: "CUSTOMER_QUESTION",
-          timestamp: question.created_at,
-          question,
-        })
-      ),
-    ].sort((left, right) => {
-      const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
-      const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
-
-      return leftTime - rightTime;
+      return {
+        ...question,
+        answer_text: answer?.answer_text ?? null,
+        answered_at: answer?.answered_at ?? null,
+      };
     });
-  }, [customerAnswers, customerSubmittedQuestions, sentQuestions]);
+  }, [customerAnswers, sentQuestions]);
 
   async function createSignedPreviewUrl(filePath: string) {
     const storagePath = extractStoragePath(filePath);
@@ -1871,111 +1818,11 @@ export default function AgentDocketDetailPage({
               {isCustomerCommunicationExpanded ? (
                 <div className="mt-5 space-y-6">
                   <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-                    {communicationTimeline.length === 0 ? (
-                      <p className="text-sm text-white/70">No customer communication yet.</p>
-                    ) : (
-                      <div className="space-y-3">
-                        {communicationTimeline.map((entry) => {
-                          if (entry.type === "AGENT_QUESTIONS") {
-                            return (
-                              <article
-                                className="rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-4"
-                                key={`agent-questions-${entry.timestamp}`}
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <h3 className="text-sm font-medium text-white">
-                                    <span aria-hidden="true" className="mr-2">
-                                      📤
-                                    </span>
-                                    Agent sent {entry.questions.length}{" "}
-                                    {entry.questions.length === 1 ? "question" : "questions"}
-                                  </h3>
-                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
-                                    {formatCommunicationTimestamp(entry.timestamp)}
-                                  </time>
-                                </div>
-                                <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/85">
-                                  {entry.questions.map((question) => (
-                                    <li key={question.id}>{question.question_text}</li>
-                                  ))}
-                                </ol>
-                              </article>
-                            );
-                          }
-
-                          if (entry.type === "CUSTOMER_ANSWERS") {
-                            return (
-                              <article
-                                className="rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4"
-                                key={`customer-answers-${entry.timestamp}`}
-                              >
-                                <div className="flex flex-wrap items-start justify-between gap-3">
-                                  <h3 className="text-sm font-medium text-white">
-                                    <span aria-hidden="true" className="mr-2">
-                                      📥
-                                    </span>
-                                    Customer answered
-                                  </h3>
-                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
-                                    {formatCommunicationTimestamp(entry.timestamp)}
-                                  </time>
-                                </div>
-                                {entry.answers.length > 1 ? (
-                                  <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-[#E55125]">
-                                    {entry.answers.map((answer) => (
-                                      <li key={answer.id}>{answer.answer_text || "No answer provided."}</li>
-                                    ))}
-                                  </ol>
-                                ) : (
-                                  <p className="mt-3 text-sm text-[#E55125]">
-                                    {entry.answers[0]?.answer_text || "No answer provided."}
-                                  </p>
-                                )}
-                              </article>
-                            );
-                          }
-
-                          return (
-                            <article
-                              className={`rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4 ${
-                                entry.question.read_at === null ? "border-l-[#E55125] bg-[#E55125]/5" : ""
-                              }`}
-                              key={`customer-question-${entry.question.id}`}
-                            >
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <h3 className="text-sm font-medium text-white">
-                                  <span aria-hidden="true" className="mr-2">
-                                    💬
-                                  </span>
-                                  Customer asked
-                                </h3>
-                                {entry.timestamp ? (
-                                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
-                                    {formatCommunicationTimestamp(entry.timestamp)}
-                                  </time>
-                                ) : (
-                                  <span className="text-xs text-white/60">Unknown time</span>
-                                )}
-                              </div>
-                              <p className="mt-3 text-sm text-white/90">{entry.question.question_text}</p>
-                            </article>
-                          );
-                        })}
-
-                        {isQuestionsLocked && unansweredQuestionsCount > 0 ? (
-                          <article className="rounded-lg border border-white/10 border-l-4 border-l-white/20 bg-black/25 p-4">
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <h3 className="text-sm font-medium text-white/60">
-                                <span aria-hidden="true" className="mr-2">
-                                  ⏳
-                                </span>
-                                Awaiting customer response
-                              </h3>
-                            </div>
-                          </article>
-                        ) : null}
-                      </div>
-                    )}
+                    <CustomerCommunicationTimeline
+                      customerQuestions={customerSubmittedQuestions as TimelineCustomerQuestion[]}
+                      marcusQuestions={timelineMarcusQuestions}
+                      readOnly={!isQuestionsLocked}
+                    />
 
                     {isQuestionsLocked ? (
                       <>
