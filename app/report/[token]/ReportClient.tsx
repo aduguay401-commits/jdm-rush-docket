@@ -77,6 +77,7 @@ export type PrivateDealerOptionRecord = {
   dealer_price_jpy: number | null;
   dealer_price_cad: number | null;
   photos: string[] | null;
+  sales_sheet_url: string | null;
   marcus_notes: string | null;
   calculated_fees: FeeBreakdown | null;
   total_delivered_cad: number | null;
@@ -219,6 +220,27 @@ function hasAuctionEstimateData(auctionEstimate: AuctionEstimateRecord | null) {
       hasPositiveNumber(auctionEstimate.total_delivered_estimate_cad) ||
       hasFeeBreakdownData(auctionEstimate.calculated_fees))
   );
+}
+
+function getReportFileExtension(filePath: string) {
+  const pathname = (() => {
+    try {
+      return new URL(filePath).pathname;
+    } catch {
+      return filePath;
+    }
+  })();
+  const fileName = decodeURIComponent(pathname.split("/").pop() ?? "").split("?")[0]?.toLowerCase() ?? "";
+  const extension = fileName.split(".").pop();
+  return extension && extension !== fileName ? extension : "";
+}
+
+function isReportImageFile(filePath: string) {
+  return ["jpg", "jpeg", "png", "heic", "webp"].includes(getReportFileExtension(filePath));
+}
+
+function isReportPdfFile(filePath: string) {
+  return getReportFileExtension(filePath) === "pdf";
 }
 
 function formatExchangeDate(dateValue: string | null | undefined) {
@@ -999,6 +1021,39 @@ export function ReportClient({
                           optionNumber={option.option_number}
                           photos={option.photos}
                         />
+                      ) : null}
+
+                      {option.sales_sheet_url ? (
+                        <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
+                          <p className="text-sm font-medium text-white">Sales Sheet</p>
+                          {isReportImageFile(option.sales_sheet_url) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              alt={`Dealer option ${option.option_number} sales sheet`}
+                              className="mt-3 max-h-[520px] w-full rounded-xl border border-white/10 object-contain"
+                              loading="lazy"
+                              src={option.sales_sheet_url}
+                            />
+                          ) : isReportPdfFile(option.sales_sheet_url) ? (
+                            <a
+                              className="mt-2 inline-flex text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                              href={option.sales_sheet_url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Open sales sheet PDF
+                            </a>
+                          ) : (
+                            <a
+                              className="mt-2 inline-flex text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                              href={option.sales_sheet_url}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              Open sales sheet
+                            </a>
+                          )}
+                        </div>
                       ) : null}
 
                       <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">

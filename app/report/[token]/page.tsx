@@ -94,8 +94,8 @@ function normalizeFeeBreakdown(raw: unknown): FeeBreakdown | null {
   };
 }
 
-function extractStoragePath(photoPath: string): string {
-  const trimmed = photoPath.trim();
+function extractStoragePath(filePath: string): string {
+  const trimmed = filePath.trim();
   if (!trimmed) {
     return "";
   }
@@ -120,13 +120,13 @@ function extractStoragePath(photoPath: string): string {
   return trimmed.replace(/^\/+/, "");
 }
 
-async function createSignedPhotoUrl(
+async function createSignedFileUrl(
   supabase: ReturnType<typeof createServerClient>,
-  photoPath: string
+  filePath: string
 ): Promise<string> {
-  const storagePath = extractStoragePath(photoPath);
+  const storagePath = extractStoragePath(filePath);
   if (!storagePath) {
-    return photoPath;
+    return filePath;
   }
 
   const { data, error } = await supabase.storage
@@ -134,8 +134,8 @@ async function createSignedPhotoUrl(
     .createSignedUrl(storagePath, 3600);
 
   if (error || !data?.signedUrl) {
-    console.warn("[report] failed to sign photo path", { photoPath, storagePath, error });
-    return photoPath;
+    console.warn("[report] failed to sign file path", { filePath, storagePath, error });
+    return filePath;
   }
 
   return data.signedUrl;
@@ -169,7 +169,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
       supabase
         .from("private_dealer_options")
         .select(
-          "option_number, year, make, model, grade, mileage, colour, transmission, trim, dealer_price_jpy, dealer_price_cad, photos, marcus_notes, calculated_fees, total_delivered_cad"
+          "option_number, year, make, model, grade, mileage, colour, transmission, trim, dealer_price_jpy, dealer_price_cad, photos, sales_sheet_url, marcus_notes, calculated_fees, total_delivered_cad"
         )
         .eq("docket_id", docket.id)
         .order("option_number", { ascending: true })
@@ -217,13 +217,18 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
       const signedPhotos = await Promise.all(
         (Array.isArray(option.photos) ? option.photos : [])
           .filter((photo): photo is string => typeof photo === "string" && photo.trim().length > 0)
-          .map((photo) => createSignedPhotoUrl(supabase, photo))
+          .map((photo) => createSignedFileUrl(supabase, photo))
       );
+      const signedSalesSheetUrl =
+        typeof option.sales_sheet_url === "string" && option.sales_sheet_url.trim().length > 0
+          ? await createSignedFileUrl(supabase, option.sales_sheet_url)
+          : null;
 
       return {
         ...option,
         calculated_fees: normalizedFees,
         photos: signedPhotos,
+        sales_sheet_url: signedSalesSheetUrl,
         total_delivered_cad: normalizedTotalDelivered,
       };
     })
@@ -263,7 +268,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
               const signedPhotos = await Promise.all(
                 (Array.isArray(listing.photos) ? listing.photos : [])
                   .filter((photo): photo is string => typeof photo === "string" && photo.trim().length > 0)
-                  .map((photo) => createSignedPhotoUrl(supabase, photo))
+                  .map((photo) => createSignedFileUrl(supabase, photo))
               );
 
               return { ...listing, photos: signedPhotos };

@@ -149,6 +149,8 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "Paused",
   unresponsive: "Unresponsive",
 };
+const SALES_SHEET_ACCEPT = "application/pdf,image/jpeg,image/png,image/heic,image/webp";
+const SALES_SHEET_MIME_TYPES = new Set(SALES_SHEET_ACCEPT.split(","));
 
 const INITIAL_AUCTION_LISTING: AuctionListingForm = {
   lotTitle: "",
@@ -510,6 +512,34 @@ function extractOriginalFileName(filePath: string) {
 
   const basename = storagePath.split("/").pop() ?? storagePath;
   return basename.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}-/i, "");
+}
+
+function getUploadFileExtension(filePath: string) {
+  const fileName = extractOriginalFileName(filePath).split("?")[0]?.toLowerCase() ?? "";
+  const extension = fileName.split(".").pop();
+  return extension && extension !== fileName ? extension : "";
+}
+
+function isImageUpload(filePath: string) {
+  return ["jpg", "jpeg", "png", "heic", "webp"].includes(getUploadFileExtension(filePath));
+}
+
+function isPdfUpload(filePath: string) {
+  return getUploadFileExtension(filePath) === "pdf";
+}
+
+function getPublicDocketFileUrl(filePath: string) {
+  const storagePath = extractStoragePath(filePath);
+  if (!storagePath) {
+    return filePath;
+  }
+
+  const encodedPath = storagePath
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+
+  return `${process.env.NEXT_PUBLIC_SUPABASE_URL}/storage/v1/object/public/docket-files/${encodedPath}`;
 }
 
 export default function AgentDocketDetailPage({
@@ -1276,7 +1306,7 @@ export default function AgentDocketDetailPage({
     target,
   }: {
     files: FileList;
-    fileType: "images" | "pdf";
+    fileType: "images" | "salesSheet";
     target: string;
   }) {
     if (files.length === 0) {
@@ -1325,9 +1355,9 @@ export default function AgentDocketDetailPage({
         throw new Error("Only image files are allowed for photo uploads.");
       }
 
-      if (fileType === "pdf" && file.type !== "application/pdf") {
+      if (fileType === "salesSheet" && !SALES_SHEET_MIME_TYPES.has(file.type)) {
         setUploadingTarget(null);
-        throw new Error("Only PDF files are allowed for sales sheets.");
+        throw new Error("Only PDF, JPG, PNG, HEIC, or WEBP files are allowed for sales sheets.");
       }
 
       const storagePath = `${id}/${crypto.randomUUID()}-${cleanFileName(file.name)}`;
@@ -1424,12 +1454,13 @@ export default function AgentDocketDetailPage({
     try {
       const uploaded = await uploadFiles({
         files,
-        fileType: "pdf",
+        fileType: "salesSheet",
         target: `dealer-option-${optionNumber}-sales-sheet`,
       });
 
       if (uploaded.length > 0) {
         updateDealerOption(optionNumber, { salesSheetUrl: uploaded[0] });
+        await syncPreviewUrls(uploaded);
       }
     } catch (uploadError) {
       const message = uploadError instanceof Error ? uploadError.message : "Failed to upload sales sheet.";
@@ -2471,14 +2502,15 @@ export default function AgentDocketDetailPage({
                             </label>
 
                             <label className="block text-sm text-white/85">
-                              Sales Sheet (PDF)
+                              Sales Sheet
                               <input
-                                accept="application/pdf"
+                                accept={SALES_SHEET_ACCEPT}
                                 className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
                                 disabled={isFormDisabled || uploadingTarget === `dealer-option-${option.optionNumber}-sales-sheet`}
                                 onChange={(event) => void handleDealerSalesSheetUpload(option.optionNumber, event.target.files)}
                                 type="file"
                               />
+                              <span className="mt-1 block text-xs text-[#888]">PDF or image file</span>
                             </label>
 
                             {option.photos.length > 0 ? (
@@ -2521,9 +2553,35 @@ export default function AgentDocketDetailPage({
                               </div>
                             ) : null}
                             {option.salesSheetUrl ? (
-                              <p className="text-xs text-emerald-300">
-                                ✅ {extractOriginalFileName(option.salesSheetUrl)} uploaded
-                              </p>
+                              (() => {
+                                const salesSheetUrl =
+                                  photoPreviewUrls[option.salesSheetUrl] ?? getPublicDocketFileUrl(option.salesSheetUrl);
+
+                                return (
+                                  <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                                    <p className="text-xs text-emerald-300">
+                                      ✅ {extractOriginalFileName(option.salesSheetUrl)} uploaded
+                                    </p>
+                                    {isImageUpload(option.salesSheetUrl) ? (
+                                      // eslint-disable-next-line @next/next/no-img-element
+                                      <img
+                                        alt={extractOriginalFileName(option.salesSheetUrl)}
+                                        className="mt-3 max-h-72 w-full rounded-md border border-white/10 object-contain"
+                                        src={salesSheetUrl}
+                                      />
+                                    ) : isPdfUpload(option.salesSheetUrl) ? (
+                                      <a
+                                        className="mt-2 inline-flex text-xs text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
+                                        href={salesSheetUrl}
+                                        rel="noreferrer"
+                                        target="_blank"
+                                      >
+                                        Open sales sheet PDF
+                                      </a>
+                                    ) : null}
+                                  </div>
+                                );
+                              })()
                             ) : null}
 
                             <label className="block text-sm text-white/85">
