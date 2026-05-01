@@ -106,6 +106,11 @@ const INTERNAL_EMAIL_TYPES = new Set([
   "report_decision_sent",
 ]);
 
+const DUPLICATE_SYSTEM_EMAIL_TYPES = new Set([
+  "email_2_questions_sent",
+  "email_3_answers_received",
+]);
+
 const STATUS_LABELS: Record<string, string> = {
   new: "New",
   questions_sent: "Questions Sent",
@@ -197,7 +202,16 @@ function getStatusLabel(status: string | null | undefined) {
 }
 
 function getStatusTransitionEmailType(oldStatus: string | null | undefined, newStatus: string | null | undefined) {
-  return STATUS_TRANSITION_EMAIL_TYPES.get(`${oldStatus ?? ""}->${newStatus ?? ""}`) ?? null;
+  const transitionEmailType = STATUS_TRANSITION_EMAIL_TYPES.get(`${oldStatus ?? ""}->${newStatus ?? ""}`);
+  if (transitionEmailType) {
+    return transitionEmailType;
+  }
+
+  if (newStatus === "report_sent") {
+    return "email_4_report_ready";
+  }
+
+  return null;
 }
 
 function addEmailTimestamp(emailTimestampIndex: Map<string, Set<number>>, emailType: string | null | undefined, timestamp: string) {
@@ -267,7 +281,10 @@ function buildEmailEvent(
   index: number,
   isFirstReportReadyEmail: boolean
 ): DocketActivityEvent | null {
-  if (email.email_type && INTERNAL_EMAIL_TYPES.has(email.email_type)) {
+  if (
+    email.email_type &&
+    (INTERNAL_EMAIL_TYPES.has(email.email_type) || DUPLICATE_SYSTEM_EMAIL_TYPES.has(email.email_type))
+  ) {
     return null;
   }
 
@@ -451,12 +468,16 @@ export function getDocketActivityFeed(docket: ActivityFeedDocket): DocketActivit
   const firstReportReadyEmailIndex = getFirstReportReadyEmailIndex(emails);
 
   emails.forEach((email, index) => {
+    const timestamp = toIsoTimestamp(email.sent_at);
+    if (timestamp) {
+      addEmailTimestamp(emailTimestampIndex, email.email_type, timestamp);
+    }
+
     const event = buildEmailEvent(docket, email, index, index === firstReportReadyEmailIndex);
     if (!event) {
       return;
     }
 
-    addEmailTimestamp(emailTimestampIndex, email.email_type, event.timestamp);
     events.push(event);
   });
 
