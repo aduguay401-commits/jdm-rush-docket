@@ -2,7 +2,6 @@ export type DashboardDocketStatusHistoryItem = {
   old_status: string | null;
   new_status: string | null;
   changed_at?: string | null;
-  created_at?: string | null;
 };
 
 export type DashboardMarcusQuestionItem = {
@@ -445,15 +444,11 @@ export function getStatusDisplay(
   };
 }
 
-function getStatusHistoryTimestamp(item: DashboardDocketStatusHistoryItem) {
-  return item.changed_at ?? item.created_at ?? null;
-}
-
 function sortStatusHistory(history: DashboardDocketStatusHistoryItem[] | null | undefined) {
   return Array.isArray(history)
     ? [...history].sort((a, b) => {
-        const aTime = new Date(getStatusHistoryTimestamp(a) ?? 0).getTime();
-        const bTime = new Date(getStatusHistoryTimestamp(b) ?? 0).getTime();
+        const aTime = new Date(a.changed_at ?? 0).getTime();
+        const bTime = new Date(b.changed_at ?? 0).getTime();
         return bTime - aTime;
       })
     : [];

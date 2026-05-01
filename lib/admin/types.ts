@@ -5,7 +5,7 @@ export type DocketStatusHistoryItem = {
   old_status: string | null;
   new_status: string | null;
   changed_by: string | null;
-  created_at: string | null;
+  changed_at: string | null;
 };
 
 export type EmailLogItem = {

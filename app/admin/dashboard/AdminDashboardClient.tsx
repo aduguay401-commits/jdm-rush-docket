@@ -97,20 +97,6 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
 
 const EMAIL_STAGE_ORDER: EmailStage[] = ["Intake", "Questions", "Research", "Decision", "Follow-up"];
 
-const STATUS_BADGE_STYLES: Record<string, string> = {
-  new: "bg-orange-400/20 text-orange-300 ring-1 ring-orange-400/40",
-  questions_sent: "bg-blue-400/20 text-blue-300 ring-1 ring-blue-400/40",
-  answers_received: "bg-orange-400/20 text-orange-300 ring-1 ring-orange-400/40",
-  research_in_progress: "bg-blue-400/20 text-blue-300 ring-1 ring-blue-400/40",
-  report_sent: "bg-blue-400/20 text-blue-300 ring-1 ring-blue-400/40",
-  decision_made: "bg-green-400/20 text-green-300 ring-1 ring-green-400/40",
-  cleared: "bg-zinc-400/20 text-zinc-300 ring-1 ring-zinc-400/40",
-  lost: "bg-red-950/60 text-red-300 ring-1 ring-red-900",
-  paused: "bg-zinc-500/20 text-zinc-300 ring-1 ring-zinc-500/40 italic",
-  unresponsive: "bg-[#7a4f00] text-[#ffb347] ring-1 ring-[#7a4f00]",
-  archived: "bg-zinc-700/60 text-zinc-200 ring-1 ring-zinc-600",
-};
-
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
   { label: "Communication", status: "communication" },
@@ -343,7 +329,7 @@ function isActive(docket: NormalizedAdminDocket) {
 }
 
 function getDaysInStatus(docket: NormalizedAdminDocket) {
-  const since = docket.docket_status_history[0]?.created_at ?? docket.created_at;
+  const since = docket.docket_status_history[0]?.changed_at ?? docket.created_at;
   const days = Math.floor((Date.now() - new Date(since).getTime()) / (1000 * 60 * 60 * 24));
   return Number.isFinite(days) && days >= 0 ? days : 0;
 }
@@ -1213,7 +1199,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       {(entry.old_status ?? "none")} → {(entry.new_status ?? "none")}
                     </p>
                     <p className="text-xs text-white/60">
-                      {entry.changed_by ?? "system"} • {formatDate(entry.created_at)}
+                      {entry.changed_by ?? "system"} • {formatDate(entry.changed_at)}
                     </p>
                   </div>
                 ))}

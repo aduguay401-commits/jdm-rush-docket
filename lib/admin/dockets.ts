@@ -23,8 +23,8 @@ export function normalizeAdminDocket(raw: AdminDocket) {
           : Number(raw.estimated_deal_value) || null,
     docket_status_history: Array.isArray(raw.docket_status_history)
       ? [...raw.docket_status_history].sort((a, b) => {
-          const aTime = new Date(a.created_at ?? 0).getTime();
-          const bTime = new Date(b.created_at ?? 0).getTime();
+          const aTime = new Date(a.changed_at ?? 0).getTime();
+          const bTime = new Date(b.changed_at ?? 0).getTime();
           return bTime - aTime;
         })
       : [],
