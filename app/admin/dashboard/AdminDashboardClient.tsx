@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CustomerQuestionItem, MarcusQuestionItem, NormalizedAdminDocket } from "@/lib/admin/types";
+import {
+  getLatestActivity,
+  getProgressBarStage,
+  getStatusDisplay,
+  sortDocketsByUrgency,
+} from "@/lib/dockets/dashboardDisplay";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -45,12 +51,6 @@ type CustomerCommunicationTimelineEntry =
       type: "AWAITING";
       timestamp: null;
     };
-
-type LastCommunication = {
-  directionLabel: string;
-  snippet: string | null;
-  timestamp: string;
-};
 
 const STATUS_ORDER = [
   "new",
@@ -111,62 +111,6 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   archived: "bg-zinc-700/60 text-zinc-200 ring-1 ring-zinc-600",
 };
 
-const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> = {
-  new: {
-    text: "🏎️ New lead — send first questions",
-    className: "font-semibold text-[#4ade80]",
-  },
-  questions_sent: {
-    text: "⏳ Questions sent. Monitoring for answers.",
-    className: "font-normal text-[#aaa]",
-  },
-  answers_received: {
-    text: "🏎️ Customer answered — respond or pull research",
-    className: "font-semibold text-[#4ade80]",
-  },
-  research_in_progress: {
-    text: "🏎️ Research in progress",
-    className: "font-semibold text-[#fb923c]",
-  },
-  report_sent: {
-    text: "⏳ Report sent. Awaiting customer decision.",
-    className: "font-normal text-[#aaa]",
-  },
-  decision_made: {
-    text: "🏎️ Customer approved — handoff to Adam",
-    className: "font-semibold text-[#4ade80]",
-  },
-  cleared: {
-    text: "✅ Deal cleared",
-    className: "font-medium text-[#4ade80]",
-  },
-  unresponsive: {
-    text: "⚠️ No response after follow-ups",
-    className: "font-medium text-[#fbbf24]",
-  },
-  lost: {
-    text: "✕ Lost",
-    className: "font-normal text-[#666]",
-  },
-  paused: {
-    text: "⏸ Paused",
-    className: "font-normal text-[#666]",
-  },
-};
-
-const STATUS_STRIPE_COLORS: Record<string, string> = {
-  new: "#4ade80",
-  questions_sent: "rgba(168,162,158,0.5)",
-  answers_received: "#4ade80",
-  research_in_progress: "#fb923c",
-  report_sent: "rgba(168,162,158,0.5)",
-  decision_made: "#4ade80",
-  cleared: "#4ade80",
-  unresponsive: "#fbbf24",
-  lost: "#525252",
-  paused: "#525252",
-};
-
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
   { label: "Communication", status: "communication" },
@@ -175,28 +119,6 @@ const PROGRESS_STAGES = [
   { label: "Decision", status: "decision_made" },
   { label: "Cleared", status: "cleared" },
 ] as const;
-
-const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
-  new: 0,
-  questions_sent: 1,
-  answers_received: 1,
-  research_in_progress: 2,
-  report_sent: 3,
-  decision_made: 4,
-  cleared: 5,
-};
-
-const CURRENT_STAGE_STYLES: Record<string, string> = {
-  new: "border-blue-300 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.6)]",
-  questions_sent: "border-amber-200 bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.55)]",
-  answers_received: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
-  research_in_progress: "border-[#ffb197] bg-[#E55125] shadow-[0_0_12px_rgba(229,81,37,0.6)]",
-  report_sent: "border-blue-200 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.55)]",
-  decision_made: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
-  cleared: "border-emerald-200 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.65)]",
-};
-
-const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -280,42 +202,6 @@ function getEmailTypeLabel(emailType: string | null | undefined) {
   return EMAIL_TYPE_LABELS[emailType] ?? emailType;
 }
 
-function getLatestCommunicationEmailLabel(emailType: string | null | undefined) {
-  if (!emailType) {
-    return "Email sent";
-  }
-
-  if (emailType.startsWith("email_1_")) {
-    return "Welcome email";
-  }
-
-  if (emailType.startsWith("email_2_")) {
-    return "Questions sent";
-  }
-
-  if (emailType.startsWith("email_4_")) {
-    return "Report sent";
-  }
-
-  if (emailType.startsWith("email_5_")) {
-    return "Approval next steps";
-  }
-
-  if (emailType === "manual_reminder") {
-    return "Manual reminder";
-  }
-
-  if (emailType.startsWith("sequence_")) {
-    return "Follow-up";
-  }
-
-  return "Email sent";
-}
-
-function getStatusStripeColor(status: string | null | undefined) {
-  return STATUS_STRIPE_COLORS[status ?? "new"] ?? "rgba(168,162,158,0.5)";
-}
-
 function withAlpha(color: string, alpha: number) {
   if (color.startsWith("#") && color.length === 7) {
     const red = Number.parseInt(color.slice(1, 3), 16);
@@ -368,53 +254,6 @@ function truncateSnippet(value: string | null | undefined, maxLength = 100) {
   }
 
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
-}
-
-function getLastCommunication(docket: NormalizedAdminDocket): LastCommunication | null {
-  const customerFirstName = docket.customer_first_name?.trim() || "Customer";
-  const candidates: LastCommunication[] = [];
-
-  for (const question of docket.marcus_questions) {
-    if (question.answer_text?.trim() && question.answered_at) {
-      candidates.push({
-        directionLabel: `📥 ${customerFirstName}`,
-        snippet: truncateSnippet(question.answer_text),
-        timestamp: question.answered_at,
-      });
-      continue;
-    }
-
-    if (question.question_text?.trim() && question.created_at) {
-      candidates.push({
-        directionLabel: "📤 Marcus",
-        snippet: truncateSnippet(question.question_text),
-        timestamp: question.created_at,
-      });
-    }
-  }
-
-  for (const question of docket.customer_questions) {
-    if (question.question_text?.trim() && question.created_at) {
-      candidates.push({
-        directionLabel: `📥 ${customerFirstName}`,
-        snippet: truncateSnippet(question.question_text),
-        timestamp: question.created_at,
-      });
-    }
-  }
-
-  for (const email of docket.email_log) {
-    if (email.sent_at) {
-      const label = getLatestCommunicationEmailLabel(email.email_type);
-      candidates.push({
-        directionLabel: label === "Report sent" ? "📤 Report sent" : `📤 ${label}`,
-        snippet: truncateSnippet(email.subject || `${label} sent.`),
-        timestamp: email.sent_at,
-      });
-    }
-  }
-
-  return candidates.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())[0] ?? null;
 }
 
 function getEmailStage(emailType: string | null | undefined): EmailStage {
@@ -529,52 +368,9 @@ function getReminderCount(docket: NormalizedAdminDocket) {
   return docket.email_log.filter((entry) => entry.email_type === "manual_reminder").length;
 }
 
-function sortStatusHistory(docket: NormalizedAdminDocket) {
-  return [...docket.docket_status_history].sort((a, b) => {
-    const aTime = new Date(a.created_at ?? 0).getTime();
-    const bTime = new Date(b.created_at ?? 0).getTime();
-    return bTime - aTime;
-  });
-}
-
-function findPreviousPipelineStage(docket: NormalizedAdminDocket, status: string) {
-  for (const item of sortStatusHistory(docket)) {
-    if (item.new_status === status && item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
-    }
-
-    if (item.new_status && item.new_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.new_status];
-    }
-
-    if (item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
-    }
-  }
-
-  return 0;
-}
-
-function getProgressState(docket: NormalizedAdminDocket) {
-  const status = docket.status ?? "new";
-
-  if (status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-    return {
-      currentIndex: PROGRESS_STAGE_INDEX_BY_STATUS[status],
-      isDimmedCurrent: false,
-      status,
-    };
-  }
-
-  return {
-    currentIndex: DIMMED_STATUS_SET.has(status) ? findPreviousPipelineStage(docket, status) : 0,
-    isDimmedCurrent: DIMMED_STATUS_SET.has(status),
-    status,
-  };
-}
-
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
-  const { currentIndex, isDimmedCurrent, status } = getProgressState(docket);
+  const progressState = getProgressBarStage(docket.status, docket);
+  const { currentIndex, status } = progressState;
 
   return (
     <div aria-label={`Pipeline progress: ${formatStatus(status)}`} className="w-full py-3">
@@ -584,14 +380,13 @@ function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
           const isCurrent = index === currentIndex;
           const isFuture = index > currentIndex;
           const dotClass = isCurrent
-            ? isDimmedCurrent
-              ? "border-zinc-500 bg-zinc-600"
-              : (CURRENT_STAGE_STYLES[status] ?? "border-white/50 bg-white/60")
+            ? progressState.currentStageClassName
             : isCompleted
-              ? "border-white bg-white"
-              : "border-zinc-700 bg-zinc-800";
-          const leftLineClass = isCompleted || isCurrent ? "bg-white/65" : "bg-zinc-800";
-          const rightLineClass = isCompleted ? "bg-white/65" : "bg-zinc-800";
+              ? progressState.completedStageClassName
+              : progressState.futureStageClassName;
+          const leftLineClass =
+            isCompleted || isCurrent ? progressState.completedLineClassName : progressState.futureLineClassName;
+          const rightLineClass = isCompleted ? progressState.completedLineClassName : progressState.futureLineClassName;
 
           return (
             <div className="min-w-0" key={stage.status}>
@@ -1066,16 +861,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
       return true;
     });
 
-    return filtered.sort((a, b) => {
-      const aPaused = isPaused(a);
-      const bPaused = isPaused(b);
-
-      if (aPaused !== bPaused) {
-        return aPaused ? 1 : -1;
-      }
-
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-    });
+    return sortDocketsByUrgency(filtered);
   }, [dockets, flaggedOnly, searchTerm, showArchived, statusFilter]);
 
   return (
@@ -1174,13 +960,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
         <section className="grid gap-4">
           {filteredDockets.map((docket) => {
-            const status = docket.status ?? "new";
-            const statusLine = STATUS_LINE_CONTENT[status] ?? {
-              text: formatStatus(status),
-              className: "font-normal text-[#888]",
-            };
-            const stripeColor = getStatusStripeColor(status);
-            const lastCommunication = getLastCommunication(docket);
+            const lastCommunication = getLatestActivity(docket);
+            const statusLine = getStatusDisplay(docket, lastCommunication);
+            const stripeColor = statusLine.stripeColor;
 
             return (
               <article className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg" key={docket.id}>

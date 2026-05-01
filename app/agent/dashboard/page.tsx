@@ -4,6 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import {
+  getLatestActivity,
+  getProgressBarStage,
+  getStatusDisplay,
+  sortDocketsByUrgency,
+} from "@/lib/dockets/dashboardDisplay";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Docket = {
@@ -43,14 +49,6 @@ type EmailLogItem = {
   sent_at: string | null;
 };
 
-type LastCommunication = {
-  direction: "agent" | "customer";
-  source_type: "customer_question" | "customer_answer" | "agent_question" | "agent_email" | "system_email";
-  directionLabel: string;
-  snippet: string | null;
-  timestamp: string;
-};
-
 const STATUS_LABELS: Record<string, string> = {
   new: "New",
   questions_sent: "Questions Sent",
@@ -64,49 +62,6 @@ const STATUS_LABELS: Record<string, string> = {
   unresponsive: "Unresponsive",
 };
 
-const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> = {
-  new: {
-    text: "🏎️ New lead — send first questions",
-    className: "font-semibold text-[#4ade80]",
-  },
-  questions_sent: {
-    text: "⏳ Questions sent. Monitoring for answers.",
-    className: "font-normal text-[#aaa]",
-  },
-  answers_received: {
-    text: "🏎️ Customer answered — respond or pull research",
-    className: "font-semibold text-[#4ade80]",
-  },
-  research_in_progress: {
-    text: "🏎️ Research in progress",
-    className: "font-semibold text-[#fb923c]",
-  },
-  report_sent: {
-    text: "⏳ Report sent. Awaiting customer decision.",
-    className: "font-normal text-[#aaa]",
-  },
-  decision_made: {
-    text: "🏎️ Customer approved — handoff to Adam",
-    className: "font-semibold text-[#4ade80]",
-  },
-  cleared: {
-    text: "✅ Deal cleared",
-    className: "font-medium text-[#4ade80]",
-  },
-  unresponsive: {
-    text: "⚠️ No response after follow-ups",
-    className: "font-medium text-[#fbbf24]",
-  },
-  lost: {
-    text: "✕ Lost",
-    className: "font-normal text-[#666]",
-  },
-  paused: {
-    text: "⏸ Paused",
-    className: "font-normal text-[#666]",
-  },
-};
-
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
   { label: "Communication", status: "communication" },
@@ -116,54 +71,7 @@ const PROGRESS_STAGES = [
   { label: "Cleared", status: "cleared" },
 ] as const;
 
-const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
-  new: 0,
-  questions_sent: 1,
-  answers_received: 1,
-  research_in_progress: 2,
-  report_sent: 3,
-  decision_made: 4,
-  cleared: 5,
-};
-
-const CURRENT_STAGE_STYLES: Record<string, string> = {
-  new: "border-blue-300 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.6)]",
-  questions_sent: "border-amber-200 bg-amber-300 shadow-[0_0_12px_rgba(252,211,77,0.55)]",
-  answers_received: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
-  research_in_progress: "border-[#ffb197] bg-[#E55125] shadow-[0_0_12px_rgba(229,81,37,0.6)]",
-  report_sent: "border-blue-200 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.55)]",
-  decision_made: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
-  cleared: "border-emerald-200 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.65)]",
-};
-
-const DIMMED_STATUS_SET = new Set(["unresponsive", "lost", "paused"]);
 const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
-
-const STATUS_STRIPE_COLORS: Record<string, string> = {
-  new: "#4ade80",
-  questions_sent: "rgba(168,162,158,0.5)",
-  answers_received: "#4ade80",
-  research_in_progress: "#fb923c",
-  report_sent: "rgba(168,162,158,0.5)",
-  decision_made: "#4ade80",
-  cleared: "#4ade80",
-  unresponsive: "#fbbf24",
-  lost: "#525252",
-  paused: "#525252",
-};
-
-type StatusDisplay = {
-  text: string;
-  className: string;
-  stripeColor: string;
-};
-
-const ACTION_STRIPE_COLOR = "#4ade80";
-const WAITING_STRIPE_COLOR = "rgba(168,162,158,0.5)";
-
-function getStatusStripeColor(status: string | null | undefined) {
-  return STATUS_STRIPE_COLORS[status ?? "new"] ?? WAITING_STRIPE_COLOR;
-}
 
 function withAlpha(color: string, alpha: number) {
   if (color.startsWith("#") && color.length === 7) {
@@ -184,90 +92,6 @@ function withAlpha(color: string, alpha: number) {
 function formatStatus(status: string | null | undefined) {
   const normalized = status ?? "new";
   return STATUS_LABELS[normalized] ?? normalized;
-}
-
-type DocketWithLastCommunication = {
-  docket: Docket;
-  lastCommunication: LastCommunication | null;
-};
-
-const CLOSED_STATUS_PRIORITY: Record<string, number> = {
-  cleared: 0,
-  unresponsive: 1,
-  lost: 2,
-  paused: 2,
-};
-
-function getDocketUrgencyPriority({ docket, lastCommunication }: DocketWithLastCommunication) {
-  const status = docket.status ?? "new";
-  const sourceType = lastCommunication?.source_type;
-
-  if (sourceType === "customer_question") {
-    return 0;
-  }
-
-  if (status === "answers_received" && sourceType === "customer_answer") {
-    return 1;
-  }
-
-  if (status === "new") {
-    return 2;
-  }
-
-  if (status === "research_in_progress") {
-    return 3;
-  }
-
-  if (status === "decision_made") {
-    return 4;
-  }
-
-  if (status === "questions_sent" || status === "report_sent" || status === "answers_received") {
-    return 5;
-  }
-
-  if (status in CLOSED_STATUS_PRIORITY) {
-    return 6;
-  }
-
-  return 6;
-}
-
-function getDocketSortTimestamp({ docket, lastCommunication }: DocketWithLastCommunication) {
-  const timestamp = lastCommunication?.timestamp ?? docket.created_at;
-  const time = new Date(timestamp).getTime();
-
-  return Number.isFinite(time) ? time : 0;
-}
-
-function compareDocketsByUrgency(a: DocketWithLastCommunication, b: DocketWithLastCommunication) {
-  const aPriority = getDocketUrgencyPriority(a);
-  const bPriority = getDocketUrgencyPriority(b);
-
-  if (aPriority !== bPriority) {
-    return aPriority - bPriority;
-  }
-
-  if (aPriority === 6) {
-    const aStatusPriority = CLOSED_STATUS_PRIORITY[a.docket.status ?? ""] ?? Number.MAX_SAFE_INTEGER;
-    const bStatusPriority = CLOSED_STATUS_PRIORITY[b.docket.status ?? ""] ?? Number.MAX_SAFE_INTEGER;
-
-    if (aStatusPriority !== bStatusPriority) {
-      return aStatusPriority - bStatusPriority;
-    }
-  }
-
-  return getDocketSortTimestamp(b) - getDocketSortTimestamp(a);
-}
-
-function sortDocketsByUrgency(dockets: Docket[]) {
-  return dockets
-    .map((docket) => ({
-      docket,
-      lastCommunication: getLastCommunication(docket),
-    }))
-    .sort(compareDocketsByUrgency)
-    .map(({ docket }) => docket);
 }
 
 function deriveDisplayNameFromEmail(email?: string | null) {
@@ -317,298 +141,9 @@ function formatRelativeTime(timestamp: string) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function truncateSnippet(value: string | null | undefined, maxLength = 100) {
-  const normalized = value?.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
-}
-
-function getCustomerFacingEmailCommunication(
-  email: EmailLogItem
-): Pick<LastCommunication, "directionLabel" | "snippet"> | null {
-  const emailType = email.email_type;
-
-  if (!emailType) {
-    return null;
-  }
-
-  const labelsByType: Record<string, Pick<LastCommunication, "directionLabel" | "snippet">> = {
-    email_1_customer_welcome: {
-      directionLabel: "📤 Welcome email sent",
-      snippet: "Welcome email sent to customer",
-    },
-    email_2_questions_sent: {
-      directionLabel: "📤 Questions sent",
-      snippet: truncateSnippet(email.subject) ?? "Research questions sent to customer",
-    },
-    email_4_report_ready: {
-      directionLabel: "📤 Report sent",
-      snippet: "Full research report sent to customer",
-    },
-    email_5_customer_approval_next_steps: {
-      directionLabel: "📤 Approval next steps sent",
-      snippet: "Deposit and agreement instructions sent",
-    },
-    manual_reminder: {
-      directionLabel: "📤 Manual reminder sent",
-      snippet: "Status reminder sent to customer",
-    },
-  };
-
-  if (labelsByType[emailType]) {
-    return labelsByType[emailType];
-  }
-
-  const sequenceMatch = /^sequence_([ABC])_step_([123])$/.exec(emailType);
-  if (!sequenceMatch) {
-    return null;
-  }
-
-  const [, sequenceType, step] = sequenceMatch;
-
-  if (sequenceType === "A") {
-    return {
-      directionLabel: `📤 Follow-up #${step} sent`,
-      snippet: "Questions follow-up sent to customer",
-    };
-  }
-
-  if (sequenceType === "B") {
-    return {
-      directionLabel: `📤 Report follow-up #${step} sent`,
-      snippet: "Report follow-up sent to customer",
-    };
-  }
-
-  return {
-    directionLabel: `📤 Approval follow-up #${step} sent`,
-    snippet: "Approval follow-up sent to customer",
-  };
-}
-
-function getLastCommunication(docket: Docket): LastCommunication | null {
-  const customerFirstName = docket.customer_first_name?.trim() || "Customer";
-  type LastCommunicationCandidate = LastCommunication & {
-    email_type?: string | null;
-  };
-
-  const candidates: LastCommunicationCandidate[] = [];
-
-  for (const question of docket.marcus_questions ?? []) {
-    if (question.question_text?.trim() && question.created_at) {
-      candidates.push({
-        direction: "agent",
-        source_type: "agent_question",
-        directionLabel: "📤 You",
-        snippet: truncateSnippet(question.question_text),
-        timestamp: question.created_at,
-      });
-    }
-
-    if (question.answer_text?.trim() && question.answered_at) {
-      candidates.push({
-        direction: "customer",
-        source_type: "customer_answer",
-        directionLabel: `📥 ${customerFirstName}`,
-        snippet: truncateSnippet(question.answer_text),
-        timestamp: question.answered_at,
-      });
-    }
-  }
-
-  for (const question of docket.customer_questions ?? []) {
-    if (question.question_text?.trim() && question.created_at) {
-      candidates.push({
-        direction: "customer",
-        source_type: "customer_question",
-        directionLabel: `📥 ${customerFirstName}`,
-        snippet: truncateSnippet(question.question_text),
-        timestamp: question.created_at,
-      });
-    }
-  }
-
-  for (const email of docket.email_log ?? []) {
-    if (email.sent_at) {
-      const emailCommunication = getCustomerFacingEmailCommunication(email);
-
-      if (!emailCommunication) {
-        continue;
-      }
-
-      candidates.push({
-        direction: "agent",
-        source_type: "agent_email",
-        email_type: email.email_type,
-        directionLabel: emailCommunication.directionLabel,
-        snippet: emailCommunication.snippet,
-        timestamp: email.sent_at,
-      });
-    }
-  }
-
-  const dedupedCandidates = candidates.filter((candidate) => {
-    if (candidate.source_type !== "agent_email") {
-      return true;
-    }
-
-    const isPairedAgentQuestionEmail = candidate.email_type === "email_2_questions_sent";
-    const isPairedCustomerQuestionEmail =
-      candidate.email_type?.startsWith("customer_followup_question_sent") ||
-      candidate.email_type?.startsWith("report_question_sent");
-
-    if (!isPairedAgentQuestionEmail && !isPairedCustomerQuestionEmail) {
-      return true;
-    }
-
-    const pairedSourceType = isPairedAgentQuestionEmail ? "agent_question" : "customer_question";
-    const emailTime = new Date(candidate.timestamp).getTime();
-
-    return !candidates.some((otherCandidate) => {
-      if (otherCandidate.source_type !== pairedSourceType) {
-        return false;
-      }
-
-      const otherTime = new Date(otherCandidate.timestamp).getTime();
-      return Math.abs(emailTime - otherTime) < 60_000;
-    });
-  });
-
-  return dedupedCandidates.reduce<LastCommunication | null>((latest, candidate) => {
-    if (!latest) {
-      return candidate;
-    }
-
-    return new Date(candidate.timestamp).getTime() > new Date(latest.timestamp).getTime() ? candidate : latest;
-  }, null);
-}
-
-function isOutboundCommunication(sourceType: LastCommunication["source_type"] | undefined) {
-  return sourceType === "agent_question" || sourceType === "agent_email" || sourceType === "system_email";
-}
-
-function getStatusDisplay(status: string | null | undefined, lastCommunication: LastCommunication | null): StatusDisplay {
-  const normalizedStatus = status ?? "new";
-  const defaultStatusLine = STATUS_LINE_CONTENT[normalizedStatus] ?? {
-    text: formatStatus(normalizedStatus),
-    className: "font-normal text-[#888]",
-  };
-
-  if (normalizedStatus === "report_sent" || normalizedStatus === "research_in_progress") {
-    if (lastCommunication?.source_type === "customer_question") {
-      return {
-        text: "🏎️ Customer asked a question — respond",
-        className: "font-semibold text-[#4ade80]",
-        stripeColor: ACTION_STRIPE_COLOR,
-      };
-    }
-
-    return {
-      ...defaultStatusLine,
-      stripeColor: getStatusStripeColor(normalizedStatus),
-    };
-  }
-
-  if (normalizedStatus === "questions_sent") {
-    if (lastCommunication?.source_type === "customer_question") {
-      return {
-        text: "🏎️ Customer asked a question — respond",
-        className: "font-semibold text-[#4ade80]",
-        stripeColor: ACTION_STRIPE_COLOR,
-      };
-    }
-
-    if (lastCommunication?.source_type === "customer_answer") {
-      return {
-        text: "🏎️ Customer answered — respond or pull research",
-        className: "font-semibold text-[#4ade80]",
-        stripeColor: ACTION_STRIPE_COLOR,
-      };
-    }
-  }
-
-  if (normalizedStatus === "answers_received") {
-    if (lastCommunication?.source_type === "customer_question") {
-      return {
-        text: "🏎️ Customer asked a question — respond",
-        className: "font-semibold text-[#4ade80]",
-        stripeColor: ACTION_STRIPE_COLOR,
-      };
-    }
-
-    if (lastCommunication?.source_type === "customer_answer") {
-      return {
-        ...defaultStatusLine,
-        stripeColor: getStatusStripeColor(normalizedStatus),
-      };
-    }
-
-    if (isOutboundCommunication(lastCommunication?.source_type)) {
-      return {
-        text: "⏳ Follow-up sent. Awaiting customer response.",
-        className: "font-normal text-[#aaa]",
-        stripeColor: WAITING_STRIPE_COLOR,
-      };
-    }
-  }
-
-  return {
-    ...defaultStatusLine,
-    stripeColor: getStatusStripeColor(normalizedStatus),
-  };
-}
-
-function sortStatusHistory(history: DocketStatusHistoryItem[] | null | undefined) {
-  return Array.isArray(history)
-    ? [...history].sort((a, b) => {
-        const aTime = new Date(a.changed_at ?? 0).getTime();
-        const bTime = new Date(b.changed_at ?? 0).getTime();
-        return bTime - aTime;
-      })
-    : [];
-}
-
-function findPreviousPipelineStage(status: string, history: DocketStatusHistoryItem[] | null | undefined) {
-  for (const item of sortStatusHistory(history)) {
-    if (item.new_status === status && item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
-    }
-
-    if (item.new_status && item.new_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.new_status];
-    }
-
-    if (item.old_status && item.old_status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-      return PROGRESS_STAGE_INDEX_BY_STATUS[item.old_status];
-    }
-  }
-
-  return 0;
-}
-
-function getProgressState(docket: Docket) {
-  const status = docket.status ?? "new";
-
-  if (status in PROGRESS_STAGE_INDEX_BY_STATUS) {
-    return {
-      currentIndex: PROGRESS_STAGE_INDEX_BY_STATUS[status],
-      isDimmedCurrent: false,
-      status,
-    };
-  }
-
-  return {
-    currentIndex: DIMMED_STATUS_SET.has(status) ? findPreviousPipelineStage(status, docket.docket_status_history) : 0,
-    isDimmedCurrent: DIMMED_STATUS_SET.has(status),
-    status,
-  };
-}
-
 function DocketProgressBar({ docket }: { docket: Docket }) {
-  const { currentIndex, isDimmedCurrent, status } = getProgressState(docket);
+  const progressState = getProgressBarStage(docket.status, docket);
+  const { currentIndex, status } = progressState;
 
   return (
     <div aria-label={`Pipeline progress: ${formatStatus(status)}`} className="w-full py-3">
@@ -618,14 +153,13 @@ function DocketProgressBar({ docket }: { docket: Docket }) {
           const isCurrent = index === currentIndex;
           const isFuture = index > currentIndex;
           const dotClass = isCurrent
-            ? isDimmedCurrent
-              ? "border-zinc-500 bg-zinc-600"
-              : (CURRENT_STAGE_STYLES[status] ?? "border-white/50 bg-white/60")
+            ? progressState.currentStageClassName
             : isCompleted
-              ? "border-white bg-white"
-              : "border-zinc-700 bg-zinc-800";
-          const leftLineClass = isCompleted || isCurrent ? "bg-white/65" : "bg-zinc-800";
-          const rightLineClass = isCompleted ? "bg-white/65" : "bg-zinc-800";
+              ? progressState.completedStageClassName
+              : progressState.futureStageClassName;
+          const leftLineClass =
+            isCompleted || isCurrent ? progressState.completedLineClassName : progressState.futureLineClassName;
+          const rightLineClass = isCompleted ? progressState.completedLineClassName : progressState.futureLineClassName;
 
           return (
             <div className="min-w-0" key={stage.status}>
@@ -832,9 +366,8 @@ export default function AgentDashboardPage() {
             </section>
             <div className="grid gap-4">
               {dockets.map((docket) => {
-                const status = docket.status ?? "new";
-                const lastCommunication = getLastCommunication(docket);
-                const statusDisplay = getStatusDisplay(status, lastCommunication);
+                const lastCommunication = getLatestActivity(docket);
+                const statusDisplay = getStatusDisplay(docket, lastCommunication);
                 const stripeColor = statusDisplay.stripeColor;
                 const customerName =
                   `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
