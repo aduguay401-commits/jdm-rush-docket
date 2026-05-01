@@ -269,7 +269,13 @@ export default function AgentDashboardPage() {
       window.sessionStorage.removeItem(DASHBOARD_REFRESH_FLAG);
     }
 
-    void loadDashboard();
+    const timeoutId = window.setTimeout(() => {
+      void loadDashboard();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
   }, [loadDashboard]);
 
   useEffect(() => {
