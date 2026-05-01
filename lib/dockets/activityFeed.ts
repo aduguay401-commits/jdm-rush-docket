@@ -7,6 +7,20 @@
 
 export type DocketActivityEventCategory = "email" | "status" | "customer_message" | "agent_message";
 
+export type DocketActivityExpandableContent =
+  | {
+      type: "questions";
+      items: string[];
+    }
+  | {
+      type: "qa_pairs";
+      items: { question: string; answer: string }[];
+    }
+  | {
+      type: "message";
+      text: string;
+    };
+
 export type DocketActivityEvent = {
   id: string;
   timestamp: string;
@@ -15,7 +29,7 @@ export type DocketActivityEvent = {
   colorClass: string;
   title: string;
   subtitle?: string;
-  expandable_content?: string;
+  expandable_content?: DocketActivityExpandableContent;
 };
 
 type ActivityFeedDocket = {
@@ -48,6 +62,8 @@ type EmailLogInput = {
 type MarcusQuestionInput = {
   id?: string | null;
   question_text?: string | null;
+  answer_text?: string | null;
+  answered_at?: string | null;
   created_at?: string | null;
 };
 
@@ -55,6 +71,7 @@ type CustomerQuestionInput = {
   id?: string | null;
   question_text?: string | null;
   answer_text?: string | null;
+  answered_at?: string | null;
   created_at?: string | null;
 };
 
@@ -80,6 +97,15 @@ const EMAIL_TYPE_LABELS: Record<string, string> = {
   sequence_C_step_3: "Follow-up C (Step 3)",
 };
 
+const INTERNAL_EMAIL_TYPES = new Set([
+  "email_1_admin_notification",
+  "email_1_marcus_notification",
+  "email_4_proceed_to_research",
+  "customer_followup_question_sent",
+  "report_question_sent",
+  "report_decision_sent",
+]);
+
 const STATUS_LABELS: Record<string, string> = {
   new: "New",
   questions_sent: "Questions Sent",
@@ -102,6 +128,7 @@ const STATUS_TRANSITION_EMAIL_TYPES = new Map<string, string>([
 ]);
 
 const EMAIL_MATCH_WINDOW_SECONDS = 60;
+const QUESTION_BATCH_WINDOW_SECONDS = 5;
 
 function getArray<T>(value: T[] | null | undefined) {
   return Array.isArray(value) ? value : [];
@@ -212,7 +239,7 @@ function buildEmailTitle(
   const recipientLabel = getEmailRecipientLabel(docket, email.recipient_email);
 
   if (email.email_type === "email_4_report_ready") {
-    return isFirstReportReadyEmail ? `Report sent to ${recipientLabel}` : "Report resent (edited)";
+    return isFirstReportReadyEmail ? "Report sent to customer" : "Report resent (edited)";
   }
 
   return `${getEmailTypeLabel(email.email_type)} sent to ${recipientLabel}`;
@@ -240,6 +267,10 @@ function buildEmailEvent(
   index: number,
   isFirstReportReadyEmail: boolean
 ): DocketActivityEvent | null {
+  if (email.email_type && INTERNAL_EMAIL_TYPES.has(email.email_type)) {
+    return null;
+  }
+
   const timestamp = toIsoTimestamp(email.sent_at);
   if (!timestamp) {
     return null;
@@ -255,7 +286,9 @@ function buildEmailEvent(
     colorClass: visual.colorClass,
     title: buildEmailTitle(docket, email, isFirstReportReadyEmail),
     subtitle: email.subject?.trim() || undefined,
-    expandable_content: email.body_snapshot?.trim() || undefined,
+    expandable_content: email.body_snapshot?.trim()
+      ? { type: "message", text: email.body_snapshot.trim() }
+      : undefined,
   };
 }
 
@@ -283,38 +316,105 @@ function getFirstReportReadyEmailIndex(emails: EmailLogInput[]) {
   return firstIndex;
 }
 
-function buildAgentMessageEvent(question: MarcusQuestionInput, index: number): DocketActivityEvent | null {
-  const timestamp = toIsoTimestamp(question.created_at);
-  if (!timestamp) {
+type TimestampedQuestion<T> = T & {
+  timestamp: string;
+  timestampMs: number;
+};
+
+function groupByTimestampWindow<T extends object>(
+  items: T[],
+  getTimestamp: (item: T) => string | null | undefined
+): TimestampedQuestion<T>[][] {
+  const sorted = items
+    .map((item) => {
+      const timestamp = toIsoTimestamp(getTimestamp(item));
+      if (!timestamp) {
+        return null;
+      }
+
+      return {
+        ...item,
+        timestamp,
+        timestampMs: getTimestampMs(timestamp),
+      };
+    })
+    .filter((item): item is TimestampedQuestion<T> => item !== null)
+    .sort((left, right) => left.timestampMs - right.timestampMs);
+
+  const groups: TimestampedQuestion<T>[][] = [];
+
+  for (const item of sorted) {
+    const currentGroup = groups[groups.length - 1];
+    const firstGroupItem = currentGroup?.[0];
+
+    if (
+      !currentGroup ||
+      !firstGroupItem ||
+      item.timestampMs - firstGroupItem.timestampMs > QUESTION_BATCH_WINDOW_SECONDS * 1000
+    ) {
+      groups.push([item]);
+      continue;
+    }
+
+    currentGroup.push(item);
+  }
+
+  return groups;
+}
+
+function buildAgentQuestionBatchEvent(
+  questions: TimestampedQuestion<MarcusQuestionInput>[],
+  index: number
+): DocketActivityEvent | null {
+  const firstQuestion = questions[0];
+  if (!firstQuestion) {
+    return null;
+  }
+
+  const questionTexts = questions.map((question) => question.question_text?.trim() || "No question provided.");
+
+  return {
+    id: `agent_message_batch:${questions.map((question) => question.id ?? question.timestamp).join(":")}:${index}`,
+    timestamp: firstQuestion.timestamp,
+    category: "agent_message",
+    icon: "📤",
+    colorClass: "text-[#E55125]",
+    title: `Agent sent ${questions.length} ${questions.length === 1 ? "question" : "questions"}`,
+    expandable_content: { type: "questions", items: questionTexts },
+  };
+}
+
+function buildCustomerAnswerBatchEvent(
+  questions: TimestampedQuestion<MarcusQuestionInput>[],
+  index: number
+): DocketActivityEvent | null {
+  const firstQuestion = questions[0];
+  if (!firstQuestion) {
     return null;
   }
 
   return {
-    id: `agent_message:${question.id ?? `${timestamp}:${index}`}`,
-    timestamp,
-    category: "agent_message",
-    icon: "📤",
-    colorClass: "text-[#E55125]",
-    title: "Agent message sent",
-    subtitle: question.question_text?.trim() || undefined,
-    expandable_content: question.question_text?.trim() || undefined,
+    id: `customer_answer_batch:${questions.map((question) => question.id ?? question.timestamp).join(":")}:${index}`,
+    timestamp: firstQuestion.timestamp,
+    category: "customer_message",
+    icon: "💬",
+    colorClass: "text-[#22c55e]",
+    title: `Customer answered ${questions.length} ${questions.length === 1 ? "question" : "questions"}`,
+    expandable_content: {
+      type: "qa_pairs",
+      items: questions.map((question) => ({
+        question: question.question_text?.trim() || "No question provided.",
+        answer: question.answer_text?.trim() || "No answer provided.",
+      })),
+    },
   };
 }
 
-function buildCustomerMessageContent(question: CustomerQuestionInput) {
-  const questionText = question.question_text?.trim() || "No question provided.";
-  const answerText = question.answer_text?.trim() || "awaiting answer";
-
-  return `Question: ${questionText}\n\nAnswer: ${answerText}`;
-}
-
-function buildCustomerMessageEvent(question: CustomerQuestionInput, index: number): DocketActivityEvent | null {
+function buildCustomerQuestionEvent(question: CustomerQuestionInput, index: number): DocketActivityEvent | null {
   const timestamp = toIsoTimestamp(question.created_at);
   if (!timestamp) {
     return null;
   }
-
-  const answerText = question.answer_text?.trim();
 
   return {
     id: `customer_message:${question.id ?? `${timestamp}:${index}`}`,
@@ -322,9 +422,8 @@ function buildCustomerMessageEvent(question: CustomerQuestionInput, index: numbe
     category: "customer_message",
     icon: "💬",
     colorClass: "text-[#22c55e]",
-    title: "Customer message received",
-    subtitle: answerText ? "Answered" : "awaiting answer",
-    expandable_content: buildCustomerMessageContent(question),
+    title: "Customer asked a question",
+    expandable_content: { type: "message", text: question.question_text?.trim() || "No question provided." },
   };
 }
 
@@ -361,15 +460,25 @@ export function getDocketActivityFeed(docket: ActivityFeedDocket): DocketActivit
     events.push(event);
   });
 
-  getArray(docket.marcus_questions).forEach((question, index) => {
-    const event = buildAgentMessageEvent(question, index);
+  groupByTimestampWindow(getArray(docket.marcus_questions), (question) => question.created_at).forEach((questions, index) => {
+    const event = buildAgentQuestionBatchEvent(questions, index);
+    if (event) {
+      events.push(event);
+    }
+  });
+
+  groupByTimestampWindow(
+    getArray(docket.marcus_questions).filter((question) => question.answer_text?.trim()),
+    (question) => question.answered_at
+  ).forEach((questions, index) => {
+    const event = buildCustomerAnswerBatchEvent(questions, index);
     if (event) {
       events.push(event);
     }
   });
 
   getArray(docket.customer_questions).forEach((question, index) => {
-    const event = buildCustomerMessageEvent(question, index);
+    const event = buildCustomerQuestionEvent(question, index);
     if (event) {
       events.push(event);
     }

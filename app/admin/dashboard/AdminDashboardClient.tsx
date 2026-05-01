@@ -10,7 +10,11 @@ import {
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
-import { getDocketActivityFeed, type DocketActivityEvent } from "@/lib/dockets/activityFeed";
+import {
+  getDocketActivityFeed,
+  type DocketActivityEvent,
+  type DocketActivityExpandableContent,
+} from "@/lib/dockets/activityFeed";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -162,6 +166,33 @@ function hasUnansweredMarcusQuestions(docket: NormalizedAdminDocket) {
 
 function isExpandableActivityEvent(event: DocketActivityEvent) {
   return event.category === "customer_message" || event.category === "agent_message";
+}
+
+function ActivityExpandableContent({ content }: { content: DocketActivityExpandableContent }) {
+  if (content.type === "questions") {
+    return (
+      <ol className="list-decimal space-y-2 pl-5">
+        {content.items.map((question, index) => (
+          <li key={`${question}-${index}`}>{question}</li>
+        ))}
+      </ol>
+    );
+  }
+
+  if (content.type === "qa_pairs") {
+    return (
+      <ol className="list-decimal space-y-3 pl-5">
+        {content.items.map((item, index) => (
+          <li key={`${item.question}-${index}`}>
+            <p className="text-white/85">{item.question}</p>
+            <p className="mt-1 text-[#E55125]">{item.answer}</p>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  return <p className="whitespace-pre-line">{content.text}</p>;
 }
 
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
@@ -798,7 +829,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                                 </RowElement>
                               {expanded && event.expandable_content ? (
                                 <div className="border-t border-white/10 px-3 py-3 text-sm leading-6 text-white/70">
-                                  <p className="whitespace-pre-line">{event.expandable_content}</p>
+                                  <ActivityExpandableContent content={event.expandable_content} />
                                 </div>
                               ) : null}
                               </div>
