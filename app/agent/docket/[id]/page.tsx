@@ -2348,16 +2348,30 @@ export default function AgentDocketDetailPage({
                     onClick={toggleAuctionSection}
                     type="button"
                   >
-                    <span className="flex items-center gap-3 text-lg font-medium">
-                      <span className={`inline-block text-sm transition-transform ${sectionExpanded.auction ? "rotate-90" : ""}`}>›</span>
-                      🔨 Auction Lots
+                    <span className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-medium">
+                      <span>🔨 Auction Lots</span>
+                      {!sectionExpanded.auction && !auctionHasMeaningfulData ? (
+                        <>
+                          <span className="text-white/45">·</span>
+                          <span className="text-sm font-normal text-white/45">Click to start</span>
+                        </>
+                      ) : null}
                     </span>
-                    {!sectionExpanded.auction && auctionHasMeaningfulData ? (
-                      <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
-                        <span className="h-2 w-2 rounded-full bg-[#E55125]" />
-                        {meaningfulAuctionListings.length} {meaningfulAuctionListings.length === 1 ? "lot" : "lots"}
+                    <span className="flex shrink-0 items-center gap-3">
+                      {!sectionExpanded.auction && auctionHasMeaningfulData ? (
+                        <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
+                          <span className="h-2 w-2 rounded-full bg-[#E55125]" />
+                          {meaningfulAuctionListings.length} {meaningfulAuctionListings.length === 1 ? "lot" : "lots"}
+                        </span>
+                      ) : null}
+                      <span
+                        className={`inline-block text-sm text-white/45 transition-transform duration-200 ${
+                          sectionExpanded.auction ? "rotate-90" : ""
+                        }`}
+                      >
+                        ›
                       </span>
-                    ) : null}
+                    </span>
                   </button>
 
                   <div
@@ -2519,9 +2533,6 @@ export default function AgentDocketDetailPage({
                       </div>
                     </div>
                   </div>
-                  {!sectionExpanded.auction && !auctionHasMeaningfulData ? (
-                    <p className="border-t border-white/10 px-4 py-3 text-sm text-white/45">Click to start</p>
-                  ) : null}
                 </div>
 
                 <div className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
@@ -2531,16 +2542,30 @@ export default function AgentDocketDetailPage({
                     onClick={toggleDealerSection}
                     type="button"
                   >
-                    <span className="flex items-center gap-3 text-lg font-medium">
-                      <span className={`inline-block text-sm transition-transform ${sectionExpanded.dealer ? "rotate-90" : ""}`}>›</span>
-                      🚗 Private Dealer Options
+                    <span className="flex min-w-0 flex-wrap items-center gap-2 text-lg font-medium">
+                      <span>🚗 Private Dealer Options</span>
+                      {!sectionExpanded.dealer && !dealerHasMeaningfulData ? (
+                        <>
+                          <span className="text-white/45">·</span>
+                          <span className="text-sm font-normal text-white/45">Click to start</span>
+                        </>
+                      ) : null}
                     </span>
-                    {!sectionExpanded.dealer && dealerHasMeaningfulData ? (
-                      <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
-                        <span className="h-2 w-2 rounded-full bg-[#E55125]" />
-                        {meaningfulDealerOptions.length} {meaningfulDealerOptions.length === 1 ? "option" : "options"}
+                    <span className="flex shrink-0 items-center gap-3">
+                      {!sectionExpanded.dealer && dealerHasMeaningfulData ? (
+                        <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
+                          <span className="h-2 w-2 rounded-full bg-[#E55125]" />
+                          {meaningfulDealerOptions.length} {meaningfulDealerOptions.length === 1 ? "option" : "options"}
+                        </span>
+                      ) : null}
+                      <span
+                        className={`inline-block text-sm text-white/45 transition-transform duration-200 ${
+                          sectionExpanded.dealer ? "rotate-90" : ""
+                        }`}
+                      >
+                        ›
                       </span>
-                    ) : null}
+                    </span>
                   </button>
 
                   <div
@@ -2810,9 +2835,6 @@ export default function AgentDocketDetailPage({
                       </div>
                   </div>
                 </div>
-                  {!sectionExpanded.dealer && !dealerHasMeaningfulData ? (
-                    <p className="border-t border-white/10 px-4 py-3 text-sm text-white/45">Click to start</p>
-                  ) : null}
                 </div>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
