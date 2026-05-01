@@ -803,13 +803,21 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     <section className="py-4">
                       {activityFeed.length === 0 ? <p className="text-sm text-white/50">No activity yet</p> : null}
                       <div className="relative space-y-3 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-[#444]">
-                        {activityFeed.map((event) => {
+                        {activityFeed.map((event, index) => {
                           const expandable = isExpandableActivityEvent(event) && event.expandable_content;
                           const expanded = expandedActivityEventIds.has(event.id);
                           const RowElement = expandable ? "button" : "div";
 
                           return (
                             <article className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={event.id}>
+                              {index < activityFeed.length - 1 ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="absolute left-4 top-[calc(100%+0.375rem)] z-10 -translate-x-1/2 text-[10px] leading-none text-[#E55125]"
+                                >
+                                  ▼
+                                </span>
+                              ) : null}
                               <span
                                 aria-hidden="true"
                                 className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-base ${event.colorClass}`}

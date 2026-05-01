@@ -425,6 +425,21 @@ function formatReportSentMessage(timestamp: string | null) {
   return formattedDate ? `Report sent to customer on ${formattedDate}.` : "Report sent to customer.";
 }
 
+function formatDraftSavedAgo(savedAt: string, now: number) {
+  const savedTime = new Date(savedAt).getTime();
+  if (!Number.isFinite(savedTime)) {
+    return "0 seconds ago";
+  }
+
+  const seconds = Math.max(0, Math.floor((now - savedTime) / 1000));
+  if (seconds < 60) {
+    return `${seconds} second${seconds === 1 ? "" : "s"} ago`;
+  }
+
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+}
+
 function formatChosenPath(path: string | null | undefined) {
   if (path === "private_dealer") {
     return "Private Dealer";
@@ -538,7 +553,8 @@ export default function AgentDocketDetailPage({
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
   const [isEditingSentReport, setIsEditingSentReport] = useState(false);
-  const [draftSavedVisible, setDraftSavedVisible] = useState(false);
+  const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [draftSavedNow, setDraftSavedNow] = useState(() => Date.now());
   const [sendingReminder, setSendingReminder] = useState(false);
   const [reminderSent, setReminderSent] = useState(false);
   const [reminderError, setReminderError] = useState<string | null>(null);
@@ -622,6 +638,10 @@ export default function AgentDocketDetailPage({
       };
     });
   }, [customerAnswers, sentQuestions]);
+  const draftSavedAgeSeconds = draftSavedAt
+    ? Math.max(0, Math.floor((draftSavedNow - new Date(draftSavedAt).getTime()) / 1000))
+    : null;
+  const draftSavedIsFresh = draftSavedAgeSeconds !== null && draftSavedAgeSeconds < 10;
 
   async function createSignedPreviewUrl(filePath: string) {
     const storagePath = extractStoragePath(filePath);
@@ -723,7 +743,9 @@ export default function AgentDocketDetailPage({
     lastSavedDraftRef.current = draft === null ? null : JSON.stringify(draft);
 
     if (options?.showIndicator !== false) {
-      setDraftSavedVisible(true);
+      const savedAt = new Date().toISOString();
+      setDraftSavedAt(savedAt);
+      setDraftSavedNow(Date.now());
     }
   }
 
@@ -909,18 +931,19 @@ export default function AgentDocketDetailPage({
   }, [docket, id, isFormDisabled, isFormReadOnly, researchDraft, shouldShowResearchForm]);
 
   useEffect(() => {
-    if (!draftSavedVisible) {
+    if (!draftSavedAt) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setDraftSavedVisible(false);
-    }, 2500);
+    setDraftSavedNow(Date.now());
+    const intervalId = window.setInterval(() => {
+      setDraftSavedNow(Date.now());
+    }, 2000);
 
     return () => {
-      window.clearTimeout(timeoutId);
+      window.clearInterval(intervalId);
     };
-  }, [draftSavedVisible]);
+  }, [draftSavedAt]);
 
   useEffect(() => {
     return () => {
@@ -2122,10 +2145,21 @@ export default function AgentDocketDetailPage({
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-xl font-semibold">Marcus Research Input Form</h2>
-                  {draftSavedVisible ? (
-                    <span className="text-xs font-medium text-emerald-300/90">Draft saved</span>
-                  ) : null}
                 </div>
+
+                {draftSavedAt ? (
+                  <div>
+                    <span
+                      className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium transition-colors duration-500 ${
+                        draftSavedIsFresh
+                          ? "border-green-500 text-green-400"
+                          : "border-gray-500 text-gray-500"
+                      }`}
+                    >
+                      ✓ Draft saved · {formatDraftSavedAgo(draftSavedAt, draftSavedNow)}
+                    </span>
+                  </div>
+                ) : null}
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
                   <h3 className="text-lg font-medium">Auction Sales History</h3>
