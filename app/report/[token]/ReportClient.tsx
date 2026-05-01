@@ -156,7 +156,21 @@ function cityLabel(city: string | null | undefined) {
 }
 
 function renderText(value: string | null | undefined) {
-  return typeof value === "string" && value.trim().length > 0 ? value : "N/A";
+  return typeof value === "string" && value.trim().length > 0 ? decodeTextEntities(value) : "N/A";
+}
+
+function decodeTextEntities(value: string) {
+  return value
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+
+function renderNoteText(value: string | null | undefined) {
+  return typeof value === "string" && value.trim().length > 0 ? decodeTextEntities(value.trim()) : "";
 }
 
 function hasDisplayNotes(value: string | null | undefined) {
@@ -388,7 +402,9 @@ function FeeBreakdownTable({
 
   return (
     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
-      <p className="mb-3 text-xs uppercase tracking-[0.15em] text-white/50">All amounts in CAD</p>
+      <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+        <p className="text-sm font-semibold text-white/70">ⓘ All amounts in CAD</p>
+      </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px] border-collapse text-left text-[14px] text-white/85 sm:text-sm">
           <tbody>
@@ -414,18 +430,21 @@ function FeeBreakdownTable({
       </div>
 
       {shouldShowPstLine ? (
-        <p className="mt-4 text-xs leading-5 text-white/55">
-          PST is paid separately at registration in your province and is not included in the total.
-          {hasPstValue
-            ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
-                breakdown.pstCAD
-              )}${
-                typeof breakdown?.pstRate === "number"
-                  ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
-                  : ""
-              }.`
-            : ""}
-        </p>
+        <div className="mt-4 rounded-xl border border-[#f59e0b]/35 bg-[#f59e0b]/10 px-4 py-3">
+          <p className="text-sm font-medium leading-6 text-[#ffd89a]">
+            <span aria-hidden="true">⚠ </span>
+            PST is paid separately at registration in your province and is not included in the total.
+            {hasPstValue
+              ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
+                  breakdown.pstCAD
+                )}${
+                  typeof breakdown?.pstRate === "number"
+                    ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
+                    : ""
+                }.`
+              : ""}
+          </p>
+        </div>
       ) : null}
       <p className="mt-2 text-xs leading-5 text-white/55">
         Exchange-rate disclaimer: CAD values are based on JPY/CAD rate
@@ -530,10 +549,10 @@ export function ReportClient({
     label: string;
   } | null>(null);
 
-  const visibleName = useMemo(
-    () => docket.customer_first_name?.trim() || "there",
-    [docket.customer_first_name]
-  );
+  const visibleName = useMemo(() => {
+    const firstName = docket.customer_first_name?.trim() ?? "";
+    return firstName.length >= 3 ? firstName : "";
+  }, [docket.customer_first_name]);
 
   const hasDecision = decisionState !== null;
   const destination = cityLabel(docket.destination_city);
@@ -862,7 +881,7 @@ export function ReportClient({
           <>
             <section className="pt-10">
               <h1 className="text-3xl font-semibold text-white sm:text-[2.35rem]">
-                Your Custom JDM Report is Ready, {visibleName}
+                Your Custom JDM Report is Ready{visibleName ? `, ${visibleName}` : ""}
               </h1>
               <SearchSummaryCard docket={docket} />
               {hasDecision ? (
@@ -895,7 +914,7 @@ export function ReportClient({
 
                   <p className="mt-5 text-sm text-white/65">Sales Notes</p>
                   <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                    {renderText(auctionResearch?.sales_history_notes)}
+                    {renderNoteText(auctionResearch?.sales_history_notes) || "N/A"}
                   </p>
                 </div>
               </section>
@@ -1088,9 +1107,9 @@ export function ReportClient({
 
                       {hasDisplayNotes(option.marcus_notes) ? (
                         <>
-                          <p className="mt-5 text-sm text-white/65">Marcus Notes</p>
+                          <p className="mt-5 text-sm text-white/65">Agent Notes</p>
                           <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                            {option.marcus_notes?.trim()}
+                            {renderNoteText(option.marcus_notes)}
                           </p>
                         </>
                       ) : null}
