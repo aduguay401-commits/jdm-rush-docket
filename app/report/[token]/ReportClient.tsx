@@ -99,6 +99,7 @@ type ReportClientProps = {
   auctionEstimate: AuctionEstimateRecord | null;
   decisionEndpoint: string;
   questionEndpoint: string;
+  previewMode?: boolean;
 };
 
 const CAD_FORMATTER = new Intl.NumberFormat("en-CA", {
@@ -472,6 +473,7 @@ export function ReportClient({
   auctionEstimate,
   decisionEndpoint,
   questionEndpoint,
+  previewMode = false,
 }: ReportClientProps) {
   const [approvalConfirmed, setApprovalConfirmed] = useState(false);
   const [customerFirstName, setCustomerFirstName] = useState("");
@@ -982,7 +984,7 @@ export function ReportClient({
                     exchange movement, and auction-side conditions.
                   </p>
 
-                  {!hasDecision ? (
+                  {!hasDecision && !previewMode ? (
                     <button
                       className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                       disabled={isDeciding}
@@ -1101,7 +1103,7 @@ export function ReportClient({
                         networkFeeLabel="Inter-dealer Network Fee"
                       />
 
-                      {!hasDecision ? (
+                      {!hasDecision && !previewMode ? (
                         <button
                           className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                           disabled={isDeciding}
@@ -1124,34 +1126,36 @@ export function ReportClient({
               )}
             </section>
 
-            <section className="border-t border-white/10 pt-10">
-              <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Ask Us Anything</h2>
-              <p className="mt-2 text-sm leading-6 text-white/65">
-                Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
-              </p>
+            {!previewMode ? (
+              <section className="border-t border-white/10 pt-10">
+                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Ask Us Anything</h2>
+                <p className="mt-2 text-sm leading-6 text-white/65">
+                  Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
+                </p>
 
-              <div className="mt-5">
-                <textarea
-                  className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                <div className="mt-5">
+                  <textarea
+                    className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                    disabled={isSendingQuestion}
+                    onChange={(event) => setQuestionText(event.target.value)}
+                    placeholder="Type your question"
+                    value={questionText}
+                  />
+                </div>
+
+                {questionError ? <p className="mt-4 text-sm text-red-400">{questionError}</p> : null}
+                {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
+
+                <button
+                  className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                   disabled={isSendingQuestion}
-                  onChange={(event) => setQuestionText(event.target.value)}
-                  placeholder="Type your question"
-                  value={questionText}
-                />
-              </div>
-
-              {questionError ? <p className="mt-4 text-sm text-red-400">{questionError}</p> : null}
-              {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
-
-              <button
-                className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                disabled={isSendingQuestion}
-                onClick={submitQuestion}
-                type="button"
-              >
-                {isSendingQuestion ? "Sending..." : "Send My Question"}
-              </button>
-            </section>
+                  onClick={submitQuestion}
+                  type="button"
+                >
+                  {isSendingQuestion ? "Sending..." : "Send My Question"}
+                </button>
+              </section>
+            ) : null}
           </>
         )}
       </div>

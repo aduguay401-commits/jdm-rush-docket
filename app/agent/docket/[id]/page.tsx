@@ -122,6 +122,30 @@ type ResearchDraft = {
   };
 };
 
+type ResearchSubmitPayload = {
+  hammerPriceLowJpy?: number;
+  hammerPriceHighJpy?: number;
+  recommendedMaxBidJpy?: number;
+  salesHistoryNotes?: string;
+  auctionListings?: Array<{ lotTitle: string; specs: string; photos: string[] }>;
+  privateDealerOptions?: Array<{
+    optionNumber: number;
+    year: string;
+    make: string;
+    model: string;
+    grade: string;
+    mileage: string;
+    colour: string;
+    transmission: TransmissionType;
+    trim: string;
+    dealerPriceJpy: number;
+    photos: string[];
+    salesSheetUrl: string;
+    notes: string;
+  }>;
+  overallNotes: string;
+};
+
 const MAX_QUESTIONS = 10;
 const RESEARCH_SUBMIT_ERROR_MESSAGE =
   "Unable to submit research. Please check all fields and try again, or contact support at adam@jdmrushimports.ca";
@@ -1700,59 +1724,8 @@ export default function AgentDocketDetailPage({
     return validationErrors;
   }
 
-  async function submitResearchReport() {
-    console.log("[Research Submit] START", {
-      docketId: id,
-      submittingResearch,
-      researchLocked,
-      at: new Date().toISOString(),
-    });
-
-    if (isFormDisabled) {
-      console.log("[Research Submit] BLOCKED", {
-        reason: researchLocked ? "research_locked" : "submit_in_progress",
-      });
-      return;
-    }
-
-    const validationErrors = validateResearchForm();
-
-    if (validationErrors.length > 0) {
-      const message = `Validation failed. Fix the following fields:\n${validationErrors
-        .map((item) => `- ${item}`)
-        .join("\n")}`;
-      console.error("[Research Submit] VALIDATION_FAILED", { validationErrors });
-      setError(message);
-      return;
-    }
-
-    setError(null);
-    setResearchConfirmation(null);
-    setSubmittingResearch(true);
-
-    const payload: {
-      hammerPriceLowJpy?: number;
-      hammerPriceHighJpy?: number;
-      recommendedMaxBidJpy?: number;
-      salesHistoryNotes?: string;
-      auctionListings?: Array<{ lotTitle: string; specs: string; photos: string[] }>;
-      privateDealerOptions?: Array<{
-        optionNumber: number;
-        year: string;
-        make: string;
-        model: string;
-        grade: string;
-        mileage: string;
-        colour: string;
-        transmission: TransmissionType;
-        trim: string;
-        dealerPriceJpy: number;
-        photos: string[];
-        salesSheetUrl: string;
-        notes: string;
-      }>;
-      overallNotes: string;
-    } = {
+  function buildResearchSubmitPayload(): ResearchSubmitPayload {
+    const payload: ResearchSubmitPayload = {
       overallNotes: overallNotes.trim(),
     };
 
@@ -1789,6 +1762,74 @@ export default function AgentDocketDetailPage({
           notes: option.notes.trim(),
         }));
     }
+
+    return payload;
+  }
+
+  async function previewResearchReport() {
+    if (isFormDisabled) {
+      return;
+    }
+
+    const validationErrors = validateResearchForm();
+
+    if (validationErrors.length > 0) {
+      const message = `Validation failed. Fix the following fields:\n${validationErrors
+        .map((item) => `- ${item}`)
+        .join("\n")}`;
+      console.error("[Research Preview] VALIDATION_FAILED", { validationErrors });
+      setError(message);
+      return;
+    }
+
+    setError(null);
+    setResearchConfirmation(null);
+    setSubmittingResearch(true);
+
+    try {
+      await saveResearchDraft(researchDraft, { showIndicator: false });
+      router.push(`/agent/docket/${id}/preview`);
+    } catch (draftError) {
+      console.error("[Research Preview] DRAFT_SAVE_FAILED", {
+        docketId: id,
+        error: draftError instanceof Error ? draftError.message : draftError,
+      });
+      setError(draftError instanceof Error ? draftError.message : "Failed to save draft before preview.");
+      setSubmittingResearch(false);
+    }
+  }
+
+  async function submitResearchReport() {
+    console.log("[Research Submit] START", {
+      docketId: id,
+      submittingResearch,
+      researchLocked,
+      at: new Date().toISOString(),
+    });
+
+    if (isFormDisabled) {
+      console.log("[Research Submit] BLOCKED", {
+        reason: researchLocked ? "research_locked" : "submit_in_progress",
+      });
+      return;
+    }
+
+    const validationErrors = validateResearchForm();
+
+    if (validationErrors.length > 0) {
+      const message = `Validation failed. Fix the following fields:\n${validationErrors
+        .map((item) => `- ${item}`)
+        .join("\n")}`;
+      console.error("[Research Submit] VALIDATION_FAILED", { validationErrors });
+      setError(message);
+      return;
+    }
+
+    setError(null);
+    setResearchConfirmation(null);
+    setSubmittingResearch(true);
+
+    const payload = buildResearchSubmitPayload();
 
     console.log("[Research Submit] PAYLOAD", payload);
 
@@ -2879,14 +2920,22 @@ export default function AgentDocketDetailPage({
                     <button
                       className="rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                       disabled={isFormDisabled || uploadingTarget !== null}
-                      onClick={() => void submitResearchReport()}
+                      onClick={() => void previewResearchReport()}
                       type="button"
                     >
                       {submittingResearch
-                        ? "Sending..."
+                        ? "Preparing preview..."
                         : isEditingSubmittedReport
-                          ? "Save & Resend Report"
-                          : "Send to Customer"}
+                          ? "Preview Updated Report"
+                          : "Preview Report"}
+                    </button>
+                    <button
+                      className="w-full text-right text-xs font-medium text-white/45 transition hover:text-white/70 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isFormDisabled || uploadingTarget !== null}
+                      onClick={() => void submitResearchReport()}
+                      type="button"
+                    >
+                      Skip preview and send directly →
                     </button>
                   </div>
                 ) : null}
