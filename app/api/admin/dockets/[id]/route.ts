@@ -5,10 +5,7 @@ type PatchPayload = {
   status?: string | null;
   admin_notes?: string | null;
   is_flagged?: boolean | null;
-  is_paused?: boolean | null;
-  paused_until?: string | null;
   lost_reason?: string | null;
-  estimated_deal_value?: number | null;
   is_archived?: boolean | null;
   archived_at?: string | null;
   research_draft?: Record<string, unknown> | null;
@@ -62,20 +59,8 @@ export async function PATCH(
       updates.is_flagged = payload.is_flagged;
     }
 
-    if (Object.prototype.hasOwnProperty.call(payload, "is_paused")) {
-      updates.is_paused = payload.is_paused;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(payload, "paused_until")) {
-      updates.paused_until = payload.paused_until;
-    }
-
     if (Object.prototype.hasOwnProperty.call(payload, "lost_reason")) {
       updates.lost_reason = payload.lost_reason;
-    }
-
-    if (Object.prototype.hasOwnProperty.call(payload, "estimated_deal_value")) {
-      updates.estimated_deal_value = payload.estimated_deal_value;
     }
 
     if (Object.prototype.hasOwnProperty.call(payload, "is_archived")) {

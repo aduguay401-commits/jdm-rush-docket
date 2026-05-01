@@ -126,7 +126,7 @@ function formatRelativeTime(timestamp: string) {
 }
 
 function isPaused(docket: NormalizedAdminDocket) {
-  return docket.is_paused || docket.status === "paused";
+  return docket.status === "paused";
 }
 
 function isNeedsAttention(docket: NormalizedAdminDocket) {

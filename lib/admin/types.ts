@@ -53,10 +53,7 @@ export type AdminDocket = {
   additional_notes: string | null;
   admin_notes: string | null;
   is_flagged: boolean | null;
-  is_paused: boolean | null;
-  paused_until: string | null;
   lost_reason: string | null;
-  estimated_deal_value: number | null;
   is_archived: boolean | null;
   archived_at: string | null;
   report_url_token: string | null;
