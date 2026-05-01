@@ -405,28 +405,28 @@ function FeeBreakdownTable({
       <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
         <p className="text-sm font-semibold text-white/70">ⓘ All amounts in CAD</p>
       </div>
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px] border-collapse text-left text-[14px] text-white/85 sm:text-sm">
-          <tbody>
-            {rows.map(([label, value], index) => {
-              const isTotal = label === "Total Delivered Price";
-              return (
-                <tr className="border-b border-white/10 last:border-b-0" key={`${label}-${index}`}>
-                  <td className={`py-2 pr-4 text-[14px] sm:text-sm ${isTotal ? "font-semibold text-white" : ""}`}>
-                    {label}
-                  </td>
-                  <td
-                    className={`py-2 text-right text-[14px] font-semibold sm:text-sm ${
-                      isTotal ? "text-[#E55125]" : ""
-                    }`}
-                  >
-                    {formatCad(value)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+      <div className="divide-y divide-white/10">
+        {rows.map(([label, value], index) => {
+          const isTotal = label === "Total Delivered Price";
+          return (
+            <div className="flex items-start justify-between gap-3 py-2" key={`${label}-${index}`}>
+              <span
+                className={`min-w-0 flex-1 text-[14px] leading-5 sm:text-sm ${
+                  isTotal ? "font-semibold text-white" : "text-white/85"
+                }`}
+              >
+                {label}
+              </span>
+              <span
+                className={`shrink-0 text-right text-[14px] font-semibold leading-5 sm:text-sm ${
+                  isTotal ? "text-[#E55125]" : "text-white/90"
+                }`}
+              >
+                {formatCad(value)}
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {shouldShowPstLine ? (
@@ -880,7 +880,7 @@ export function ReportClient({
         {!approvalConfirmed && (
           <>
             <section className="pt-10">
-              <h1 className="text-3xl font-semibold text-white sm:text-[2.35rem]">
+              <h1 className="break-words text-3xl font-semibold text-white sm:text-[2.35rem]">
                 Your Custom JDM Report is Ready{visibleName ? `, ${visibleName}` : ""}
               </h1>
               <SearchSummaryCard docket={docket} />
@@ -1005,7 +1005,7 @@ export function ReportClient({
 
                   {!hasDecision && !previewMode ? (
                     <button
-                      className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                      className="mt-5 min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                       disabled={isDeciding}
                       onClick={() => submitDecision("auction")}
                       type="button"
@@ -1048,16 +1048,26 @@ export function ReportClient({
                         <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
                           <p className="text-sm font-medium text-white">Sales Sheet</p>
                           {isReportImageFile(option.sales_sheet_url) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              alt={`Dealer option ${option.option_number} sales sheet`}
-                              className="mt-3 max-h-[520px] w-full rounded-xl border border-white/10 object-contain"
-                              loading="lazy"
-                              src={option.sales_sheet_url}
-                            />
+                            <>
+                              <a
+                                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                                href={option.sales_sheet_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open full-size sales sheet
+                              </a>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                alt={`Dealer option ${option.option_number} sales sheet`}
+                                className="mt-3 max-h-[520px] w-full max-w-full rounded-xl border border-white/10 object-contain"
+                                loading="lazy"
+                                src={option.sales_sheet_url}
+                              />
+                            </>
                           ) : isReportPdfFile(option.sales_sheet_url) ? (
                             <a
-                              className="mt-2 inline-flex text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                              className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
                               href={option.sales_sheet_url}
                               rel="noreferrer"
                               target="_blank"
@@ -1066,7 +1076,7 @@ export function ReportClient({
                             </a>
                           ) : (
                             <a
-                              className="mt-2 inline-flex text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                              className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
                               href={option.sales_sheet_url}
                               rel="noreferrer"
                               target="_blank"
@@ -1124,7 +1134,7 @@ export function ReportClient({
 
                       {!hasDecision && !previewMode ? (
                         <button
-                          className="mt-5 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                          className="mt-5 min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                           disabled={isDeciding}
                           onClick={() =>
                             submitDecision(
@@ -1166,7 +1176,7 @@ export function ReportClient({
                 {questionSuccess ? <p className="mt-4 text-sm text-emerald-400">{questionSuccess}</p> : null}
 
                 <button
-                  className="mt-5 rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                  className="mt-5 min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70 sm:w-auto"
                   disabled={isSendingQuestion}
                   onClick={submitQuestion}
                   type="button"

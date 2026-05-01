@@ -96,25 +96,32 @@ export default function PreviewClient({
   return (
     <main className="min-h-screen bg-[#0d0d0d] text-white">
       <div className="sticky top-0 z-40 border-b border-white/10 bg-[#101010]/95 px-4 py-3 backdrop-blur sm:px-6">
-        <div className="mx-auto flex max-w-6xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <button
-            className="inline-flex items-center justify-center rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white"
-            onClick={() => router.push(editUrl)}
-            type="button"
-          >
-            ← Back to Edit
-          </button>
-          <p className="text-center text-sm text-white/55">
-            Preview — this is what {getCustomerName(docket)} will see
+        <div className="mx-auto max-w-6xl">
+          <div className="grid grid-cols-2 items-center gap-3 sm:grid-cols-[auto_1fr_auto]">
+            <button
+              className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white"
+              onClick={() => router.push(editUrl)}
+              type="button"
+            >
+              ← Back
+              <span className="hidden sm:inline">&nbsp;to Edit</span>
+            </button>
+            <p className="hidden text-center text-sm text-white/55 sm:block">
+              Preview — this is what {getCustomerName(docket)} will see
+            </p>
+            <button
+              className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+              disabled={submitting}
+              onClick={() => void sendToCustomer()}
+              type="button"
+            >
+              {submitting ? "Sending..." : "Send"}
+              <span className="hidden sm:inline">&nbsp;to Customer</span>
+            </button>
+          </div>
+          <p className="mt-2 text-center text-xs text-white/55 sm:hidden">
+            Preview for {getCustomerName(docket)}
           </p>
-          <button
-            className="inline-flex items-center justify-center rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-            disabled={submitting}
-            onClick={() => void sendToCustomer()}
-            type="button"
-          >
-            {submitting ? "Sending..." : "Send to Customer"}
-          </button>
         </div>
         {error ? (
           <div className="mx-auto mt-3 max-w-6xl rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
