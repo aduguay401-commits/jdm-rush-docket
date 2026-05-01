@@ -44,3 +44,8 @@ export async function requireAdmin() {
   const auth = await getCurrentUserRole();
   return auth.user && auth.role === "admin";
 }
+
+export async function requireAdminOrAgent() {
+  const auth = await getCurrentUserRole();
+  return auth.user && (auth.role === "admin" || auth.role === "agent");
+}

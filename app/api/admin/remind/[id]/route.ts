@@ -1,7 +1,7 @@
 import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
-import { requireAdmin } from "@/lib/admin/auth";
+import { requireAdminOrAgent } from "@/lib/admin/auth";
 
 type ReminderCta = {
   message: string;
@@ -111,7 +111,7 @@ export async function POST(
   _request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  if (!(await requireAdmin())) {
+  if (!(await requireAdminOrAgent())) {
     return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
   }
 

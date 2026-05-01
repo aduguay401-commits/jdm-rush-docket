@@ -556,9 +556,13 @@ export default function AgentDocketDetailPage({
   const [researchLocked, setResearchLocked] = useState(false);
   const [isEditingSentReport, setIsEditingSentReport] = useState(false);
   const [draftSavedVisible, setDraftSavedVisible] = useState(false);
+  const [sendingReminder, setSendingReminder] = useState(false);
+  const [reminderSent, setReminderSent] = useState(false);
+  const [reminderError, setReminderError] = useState<string | null>(null);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
   const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
+  const reminderSentTimeoutRef = useRef<number | null>(null);
 
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
@@ -972,6 +976,14 @@ export default function AgentDocketDetailPage({
   }, [draftSavedVisible]);
 
   useEffect(() => {
+    return () => {
+      if (reminderSentTimeoutRef.current) {
+        window.clearTimeout(reminderSentTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!docket) {
       return;
     }
@@ -1201,6 +1213,41 @@ export default function AgentDocketDetailPage({
     setDocket((prev) => (prev ? { ...prev, status: "research_in_progress" } : prev));
     setProceedConfirmation("Confirmed. You can now complete and send the research report below.");
     setProceeding(false);
+  }
+
+  async function sendReportReminder() {
+    if (sendingReminder || !docket) {
+      return;
+    }
+
+    setSendingReminder(true);
+    setReminderSent(false);
+    setReminderError(null);
+
+    if (reminderSentTimeoutRef.current) {
+      window.clearTimeout(reminderSentTimeoutRef.current);
+      reminderSentTimeoutRef.current = null;
+    }
+
+    try {
+      const response = await fetch(`/api/admin/remind/${docket.id}`, { method: "POST" });
+      const result = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to send reminder.");
+      }
+
+      window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
+      setReminderSent(true);
+      reminderSentTimeoutRef.current = window.setTimeout(() => {
+        setReminderSent(false);
+        reminderSentTimeoutRef.current = null;
+      }, 3000);
+    } catch (sendError) {
+      setReminderError(sendError instanceof Error ? sendError.message : "Failed to send reminder.");
+    } finally {
+      setSendingReminder(false);
+    }
   }
 
   function updateAuctionListing(index: number, patch: Partial<AuctionListingForm>) {
@@ -2060,14 +2107,27 @@ export default function AgentDocketDetailPage({
               <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
                 <p className="text-sm font-medium text-white">{formatReportSentMessage(reportSentAt)}</p>
                 {reportUrl ? (
-                  <a
-                    className="mt-2 inline-flex text-sm font-medium text-[#22c55e] underline underline-offset-2 hover:text-green-300"
-                    href={reportUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    View report
-                  </a>
+                  <>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <a
+                        className="inline-flex rounded-lg border border-[#22c55e] px-4 py-2 text-sm font-medium text-[#22c55e] transition hover:bg-[#22c55e]/10"
+                        href={reportUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        View Report
+                      </a>
+                      <button
+                        className="inline-flex rounded-lg border border-[#22c55e] px-4 py-2 text-sm font-medium text-[#22c55e] transition hover:bg-[#22c55e]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={sendingReminder}
+                        onClick={sendReportReminder}
+                        type="button"
+                      >
+                        {sendingReminder ? "Sending..." : reminderSent ? "Reminder Sent ✓" : "Send Reminder"}
+                      </button>
+                    </div>
+                    {reminderError ? <p className="mt-2 text-sm text-red-300">{reminderError}</p> : null}
+                  </>
                 ) : null}
               </section>
             ) : null}
