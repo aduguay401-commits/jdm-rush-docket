@@ -116,6 +116,10 @@ type ResearchDraft = {
   overallNotes: string;
   auctionListings: AuctionListingForm[];
   dealerOptions: DealerOptionForm[];
+  sectionExpanded?: {
+    auction: boolean;
+    dealer: boolean;
+  };
 };
 
 const MAX_QUESTIONS = 10;
@@ -213,10 +217,29 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
 ];
 
 function createInitialAuctionListings() {
-  return [{ ...INITIAL_AUCTION_LISTING }];
+  return [] as AuctionListingForm[];
+}
+
+function createStarterAuctionListing() {
+  return { ...INITIAL_AUCTION_LISTING };
 }
 
 function createInitialDealerOptions() {
+  return [] as DealerOptionForm[];
+}
+
+function createDealerOption(optionNumber: 1 | 2 | 3, expanded = true) {
+  const template = INITIAL_DEALER_OPTIONS.find((option) => option.optionNumber === optionNumber) ?? INITIAL_DEALER_OPTIONS[0];
+
+  return {
+    ...template,
+    optionNumber,
+    expanded,
+    photos: [...template.photos],
+  };
+}
+
+function createAllDealerOptions() {
   return INITIAL_DEALER_OPTIONS.map((option) => ({
     ...option,
     photos: [...option.photos],
@@ -232,6 +255,10 @@ function createEmptyResearchDraft(): ResearchDraft {
     overallNotes: "",
     auctionListings: createInitialAuctionListings(),
     dealerOptions: createInitialDealerOptions(),
+    sectionExpanded: {
+      auction: false,
+      dealer: false,
+    },
   };
 }
 
@@ -279,6 +306,67 @@ function normalizeDealerOptionDraft(value: unknown, fallback: DealerOptionForm):
   };
 }
 
+function hasMeaningfulAuctionListingData(listing: AuctionListingForm) {
+  return listing.lotTitle.trim().length > 0 || listing.specs.trim().length > 0 || listing.photos.length > 0;
+}
+
+function hasDealerMeaningfulData(options: DealerOptionForm[]) {
+  return options.some((option) =>
+    [
+      option.year,
+      option.make,
+      option.model,
+      option.grade,
+      option.mileage,
+      option.colour,
+      option.trim,
+      option.dealerPriceJpy,
+      option.dealerPriceCad,
+      option.salesSheetUrl,
+      option.notes,
+    ].some((value) => value.trim().length > 0) || option.photos.length > 0
+  );
+}
+
+function hasAuctionMeaningfulData({
+  hammerPriceLowJpy,
+  hammerPriceHighJpy,
+  recommendedMaxBidJpy,
+  auctionListings,
+  auctionExpanded,
+}: {
+  hammerPriceLowJpy: string;
+  hammerPriceHighJpy: string;
+  recommendedMaxBidJpy: string;
+  auctionListings: AuctionListingForm[];
+  auctionExpanded: boolean;
+}) {
+  const hasListingData = auctionListings.some(hasMeaningfulAuctionListingData);
+  const hasPositiveAuctionPrice = [hammerPriceLowJpy, hammerPriceHighJpy, recommendedMaxBidJpy].some((value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) && numeric > 0;
+  });
+
+  return hasListingData || (auctionExpanded && hasPositiveAuctionPrice);
+}
+
+function getDataAwareSectionExpanded(draft: ResearchDraft) {
+  if (draft.sectionExpanded) {
+    return draft.sectionExpanded;
+  }
+
+  return {
+    auction: hasAuctionMeaningfulData({
+      hammerPriceLowJpy: draft.hammerPriceLowJpy,
+      hammerPriceHighJpy: draft.hammerPriceHighJpy,
+      recommendedMaxBidJpy: draft.recommendedMaxBidJpy,
+      auctionListings: draft.auctionListings,
+      auctionExpanded: false,
+    }),
+    dealer: hasDealerMeaningfulData(draft.dealerOptions),
+  };
+}
+
 function splitSubmittedResearchNotes(value: unknown) {
   const notes = toDraftString(value);
   const [salesHistoryNotes = "", ...recommendationParts] = notes.split(/\n{2,}/);
@@ -299,7 +387,7 @@ function normalizeResearchDraft(value: unknown): ResearchDraft | null {
     ? draft.auctionListings.map(normalizeAuctionListingDraft)
     : createInitialAuctionListings();
   const dealerOptionDrafts = Array.isArray(draft.dealerOptions) ? draft.dealerOptions : [];
-  const dealerOptions = createInitialDealerOptions().map((fallback) => {
+  const dealerOptions = createAllDealerOptions().flatMap((fallback) => {
     const savedOption = dealerOptionDrafts.find((option) => {
       if (!option || typeof option !== "object") {
         return false;
@@ -308,8 +396,18 @@ function normalizeResearchDraft(value: unknown): ResearchDraft | null {
       return (option as Partial<DealerOptionForm>).optionNumber === fallback.optionNumber;
     });
 
-    return normalizeDealerOptionDraft(savedOption, fallback);
+    return savedOption ? [normalizeDealerOptionDraft(savedOption, fallback)] : [];
   });
+  const sectionExpanded =
+    draft.sectionExpanded &&
+    typeof draft.sectionExpanded === "object" &&
+    typeof draft.sectionExpanded.auction === "boolean" &&
+    typeof draft.sectionExpanded.dealer === "boolean"
+      ? {
+          auction: draft.sectionExpanded.auction,
+          dealer: draft.sectionExpanded.dealer,
+        }
+      : undefined;
 
   return {
     hammerPriceLowJpy: toDraftString(draft.hammerPriceLowJpy),
@@ -317,8 +415,9 @@ function normalizeResearchDraft(value: unknown): ResearchDraft | null {
     recommendedMaxBidJpy: toDraftString(draft.recommendedMaxBidJpy),
     salesHistoryNotes: toDraftString(draft.salesHistoryNotes),
     overallNotes: toDraftString(draft.overallNotes),
-    auctionListings: auctionListings.length > 0 ? auctionListings : createInitialAuctionListings(),
+    auctionListings,
     dealerOptions,
+    ...(sectionExpanded ? { sectionExpanded } : {}),
   };
 }
 
@@ -343,16 +442,16 @@ function normalizeSubmittedResearchDraft(
       Array.isArray(auctionResearch?.auction_listings) && auctionResearch.auction_listings.length > 0
         ? auctionResearch.auction_listings.map(normalizeAuctionListingDraft)
         : createInitialAuctionListings(),
-    dealerOptions: createInitialDealerOptions().map((fallback) => {
+    dealerOptions: createAllDealerOptions().flatMap((fallback) => {
       const savedOption = dealerOptionsByNumber.get(fallback.optionNumber);
 
       if (!savedOption) {
-        return fallback;
+        return [];
       }
 
-      return {
+      return [{
         optionNumber: fallback.optionNumber,
-        expanded: fallback.expanded,
+        expanded: true,
         year: toDraftString(savedOption.year),
         make: toDraftString(savedOption.make),
         model: toDraftString(savedOption.model),
@@ -366,7 +465,7 @@ function normalizeSubmittedResearchDraft(
         photos: normalizeDraftStringArray(savedOption.photos),
         salesSheetUrl: toDraftString(savedOption.sales_sheet_url),
         notes: toDraftString(savedOption.marcus_notes),
-      };
+      }];
     }),
   };
 }
@@ -576,6 +675,7 @@ export default function AgentDocketDetailPage({
   const [salesHistoryNotes, setSalesHistoryNotes] = useState("");
   const [auctionListings, setAuctionListings] = useState<AuctionListingForm[]>(createInitialAuctionListings);
   const [dealerOptions, setDealerOptions] = useState<DealerOptionForm[]>(createInitialDealerOptions);
+  const [sectionExpanded, setSectionExpanded] = useState({ auction: false, dealer: false });
   const [overallNotes, setOverallNotes] = useState("");
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [submittingResearch, setSubmittingResearch] = useState(false);
@@ -620,17 +720,18 @@ export default function AgentDocketDetailPage({
     ? `https://docket.jdmrushimports.ca/report/${docket.report_url_token}`
     : null;
   const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
-  const hasAuctionListingSummary = auctionListings.some(
-    (listing) =>
-      listing.lotTitle.trim().length > 0 || listing.specs.trim().length > 0 || listing.photos.length > 0
-  );
-  const hasAuctionResearchSummary = [
+  const auctionHasMeaningfulData = hasAuctionMeaningfulData({
     hammerPriceLowJpy,
     hammerPriceHighJpy,
     recommendedMaxBidJpy,
-    salesHistoryNotes,
-  ].some((value) => value.trim().length > 0) || hasAuctionListingSummary;
-  const submittedDealerOptions = dealerOptions.filter((option) => hasAnyDealerData(option));
+    auctionListings,
+    auctionExpanded: sectionExpanded.auction,
+  });
+  const dealerHasMeaningfulData = hasDealerMeaningfulData(dealerOptions);
+  const meaningfulAuctionListings = auctionListings.filter(hasMeaningfulAuctionListingData);
+  const meaningfulDealerOptions = dealerOptions.filter((option) => hasAnyDealerData(option));
+  const hasAuctionResearchSummary = auctionHasMeaningfulData || salesHistoryNotes.trim().length > 0;
+  const submittedDealerOptions = meaningfulDealerOptions;
   const researchDraft = useMemo<ResearchDraft>(
     () => ({
       hammerPriceLowJpy,
@@ -640,6 +741,7 @@ export default function AgentDocketDetailPage({
       overallNotes,
       auctionListings,
       dealerOptions,
+      sectionExpanded,
     }),
     [
       auctionListings,
@@ -648,6 +750,7 @@ export default function AgentDocketDetailPage({
       hammerPriceLowJpy,
       overallNotes,
       recommendedMaxBidJpy,
+      sectionExpanded,
       salesHistoryNotes,
     ]
   );
@@ -814,6 +917,7 @@ export default function AgentDocketDetailPage({
       const loadedDocket = data as Docket;
       const savedDraft = normalizeResearchDraft(loadedDocket.research_draft);
       const initialDraft = savedDraft ?? createEmptyResearchDraft();
+      const initialSectionExpanded = getDataAwareSectionExpanded(initialDraft);
 
       setDocket(loadedDocket);
       setHammerPriceLowJpy(initialDraft.hammerPriceLowJpy);
@@ -823,7 +927,8 @@ export default function AgentDocketDetailPage({
       setOverallNotes(initialDraft.overallNotes);
       setAuctionListings(initialDraft.auctionListings);
       setDealerOptions(initialDraft.dealerOptions);
-      lastSavedDraftRef.current = JSON.stringify(initialDraft);
+      setSectionExpanded(initialSectionExpanded);
+      lastSavedDraftRef.current = JSON.stringify({ ...initialDraft, sectionExpanded: initialSectionExpanded });
       draftHydratedRef.current = true;
 
       const [
@@ -901,6 +1006,7 @@ export default function AgentDocketDetailPage({
 
       const hydratedDraft =
         savedDraft ?? normalizeSubmittedResearchDraft(auctionResearchData, dealerOptionsData ?? []);
+      const hydratedSectionExpanded = getDataAwareSectionExpanded(hydratedDraft);
 
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
@@ -913,7 +1019,8 @@ export default function AgentDocketDetailPage({
       setOverallNotes(hydratedDraft.overallNotes);
       setAuctionListings(hydratedDraft.auctionListings);
       setDealerOptions(hydratedDraft.dealerOptions);
-      lastSavedDraftRef.current = JSON.stringify(hydratedDraft);
+      setSectionExpanded(hydratedSectionExpanded);
+      lastSavedDraftRef.current = JSON.stringify({ ...hydratedDraft, sectionExpanded: hydratedSectionExpanded });
 
       const unreadQuestions = (customerQuestionsData ?? []).filter((question) => question.read_at === null);
       if (unreadQuestions.length > 0) {
@@ -1255,7 +1362,18 @@ export default function AgentDocketDetailPage({
   }
 
   function addAuctionListing() {
-    setAuctionListings((prev) => [...prev, { ...INITIAL_AUCTION_LISTING }]);
+    setAuctionListings((prev) => [...prev, createStarterAuctionListing()]);
+  }
+
+  function toggleAuctionSection() {
+    setSectionExpanded((prev) => {
+      const nextExpanded = !prev.auction;
+      if (nextExpanded) {
+        setAuctionListings((current) => (current.length > 0 ? current : [createStarterAuctionListing()]));
+      }
+
+      return { ...prev, auction: nextExpanded };
+    });
   }
 
   function removeAuctionListing(index: number) {
@@ -1285,6 +1403,32 @@ export default function AgentDocketDetailPage({
     setDealerOptions((prev) =>
       prev.map((item) => (item.optionNumber === optionNumber ? { ...item, ...patch } : item))
     );
+  }
+
+  function addDealerOption() {
+    setDealerOptions((prev) => {
+      const existingNumbers = new Set(prev.map((option) => option.optionNumber));
+      const nextOptionNumber = ([1, 2, 3] as const).find((optionNumber) => !existingNumbers.has(optionNumber));
+
+      if (!nextOptionNumber) {
+        return prev;
+      }
+
+      return [...prev, createDealerOption(nextOptionNumber, true)].sort(
+        (first, second) => first.optionNumber - second.optionNumber
+      );
+    });
+  }
+
+  function toggleDealerSection() {
+    setSectionExpanded((prev) => {
+      const nextExpanded = !prev.dealer;
+      if (nextExpanded) {
+        setDealerOptions((current) => (current.length > 0 ? current : [createDealerOption(1, true)]));
+      }
+
+      return { ...prev, dealer: nextExpanded };
+    });
   }
 
   function removeDealerOptionPhoto(optionNumber: number, photoIndex: number) {
@@ -1489,13 +1633,13 @@ export default function AgentDocketDetailPage({
     const low = Number(hammerPriceLowJpy);
     const high = Number(hammerPriceHighJpy);
     const maxBid = Number(recommendedMaxBidJpy);
-    const hasAuctionData =
-      hammerPriceLowJpy.trim().length > 0 ||
-      hammerPriceHighJpy.trim().length > 0 ||
-      recommendedMaxBidJpy.trim().length > 0 ||
-      auctionListings.some(
-        (listing) => listing.lotTitle.trim().length > 0 || listing.specs.trim().length > 0
-      );
+    const hasAuctionData = auctionHasMeaningfulData;
+    const hasDealerData = dealerHasMeaningfulData;
+    const populatedAuctionListings = auctionListings.filter(hasMeaningfulAuctionListingData);
+
+    if (!hasAuctionData && !hasDealerData) {
+      validationErrors.push("Add at least one auction lot or dealer option before sending.");
+    }
 
     if (hasAuctionData) {
       if (!Number.isFinite(low) || low <= 0) {
@@ -1516,63 +1660,36 @@ export default function AgentDocketDetailPage({
         validationErrors.push("Recommended Max Bid (JPY) is required and must be greater than 0.");
       }
 
-      for (let index = 0; index < auctionListings.length; index += 1) {
-        const listing = auctionListings[index];
+      if (populatedAuctionListings.length === 0) {
+        validationErrors.push("At least one auction listing is required when auction data is included.");
+      }
+
+      for (const listing of populatedAuctionListings) {
+        const listingIndex = auctionListings.indexOf(listing);
 
         if (!listing.lotTitle.trim() || !listing.specs.trim()) {
-          validationErrors.push(`Auction Listing ${index + 1} requires Lot Title and Specs.`);
+          validationErrors.push(`Auction Listing ${listingIndex + 1} requires Lot Title and Specs.`);
         }
       }
     }
 
-    const primaryOption = dealerOptions.find((option) => option.optionNumber === 1);
-    const hasPrimaryDealerData =
-      Boolean(primaryOption) &&
-      [
-        primaryOption?.year,
-        primaryOption?.make,
-        primaryOption?.model,
-        primaryOption?.dealerPriceJpy,
-      ].some((value) => Boolean(value?.trim()));
-    const hasAdditionalDealerData = dealerOptions
-      .filter((item) => item.optionNumber !== 1)
-      .some((option) => hasAnyDealerData(option));
+    if (hasDealerData) {
+      for (const option of dealerOptions) {
+        if (!hasAnyDealerData(option)) {
+          continue;
+        }
 
-    if (!hasAuctionData && !hasPrimaryDealerData && !hasAdditionalDealerData) {
-      validationErrors.push("You must provide at least one private dealer option or auction research data.");
-    }
+        if (!option.year.trim() || !option.make.trim() || !option.model.trim()) {
+          validationErrors.push(
+            `Private Dealer Option ${option.optionNumber} must include Year, Make, and Model when used.`
+          );
+        }
 
-    if (
-      hasPrimaryDealerData &&
-      (!primaryOption || !primaryOption.year.trim() || !primaryOption.make.trim() || !primaryOption.model.trim())
-    ) {
-      validationErrors.push("Private Dealer Option 1 requires Year, Make, and Model.");
-    }
-
-    if (
-      hasPrimaryDealerData &&
-      (!primaryOption ||
-        !Number.isFinite(Number(primaryOption.dealerPriceJpy)) ||
-        Number(primaryOption.dealerPriceJpy) <= 0)
-    ) {
-      validationErrors.push("Private Dealer Option 1 requires a valid Dealer Price (JPY).");
-    }
-
-    for (const option of dealerOptions.filter((item) => item.optionNumber !== 1)) {
-      if (!hasAnyDealerData(option)) {
-        continue;
-      }
-
-      if (!option.year.trim() || !option.make.trim() || !option.model.trim()) {
-        validationErrors.push(
-          `Private Dealer Option ${option.optionNumber} must include Year, Make, and Model when used.`
-        );
-      }
-
-      if (!Number.isFinite(Number(option.dealerPriceJpy)) || Number(option.dealerPriceJpy) <= 0) {
-        validationErrors.push(
-          `Private Dealer Option ${option.optionNumber} must include a valid Dealer Price (JPY) when used.`
-        );
+        if (!Number.isFinite(Number(option.dealerPriceJpy)) || Number(option.dealerPriceJpy) <= 0) {
+          validationErrors.push(
+            `Private Dealer Option ${option.optionNumber} must include a valid Dealer Price (JPY) when used.`
+          );
+        }
       }
     }
 
@@ -1613,18 +1730,49 @@ export default function AgentDocketDetailPage({
     setResearchConfirmation(null);
     setSubmittingResearch(true);
 
-    const payload = {
-      hammerPriceLowJpy: Number(hammerPriceLowJpy),
-      hammerPriceHighJpy: Number(hammerPriceHighJpy),
-      recommendedMaxBidJpy: Number(recommendedMaxBidJpy),
-      salesHistoryNotes: salesHistoryNotes.trim(),
-      auctionListings: auctionListings.map((listing) => ({
-        lotTitle: listing.lotTitle.trim(),
-        specs: listing.specs.trim(),
-        photos: listing.photos,
-      })),
-      privateDealerOptions: dealerOptions
-        .filter((option) => option.optionNumber === 1 || hasAnyDealerData(option))
+    const payload: {
+      hammerPriceLowJpy?: number;
+      hammerPriceHighJpy?: number;
+      recommendedMaxBidJpy?: number;
+      salesHistoryNotes?: string;
+      auctionListings?: Array<{ lotTitle: string; specs: string; photos: string[] }>;
+      privateDealerOptions?: Array<{
+        optionNumber: number;
+        year: string;
+        make: string;
+        model: string;
+        grade: string;
+        mileage: string;
+        colour: string;
+        transmission: TransmissionType;
+        trim: string;
+        dealerPriceJpy: number;
+        photos: string[];
+        salesSheetUrl: string;
+        notes: string;
+      }>;
+      overallNotes: string;
+    } = {
+      overallNotes: overallNotes.trim(),
+    };
+
+    if (auctionHasMeaningfulData) {
+      payload.hammerPriceLowJpy = Number(hammerPriceLowJpy);
+      payload.hammerPriceHighJpy = Number(hammerPriceHighJpy);
+      payload.recommendedMaxBidJpy = Number(recommendedMaxBidJpy);
+      payload.salesHistoryNotes = salesHistoryNotes.trim();
+      payload.auctionListings = auctionListings
+        .filter(hasMeaningfulAuctionListingData)
+        .map((listing) => ({
+          lotTitle: listing.lotTitle.trim(),
+          specs: listing.specs.trim(),
+          photos: listing.photos,
+        }));
+    }
+
+    if (dealerHasMeaningfulData) {
+      payload.privateDealerOptions = dealerOptions
+        .filter(hasAnyDealerData)
         .map((option) => ({
           optionNumber: option.optionNumber,
           year: option.year.trim(),
@@ -1639,9 +1787,8 @@ export default function AgentDocketDetailPage({
           photos: option.photos,
           salesSheetUrl: option.salesSheetUrl.trim(),
           notes: option.notes.trim(),
-      })),
-      overallNotes: overallNotes.trim(),
-    };
+        }));
+    }
 
     console.log("[Research Submit] PAYLOAD", payload);
 
@@ -1724,6 +1871,7 @@ export default function AgentDocketDetailPage({
     setOverallNotes(emptyDraft.overallNotes);
     setAuctionListings(emptyDraft.auctionListings);
     setDealerOptions(emptyDraft.dealerOptions);
+    setSectionExpanded(emptyDraft.sectionExpanded ?? { auction: false, dealer: false });
     lastSavedDraftRef.current = JSON.stringify(emptyDraft);
 
     try {
@@ -1747,6 +1895,7 @@ export default function AgentDocketDetailPage({
         photos: [...option.photos],
       }))
     );
+    setSectionExpanded(getDataAwareSectionExpanded(draft));
   }
 
   function startSentReportEdit() {
@@ -2192,164 +2341,225 @@ export default function AgentDocketDetailPage({
                   </div>
                 ) : null}
 
-                <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-lg font-medium">Auction Sales History</h3>
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <label className="text-sm text-white/85">
-                      Hammer Price Low (JPY)
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                        disabled={isFormDisabled}
-                        min={0}
-                        onChange={(event) => setHammerPriceLowJpy(event.target.value)}
-                        placeholder="e.g. 1200000"
-                        type="number"
-                        value={hammerPriceLowJpy}
-                      />
-                    </label>
-                    <label className="text-sm text-white/85">
-                      Hammer Price High (JPY)
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                        disabled={isFormDisabled}
-                        min={0}
-                        onChange={(event) => setHammerPriceHighJpy(event.target.value)}
-                        placeholder="e.g. 1700000"
-                        type="number"
-                        value={hammerPriceHighJpy}
-                      />
-                    </label>
-                    <label className="text-sm text-white/85">
-                      Recommended Max Bid (JPY)
-                      <input
-                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                        disabled={isFormDisabled}
-                        min={0}
-                        onChange={(event) => setRecommendedMaxBidJpy(event.target.value)}
-                        placeholder="e.g. 1600000"
-                        type="number"
-                        value={recommendedMaxBidJpy}
-                      />
-                    </label>
-                  </div>
-                  <label className="block text-sm text-white/85">
-                    Sales History Notes
-                    <textarea
-                      className="mt-1 min-h-28 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                      disabled={isFormDisabled}
-                      onChange={(event) => setSalesHistoryNotes(event.target.value)}
-                      placeholder="Include previous sales and market behavior."
-                      value={salesHistoryNotes}
-                    />
-                  </label>
-                </div>
+                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
+                  <button
+                    className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition hover:bg-white/[0.03] disabled:cursor-not-allowed"
+                    disabled={isFormDisabled}
+                    onClick={toggleAuctionSection}
+                    type="button"
+                  >
+                    <span className="flex items-center gap-3 text-lg font-medium">
+                      <span className={`inline-block text-sm transition-transform ${sectionExpanded.auction ? "rotate-90" : ""}`}>›</span>
+                      🔨 Auction Lots
+                    </span>
+                    {!sectionExpanded.auction && auctionHasMeaningfulData ? (
+                      <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
+                        <span className="h-2 w-2 rounded-full bg-[#E55125]" />
+                        {meaningfulAuctionListings.length} {meaningfulAuctionListings.length === 1 ? "lot" : "lots"}
+                      </span>
+                    ) : null}
+                  </button>
 
-                <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-lg font-medium">Current Weekly Auction Listings</h3>
-                    <button
-                      className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isFormDisabled}
-                      onClick={addAuctionListing}
-                      type="button"
-                    >
-                      + Add Another Auction Lot
-                    </button>
-                  </div>
-
-                  <div className="space-y-4">
-                    {auctionListings.map((listing, listingIndex) => (
-                      <div className="space-y-3 rounded-lg border border-white/10 bg-black/25 p-4" key={`auction-listing-${listingIndex + 1}`}>
-                        <div className="flex items-center justify-between gap-3">
-                          <p className="text-sm font-medium text-white/90">Auction Listing {listingIndex + 1}</p>
-                          {auctionListings.length > 1 ? (
-                            <button
-                              className="rounded-md border border-red-400/60 px-3 py-1 text-xs text-red-300 transition hover:bg-red-400/10"
+                  <div
+                    className={`grid transition-all duration-300 ${
+                      sectionExpanded.auction ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="space-y-4 border-t border-white/10 p-4">
+                        <div className="grid gap-4 sm:grid-cols-3">
+                          <label className="text-sm text-white/85">
+                            Hammer Price Low (JPY)
+                            <input
+                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                               disabled={isFormDisabled}
-                              onClick={() => removeAuctionListing(listingIndex)}
-                              type="button"
-                            >
-                              Remove
-                            </button>
-                          ) : null}
+                              min={0}
+                              onChange={(event) => setHammerPriceLowJpy(event.target.value)}
+                              placeholder="e.g. 1200000"
+                              type="number"
+                              value={hammerPriceLowJpy}
+                            />
+                          </label>
+                          <label className="text-sm text-white/85">
+                            Hammer Price High (JPY)
+                            <input
+                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                              disabled={isFormDisabled}
+                              min={0}
+                              onChange={(event) => setHammerPriceHighJpy(event.target.value)}
+                              placeholder="e.g. 1700000"
+                              type="number"
+                              value={hammerPriceHighJpy}
+                            />
+                          </label>
+                          <label className="text-sm text-white/85">
+                            Recommended Max Bid (JPY)
+                            <input
+                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                              disabled={isFormDisabled}
+                              min={0}
+                              onChange={(event) => setRecommendedMaxBidJpy(event.target.value)}
+                              placeholder="e.g. 1600000"
+                              type="number"
+                              value={recommendedMaxBidJpy}
+                            />
+                          </label>
                         </div>
                         <label className="block text-sm text-white/85">
-                          Lot Title
-                          <input
-                            className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                            disabled={isFormDisabled}
-                            onChange={(event) => updateAuctionListing(listingIndex, { lotTitle: event.target.value })}
-                            type="text"
-                            value={listing.lotTitle}
-                          />
-                        </label>
-                        <label className="block text-sm text-white/85">
-                          Specs
+                          Sales History Notes
                           <textarea
-                            className="mt-1 min-h-24 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                            className="mt-1 min-h-28 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                             disabled={isFormDisabled}
-                            onChange={(event) => updateAuctionListing(listingIndex, { specs: event.target.value })}
-                            value={listing.specs}
+                            onChange={(event) => setSalesHistoryNotes(event.target.value)}
+                            placeholder="Include previous sales and market behavior."
+                            value={salesHistoryNotes}
                           />
                         </label>
-                        <label className="block text-sm text-white/85">
-                          Photos
-                          <input
-                            accept="image/*"
-                            className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
-                            disabled={isFormDisabled || uploadingTarget === `auction-listing-${listingIndex + 1}`}
-                            multiple
-                            onChange={(event) => void handleAuctionListingPhotosUpload(listingIndex, event.target.files)}
-                            type="file"
-                          />
-                        </label>
-                        {listing.photos.length > 0 ? (
-                          <div className="flex flex-wrap gap-3">
-                            {listing.photos.map((photoPath, photoIndex) => {
-                              const previewUrl = photoPreviewUrls[photoPath];
-                              const fileName = extractOriginalFileName(photoPath);
 
-                              return (
-                                <div className="w-20" key={`${photoPath}-${photoIndex}`}>
-                                  <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
-                                    {previewUrl ? (
-                                      // eslint-disable-next-line @next/next/no-img-element
-                                      <img
-                                        alt={fileName}
-                                        className="h-full w-full object-cover"
-                                        src={previewUrl}
-                                      />
-                                    ) : (
-                                      <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
-                                        No preview
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <h3 className="text-lg font-medium">Current Weekly Auction Listings</h3>
+                          <button
+                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isFormDisabled}
+                            onClick={addAuctionListing}
+                            type="button"
+                          >
+                            + Add Another Auction Lot
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          {auctionListings.map((listing, listingIndex) => (
+                            <div className="space-y-3 rounded-lg border border-white/10 bg-black/25 p-4" key={`auction-listing-${listingIndex + 1}`}>
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-medium text-white/90">Auction Listing {listingIndex + 1}</p>
+                                {auctionListings.length > 1 ? (
+                                  <button
+                                    className="rounded-md border border-red-400/60 px-3 py-1 text-xs text-red-300 transition hover:bg-red-400/10"
+                                    disabled={isFormDisabled}
+                                    onClick={() => removeAuctionListing(listingIndex)}
+                                    type="button"
+                                  >
+                                    Remove
+                                  </button>
+                                ) : null}
+                              </div>
+                              <label className="block text-sm text-white/85">
+                                Lot Title
+                                <input
+                                  className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                  disabled={isFormDisabled}
+                                  onChange={(event) => updateAuctionListing(listingIndex, { lotTitle: event.target.value })}
+                                  type="text"
+                                  value={listing.lotTitle}
+                                />
+                              </label>
+                              <label className="block text-sm text-white/85">
+                                Specs
+                                <textarea
+                                  className="mt-1 min-h-24 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                  disabled={isFormDisabled}
+                                  onChange={(event) => updateAuctionListing(listingIndex, { specs: event.target.value })}
+                                  value={listing.specs}
+                                />
+                              </label>
+                              <label className="block text-sm text-white/85">
+                                Photos
+                                <input
+                                  accept="image/*"
+                                  className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
+                                  disabled={isFormDisabled || uploadingTarget === `auction-listing-${listingIndex + 1}`}
+                                  multiple
+                                  onChange={(event) => void handleAuctionListingPhotosUpload(listingIndex, event.target.files)}
+                                  type="file"
+                                />
+                              </label>
+                              {listing.photos.length > 0 ? (
+                                <div className="flex flex-wrap gap-3">
+                                  {listing.photos.map((photoPath, photoIndex) => {
+                                    const previewUrl = photoPreviewUrls[photoPath];
+                                    const fileName = extractOriginalFileName(photoPath);
+
+                                    return (
+                                      <div className="w-20" key={`${photoPath}-${photoIndex}`}>
+                                        <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
+                                          {previewUrl ? (
+                                            // eslint-disable-next-line @next/next/no-img-element
+                                            <img
+                                              alt={fileName}
+                                              className="h-full w-full object-cover"
+                                              src={previewUrl}
+                                            />
+                                          ) : (
+                                            <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
+                                              No preview
+                                            </div>
+                                          )}
+                                          <button
+                                            aria-label={`Remove ${fileName}`}
+                                            className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
+                                            disabled={isFormDisabled}
+                                            onClick={() => removeAuctionListingPhoto(listingIndex, photoIndex)}
+                                            type="button"
+                                          >
+                                            ×
+                                          </button>
+                                        </div>
+                                        <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
+                                          {fileName}
+                                        </p>
                                       </div>
-                                    )}
-                                    <button
-                                      aria-label={`Remove ${fileName}`}
-                                      className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
-                                      disabled={isFormDisabled}
-                                      onClick={() => removeAuctionListingPhoto(listingIndex, photoIndex)}
-                                      type="button"
-                                    >
-                                      ×
-                                    </button>
-                                  </div>
-                                  <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
-                                    {fileName}
-                                  </p>
+                                    );
+                                  })}
                                 </div>
-                              );
-                            })}
-                          </div>
-                        ) : null}
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
+                    </div>
                   </div>
+                  {!sectionExpanded.auction && !auctionHasMeaningfulData ? (
+                    <p className="border-t border-white/10 px-4 py-3 text-sm text-white/45">Click to start</p>
+                  ) : null}
                 </div>
 
-                <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
-                  <h3 className="text-lg font-medium">Private Dealer Options</h3>
-                  <div className="space-y-3">
+                <div className="overflow-hidden rounded-lg border border-white/10 bg-black/20">
+                  <button
+                    className="flex w-full items-center justify-between gap-4 px-4 py-4 text-left transition hover:bg-white/[0.03] disabled:cursor-not-allowed"
+                    disabled={isFormDisabled}
+                    onClick={toggleDealerSection}
+                    type="button"
+                  >
+                    <span className="flex items-center gap-3 text-lg font-medium">
+                      <span className={`inline-block text-sm transition-transform ${sectionExpanded.dealer ? "rotate-90" : ""}`}>›</span>
+                      🚗 Private Dealer Options
+                    </span>
+                    {!sectionExpanded.dealer && dealerHasMeaningfulData ? (
+                      <span className="inline-flex items-center gap-2 text-xs font-medium text-white/65">
+                        <span className="h-2 w-2 rounded-full bg-[#E55125]" />
+                        {meaningfulDealerOptions.length} {meaningfulDealerOptions.length === 1 ? "option" : "options"}
+                      </span>
+                    ) : null}
+                  </button>
+
+                  <div
+                    className={`grid transition-all duration-300 ${
+                      sectionExpanded.dealer ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
+                    }`}
+                  >
+                    <div className="overflow-hidden space-y-3 border-t border-white/10 p-4">
+                      <div className="flex justify-end">
+                        <button
+                          className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={isFormDisabled || dealerOptions.length >= 3}
+                          onClick={addDealerOption}
+                          type="button"
+                        >
+                          + Add Dealer Option
+                        </button>
+                      </div>
+                      <div className="space-y-3">
                     {dealerOptions.map((option) => (
                       <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>
                         <button
@@ -2597,7 +2807,12 @@ export default function AgentDocketDetailPage({
                         ) : null}
                       </div>
                     ))}
+                      </div>
                   </div>
+                </div>
+                  {!sectionExpanded.dealer && !dealerHasMeaningfulData ? (
+                    <p className="border-t border-white/10 px-4 py-3 text-sm text-white/45">Click to start</p>
+                  ) : null}
                 </div>
 
                 <div className="space-y-4 rounded-lg border border-white/10 bg-black/20 p-4">
@@ -2615,6 +2830,11 @@ export default function AgentDocketDetailPage({
 
                 {!isFormReadOnly ? (
                   <div className="flex flex-wrap items-center justify-end gap-3">
+                    {!auctionHasMeaningfulData && !dealerHasMeaningfulData ? (
+                      <p className="w-full text-right text-sm text-white/45">
+                        Add at least one auction lot or dealer option
+                      </p>
+                    ) : null}
                     {isEditingSubmittedReport ? (
                       <button
                         className="rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"

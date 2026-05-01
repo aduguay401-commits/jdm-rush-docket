@@ -160,6 +160,14 @@ function normalizeAuctionListings(value: unknown) {
     .filter((item) => item.lot_title && item.specs);
 }
 
+function hasAnyAuctionListingData(listing: AuctionListingPayload) {
+  return (
+    toNonEmptyString(listing?.lotTitle ?? listing?.lot_title).length > 0 ||
+    toNonEmptyString(listing?.specs).length > 0 ||
+    normalizeStringArray(listing?.photos).length > 0
+  );
+}
+
 function normalizeDealerOptions(value: unknown) {
   const parsed = parseJsonLikeString(value);
 
@@ -251,7 +259,7 @@ function getDealerOptionNumber(option: PrivateDealerOptionPayload) {
 }
 
 function hasAnyDealerOptionData(option: PrivateDealerOptionPayload) {
-  return [
+  const hasTextOrPriceData = [
     option.year,
     option.make,
     option.model,
@@ -266,6 +274,8 @@ function hasAnyDealerOptionData(option: PrivateDealerOptionPayload) {
     option.notes,
     option.marcus_notes,
   ].some((value) => toNonEmptyString(value).length > 0 || toPositiveInteger(value) !== null);
+
+  return hasTextOrPriceData || normalizeStringArray(option.photos).length > 0;
 }
 
 function toErrorObject(error: unknown) {
@@ -443,21 +453,13 @@ export async function POST(
     const salesHistoryNotes = toNonEmptyString(payload.salesHistoryNotes);
     const overallNotes = toNonEmptyString(payload.overallNotes);
     const auctionListings = normalizeAuctionListings(payload.auctionListings);
+    const rawAuctionListings = Array.isArray(payload.auctionListings) ? payload.auctionListings : [];
     const privateDealerOptions = normalizeDealerOptions(payload.privateDealerOptions);
     const rawDealerOptions = Array.isArray(payload.privateDealerOptions) ? payload.privateDealerOptions : [];
     const rawPrimaryDealerOption = rawDealerOptions.find((item) => getDealerOptionNumber(item) === 1);
-    const hasAuctionData = [hammerPriceLowJpy, hammerPriceHighJpy, recommendedMaxBidJpy].some(
-      (value) => typeof value === "number" && value > 0
-    );
-    const hasPrimaryDealerData =
-      !!rawPrimaryDealerOption &&
-      [
-        rawPrimaryDealerOption.year,
-        rawPrimaryDealerOption.make,
-        rawPrimaryDealerOption.model,
-        rawPrimaryDealerOption.dealerPriceJpy,
-        rawPrimaryDealerOption.dealer_price_jpy,
-      ].some((value) => toNonEmptyString(value).length > 0 || toPositiveInteger(value) !== null);
+    const hasAuctionListingData = rawAuctionListings.some((listing) => hasAnyAuctionListingData(listing));
+    const hasAuctionData = hasAuctionListingData;
+    const hasPrimaryDealerData = !!rawPrimaryDealerOption && hasAnyDealerOptionData(rawPrimaryDealerOption);
     const hasAdditionalDealerData = rawDealerOptions
       .filter((item) => getDealerOptionNumber(item) !== 1)
       .some((item) => hasAnyDealerOptionData(item));
@@ -471,6 +473,7 @@ export async function POST(
       salesHistoryNotesLength: salesHistoryNotes.length,
       overallNotesLength: overallNotes.length,
       auctionListingsCount: auctionListings.length,
+      rawAuctionListingsCount: rawAuctionListings.length,
       privateDealerOptionsCount: privateDealerOptions.length,
       hasAuctionData,
       hasPrivateDealerData,
@@ -504,10 +507,20 @@ export async function POST(
           "At least one auction listing is required. Required listing fields: lotTitle and specs (or lot_title/specs)."
         );
       }
+
+      for (const [index, listing] of rawAuctionListings.entries()) {
+        if (!hasAnyAuctionListingData(listing)) {
+          continue;
+        }
+
+        if (!toNonEmptyString(listing.lotTitle ?? listing.lot_title) || !toNonEmptyString(listing.specs)) {
+          validationErrors.push(`Auction Listing ${index + 1} requires Lot Title and Specs.`);
+        }
+      }
     }
 
     if (!hasAuctionData && !hasPrimaryDealerData && !hasAdditionalDealerData) {
-      validationErrors.push("You must provide at least one private dealer option or auction research data.");
+      validationErrors.push("Add at least one auction lot or dealer option before sending.");
     }
 
     if (
