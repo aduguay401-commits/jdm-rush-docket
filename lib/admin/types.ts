@@ -29,6 +29,7 @@ export type MarcusQuestionItem = {
 export type CustomerQuestionItem = {
   id: string;
   question_text: string | null;
+  answer_text?: string | null;
   created_at: string | null;
   read_at: string | null;
 };

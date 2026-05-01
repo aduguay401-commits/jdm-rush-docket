@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
-import type { CustomerQuestionItem, MarcusQuestionItem, NormalizedAdminDocket } from "@/lib/admin/types";
+import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import {
   getLatestActivity,
   getProgressBarStage,
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
+import { getDocketActivityFeed, type DocketActivityEvent } from "@/lib/dockets/activityFeed";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -17,85 +18,14 @@ type Props = {
 };
 
 type StatusFilter = "all" | "needs_attention" | "active" | "approved" | "paused" | "cleared" | "lost";
-type EmailStage = "Intake" | "Questions" | "Research" | "Decision" | "Follow-up";
+type DrawerTab = "activity" | "notes";
 
 type PatchPayload = {
   status?: string | null;
   admin_notes?: string | null;
-  is_flagged?: boolean | null;
-  is_paused?: boolean | null;
-  paused_until?: string | null;
-  lost_reason?: string | null;
-  estimated_deal_value?: number | null;
   is_archived?: boolean | null;
   archived_at?: string | null;
 };
-
-type CustomerCommunicationTimelineEntry =
-  | {
-      type: "AGENT_QUESTIONS";
-      timestamp: string | null;
-      questions: MarcusQuestionItem[];
-    }
-  | {
-      type: "CUSTOMER_ANSWERS";
-      timestamp: string | null;
-      answers: MarcusQuestionItem[];
-    }
-  | {
-      type: "CUSTOMER_QUESTION";
-      timestamp: string | null;
-      question: CustomerQuestionItem;
-    }
-  | {
-      type: "AWAITING";
-      timestamp: null;
-    };
-
-const STATUS_ORDER = [
-  "new",
-  "questions_sent",
-  "answers_received",
-  "research_in_progress",
-  "report_sent",
-  "decision_made",
-  "unresponsive",
-  "paused",
-  "cleared",
-  "lost",
-];
-
-const LOST_REASONS = [
-  "Price too high",
-  "Customer went elsewhere",
-  "Could not source vehicle",
-  "Customer went silent",
-  "Other",
-];
-
-const EMAIL_TYPE_LABELS: Record<string, string> = {
-  email_1_customer_welcome: "Welcome Email",
-  email_1_admin_notification: "Admin Notification",
-  email_1_marcus_notification: "Agent Notification",
-  email_2_questions_sent: "Questions Sent",
-  email_3_answers_received: "Answers Received",
-  email_4_report_ready: "Report Ready",
-  email_5_customer_approval_next_steps: "Approval & Next Steps",
-  manual_reminder: "Manual Reminder",
-  customer_followup_question_sent: "Customer Question Alert",
-  report_question_sent: "Report Question Alert",
-  sequence_A_step_1: "Follow-up A (Step 1)",
-  sequence_A_step_2: "Follow-up A (Step 2)",
-  sequence_A_step_3: "Follow-up A (Step 3)",
-  sequence_B_step_1: "Follow-up B (Step 1)",
-  sequence_B_step_2: "Follow-up B (Step 2)",
-  sequence_B_step_3: "Follow-up B (Step 3)",
-  sequence_C_step_1: "Follow-up C (Step 1)",
-  sequence_C_step_2: "Follow-up C (Step 2)",
-  sequence_C_step_3: "Follow-up C (Step 3)",
-};
-
-const EMAIL_STAGE_ORDER: EmailStage[] = ["Intake", "Questions", "Research", "Decision", "Follow-up"];
 
 const PROGRESS_STAGES = [
   { label: "New", status: "new" },
@@ -111,32 +41,6 @@ function formatDate(value: string | null | undefined) {
     return "-";
   }
   return new Date(value).toLocaleString();
-}
-
-function formatEmailTimestamp(value: string | null | undefined) {
-  if (!value) {
-    return "-";
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(new Date(value));
-}
-
-function formatCurrencyCad(value: number | null | undefined) {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return "-";
-  }
-
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
 }
 
 function formatStatus(status: string | null | undefined) {
@@ -174,18 +78,6 @@ function getCustomerName(docket: NormalizedAdminDocket) {
 
 function getVehicleLabel(docket: NormalizedAdminDocket) {
   return [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model].filter(Boolean).join(" ") || "N/A";
-}
-
-function truncate(str: string, max: number) {
-  return str?.length > max ? str.substring(0, max) + "..." : str;
-}
-
-function getEmailTypeLabel(emailType: string | null | undefined) {
-  if (!emailType) {
-    return "Unknown Email";
-  }
-
-  return EMAIL_TYPE_LABELS[emailType] ?? emailType;
 }
 
 function withAlpha(color: string, alpha: number) {
@@ -233,85 +125,6 @@ function formatRelativeTime(timestamp: string) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-function truncateSnippet(value: string | null | undefined, maxLength = 100) {
-  const normalized = value?.replace(/\s+/g, " ").trim();
-  if (!normalized) {
-    return null;
-  }
-
-  return normalized.length > maxLength ? `${normalized.slice(0, maxLength).trimEnd()}...` : normalized;
-}
-
-function getEmailStage(emailType: string | null | undefined): EmailStage {
-  if (!emailType) {
-    return "Follow-up";
-  }
-
-  if (emailType.startsWith("email_1_")) {
-    return "Intake";
-  }
-  if (
-    emailType.startsWith("email_2_") ||
-    emailType.startsWith("email_3_") ||
-    emailType === "customer_followup_question_sent"
-  ) {
-    return "Questions";
-  }
-  if (emailType.startsWith("email_4_")) {
-    return "Research";
-  }
-  if (emailType.startsWith("email_5_")) {
-    return "Decision";
-  }
-
-  return "Follow-up";
-}
-
-function normalizeEmail(value: string | null | undefined) {
-  return value?.trim().toLowerCase() ?? "";
-}
-
-function getDocketCustomerFirstName(docket: NormalizedAdminDocket) {
-  const possibleDocket = docket as NormalizedAdminDocket & { customerFirstName?: string | null };
-  return (possibleDocket.customer_first_name ?? possibleDocket.customerFirstName)?.trim() ?? "";
-}
-
-function getEmailRecipientLabel(docket: NormalizedAdminDocket, recipientEmail: string | null | undefined) {
-  const normalized = normalizeEmail(recipientEmail);
-
-  if (!normalized) {
-    return "N/A";
-  }
-
-  if (normalized === "adam@jdmrushimports.ca") {
-    return "Adam (Admin)";
-  }
-
-  if (normalized === "marcus@gemmytrading.com" || normalized === "trade@gemmytrading.com") {
-    return "Marcus (Agent)";
-  }
-
-  const customerFirstName = getDocketCustomerFirstName(docket);
-  if (customerFirstName) {
-    return `${customerFirstName} (Customer)`;
-  }
-
-  return recipientEmail ?? "N/A";
-}
-
-function getEmailBodySnippet(bodySnapshot: string | null | undefined) {
-  if (!bodySnapshot) {
-    return "No body snapshot available.";
-  }
-
-  const plainText = bodySnapshot
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return truncate(plainText, 200);
-}
-
 function isPaused(docket: NormalizedAdminDocket) {
   return docket.is_paused || docket.status === "paused";
 }
@@ -328,30 +141,23 @@ function isActive(docket: NormalizedAdminDocket) {
   return !isPaused(docket) && docket.status !== "cleared" && docket.status !== "lost";
 }
 
-function getDaysInStatus(docket: NormalizedAdminDocket) {
-  const since = docket.docket_status_history[0]?.changed_at ?? docket.created_at;
-  const days = Math.floor((Date.now() - new Date(since).getTime()) / (1000 * 60 * 60 * 24));
-  return Number.isFinite(days) && days >= 0 ? days : 0;
+function getLocationLabel(docket: NormalizedAdminDocket) {
+  return [docket.destination_city, docket.destination_province].filter(Boolean).join(", ") || "N/A";
 }
 
-function getAgentStatus(docket: NormalizedAdminDocket) {
-  if (docket.status === "new" || docket.status === "answers_received") {
-    return "Pending Agent";
-  }
-  if (docket.status === "cleared" || docket.status === "lost") {
-    return "Complete";
-  }
-  if (isPaused(docket)) {
-    return "Paused";
-  }
-  if (Array.isArray(docket.auction_research) && docket.auction_research.length > 0) {
-    return "Research Submitted";
-  }
-  return "In Progress";
+function getProgressStageText(docket: NormalizedAdminDocket) {
+  const progress = getProgressBarStage(docket.status, docket);
+  return `stage ${Math.min(progress.currentIndex + 1, PROGRESS_STAGES.length)}/${PROGRESS_STAGES.length}`;
 }
 
-function getReminderCount(docket: NormalizedAdminDocket) {
-  return docket.email_log.filter((entry) => entry.email_type === "manual_reminder").length;
+function getLastReminder(docket: NormalizedAdminDocket) {
+  return docket.email_log
+    .filter((entry) => entry.email_type === "manual_reminder" && entry.sent_at)
+    .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime())[0] ?? null;
+}
+
+function isExpandableActivityEvent(event: DocketActivityEvent) {
+  return event.category === "customer_message" || event.category === "agent_message";
 }
 
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
@@ -413,140 +219,33 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [showArchived, setShowArchived] = useState(false);
 
   const [selectedDocketId, setSelectedDocketId] = useState<string | null>(null);
-  const [scrollToQuestionsOnOpen, setScrollToQuestionsOnOpen] = useState(false);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
-  const [expandedEmailLogIds, setExpandedEmailLogIds] = useState<Set<string>>(new Set());
-  const customerQaRef = useRef<HTMLElement | null>(null);
-
-  const [statusDraft, setStatusDraft] = useState("new");
-  const [lostReasonDraft, setLostReasonDraft] = useState("");
-  const [estimatedDealValueDraft, setEstimatedDealValueDraft] = useState("");
+  const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>("activity");
+  const [expandedActivityEventIds, setExpandedActivityEventIds] = useState<Set<string>>(new Set());
   const [adminNotesDraft, setAdminNotesDraft] = useState("");
-  const [pauseDraft, setPauseDraft] = useState(false);
-  const [pausedUntilDraft, setPausedUntilDraft] = useState("");
   const [notesSavedState, setNotesSavedState] = useState<"idle" | "saving" | "saved">("idle");
+  const [lastNotesSavedAt, setLastNotesSavedAt] = useState<string | null>(null);
 
   const selectedDocket = useMemo(
     () => dockets.find((docket) => docket.id === selectedDocketId) ?? null,
     [dockets, selectedDocketId]
   );
 
-  const customerCommunicationTimeline = useMemo<CustomerCommunicationTimelineEntry[]>(() => {
+  const activityFeed = useMemo(() => {
     if (!selectedDocket) {
       return [];
     }
 
-    const agentQuestionBatches = new Map<string, MarcusQuestionItem[]>();
-    for (const question of selectedDocket.marcus_questions) {
-      const timestamp = question.created_at ?? "";
-      const batch = agentQuestionBatches.get(timestamp) ?? [];
-      batch.push(question);
-      agentQuestionBatches.set(timestamp, batch);
-    }
-
-    const customerAnswerBatches = new Map<string, MarcusQuestionItem[]>();
-    for (const question of selectedDocket.marcus_questions) {
-      if (!question.answer_text || question.answer_text.trim().length === 0) {
-        continue;
-      }
-
-      const timestamp = question.answered_at ?? "";
-      const batch = customerAnswerBatches.get(timestamp) ?? [];
-      batch.push(question);
-      customerAnswerBatches.set(timestamp, batch);
-    }
-
-    const entries: CustomerCommunicationTimelineEntry[] = [
-      ...Array.from(agentQuestionBatches.entries()).map(
-        ([timestamp, questions]): CustomerCommunicationTimelineEntry => ({
-          type: "AGENT_QUESTIONS",
-          timestamp: timestamp || null,
-          questions,
-        })
-      ),
-      ...Array.from(customerAnswerBatches.entries()).map(
-        ([timestamp, answers]): CustomerCommunicationTimelineEntry => ({
-          type: "CUSTOMER_ANSWERS",
-          timestamp: timestamp || null,
-          answers,
-        })
-      ),
-      ...selectedDocket.customer_questions.map(
-        (question): CustomerCommunicationTimelineEntry => ({
-          type: "CUSTOMER_QUESTION",
-          timestamp: question.created_at,
-          question,
-        })
-      ),
-    ];
-
-    const unansweredQuestionsCount =
-      selectedDocket.marcus_questions.length -
-      selectedDocket.marcus_questions.filter(
-        (question) => question.answer_text && question.answer_text.trim().length > 0
-      ).length;
-
-    if (selectedDocket.marcus_questions.length > 0 && unansweredQuestionsCount > 0) {
-      entries.push({ type: "AWAITING", timestamp: null });
-    }
-
-    return entries.sort((left, right) => {
-      const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
-      const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
-
-      return leftTime - rightTime;
-    });
+    return getDocketActivityFeed(selectedDocket);
   }, [selectedDocket]);
 
-  const groupedEmailLog = useMemo(() => {
+  const lastReminder = useMemo(() => {
     if (!selectedDocket) {
-      return [];
+      return null;
     }
 
-    return EMAIL_STAGE_ORDER.map((stage) => {
-      const emails = selectedDocket.email_log
-        .filter((entry) => getEmailStage(entry.email_type) === stage)
-        .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime());
-
-      return { stage, emails };
-    }).filter((group) => group.emails.length > 0);
+    return getLastReminder(selectedDocket);
   }, [selectedDocket]);
-
-  useEffect(() => {
-    if (!selectedDocket) {
-      return;
-    }
-
-    setStatusDraft(selectedDocket.status ?? "new");
-    setLostReasonDraft(selectedDocket.lost_reason ?? "");
-    setEstimatedDealValueDraft(
-      typeof selectedDocket.estimated_deal_value === "number" ? String(selectedDocket.estimated_deal_value) : ""
-    );
-    setAdminNotesDraft(selectedDocket.admin_notes ?? "");
-    setPauseDraft(Boolean(selectedDocket.is_paused || selectedDocket.status === "paused"));
-    setPausedUntilDraft(selectedDocket.paused_until ? selectedDocket.paused_until.slice(0, 10) : "");
-    setNotesSavedState("idle");
-  }, [selectedDocket]);
-
-  useEffect(() => {
-    if (!selectedDocket || !scrollToQuestionsOnOpen) {
-      return;
-    }
-
-    if (selectedDocket.status !== "answers_received") {
-      setScrollToQuestionsOnOpen(false);
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      customerQaRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      setScrollToQuestionsOnOpen(false);
-    });
-
-    return () => {
-      window.cancelAnimationFrame(frame);
-    };
-  }, [selectedDocket, scrollToQuestionsOnOpen]);
 
   useEffect(() => {
     function onEscape(event: KeyboardEvent) {
@@ -565,7 +264,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   }, [selectedDocketId]);
 
   useEffect(() => {
-    setExpandedEmailLogIds(new Set());
+    setExpandedActivityEventIds(new Set());
   }, [selectedDocketId]);
 
   async function refreshDockets(archivedOnly: boolean = showArchived) {
@@ -634,14 +333,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     }
   }
 
-  async function handleToggleFlag(id: string, currentValue: boolean | null) {
-    try {
-      await patchDocket(id, { is_flagged: !currentValue });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to toggle flag");
-    }
-  }
-
   async function handleUnarchiveDocket(id: string) {
     setError(null);
 
@@ -676,81 +367,29 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     setSendingReminderId(null);
   }
 
-  function handleOpenDrawer(docketId: string, options?: { scrollToQuestions?: boolean }) {
+  function handleOpenDrawer(docketId: string) {
+    const docket = dockets.find((item) => item.id === docketId);
+    setAdminNotesDraft(docket?.admin_notes ?? "");
+    setNotesSavedState("idle");
+    setLastNotesSavedAt(null);
+    setActiveDrawerTab("activity");
     setSelectedDocketId(docketId);
-    setScrollToQuestionsOnOpen(Boolean(options?.scrollToQuestions));
   }
 
-  function toggleEmailLogEntry(entryId: string) {
-    setExpandedEmailLogIds((previous) => {
+  function toggleActivityEvent(event: DocketActivityEvent) {
+    if (!isExpandableActivityEvent(event)) {
+      return;
+    }
+
+    setExpandedActivityEventIds((previous) => {
       const next = new Set(previous);
-      if (next.has(entryId)) {
-        next.delete(entryId);
+      if (next.has(event.id)) {
+        next.delete(event.id);
       } else {
-        next.add(entryId);
+        next.add(event.id);
       }
       return next;
     });
-  }
-
-  async function saveStatus() {
-    if (!selectedDocket) {
-      return;
-    }
-
-    try {
-      await patchDocket(selectedDocket.id, { status: statusDraft });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to save status");
-    }
-  }
-
-  async function saveEstimatedDealValue() {
-    if (!selectedDocket) {
-      return;
-    }
-
-    const value = estimatedDealValueDraft.trim();
-    const parsed = value.length === 0 ? null : Number(value);
-
-    if (value.length > 0 && Number.isNaN(parsed)) {
-      setError("Estimated deal value must be a number");
-      return;
-    }
-
-    try {
-      await patchDocket(selectedDocket.id, { estimated_deal_value: parsed });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to save estimated deal value");
-    }
-  }
-
-  async function savePauseSettings() {
-    if (!selectedDocket) {
-      return;
-    }
-
-    try {
-      await patchDocket(selectedDocket.id, {
-        is_paused: pauseDraft,
-        paused_until: pauseDraft && pausedUntilDraft ? `${pausedUntilDraft}T00:00:00.000Z` : null,
-        status: pauseDraft ? "paused" : statusDraft === "paused" ? "new" : statusDraft,
-      });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to save pause settings");
-    }
-  }
-
-  async function saveLostReason() {
-    if (!selectedDocket) {
-      return;
-    }
-
-    try {
-      await patchDocket(selectedDocket.id, { lost_reason: lostReasonDraft || null });
-    } catch (updateError) {
-      setError(updateError instanceof Error ? updateError.message : "Failed to save lost reason");
-    }
   }
 
   async function saveAdminNotes() {
@@ -766,10 +405,48 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
     try {
       await patchDocket(selectedDocket.id, { admin_notes: adminNotesDraft || null });
+      setLastNotesSavedAt(new Date().toISOString());
       setNotesSavedState("saved");
     } catch (updateError) {
       setNotesSavedState("idle");
       setError(updateError instanceof Error ? updateError.message : "Failed to save admin notes");
+    }
+  }
+
+  function handleSelectDrawerTab(tab: DrawerTab) {
+    if (activeDrawerTab === "notes" && tab !== "notes") {
+      void saveAdminNotes();
+    }
+
+    setActiveDrawerTab(tab);
+  }
+
+  async function handleMarkSelectedDocketAsLost() {
+    if (!selectedDocket) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Mark this docket as lost? This action is for record-keeping; the docket will be hidden from active views."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/admin/dockets/${selectedDocket.id}/mark-lost`, { method: "POST" });
+      const result = (await response.json()) as { success: boolean; error?: string };
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to mark docket as lost");
+      }
+
+      await refreshDockets(showArchived);
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "Failed to mark docket as lost");
     }
   }
 
@@ -790,16 +467,11 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     const active = dockets.filter(isActive).length;
     const needsAttention = dockets.filter(isNeedsAttention).length;
     const approvedPending = dockets.filter((docket) => docket.status === "decision_made").length;
-    const totalPipelineValue = dockets.reduce(
-      (sum, docket) => sum + (typeof docket.estimated_deal_value === "number" ? docket.estimated_deal_value : 0),
-      0
-    );
 
     return {
       active,
       needsAttention,
       approvedPending,
-      totalPipelineValue,
     };
   }, [dockets]);
 
@@ -891,7 +563,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             Viewing archived dockets
           </div>
         ) : (
-          <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <section className="mb-5 grid gap-3 sm:grid-cols-3">
             <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
               <p className="text-xs uppercase tracking-wider text-white/60">Total Active Dockets</p>
               <p className="mt-2 text-3xl font-semibold">{metrics.active}</p>
@@ -903,10 +575,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
               <p className="text-xs uppercase tracking-wider text-white/60">Approved - Pending Deposit</p>
               <p className="mt-2 text-3xl font-semibold text-green-300">{metrics.approvedPending}</p>
-            </article>
-            <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-              <p className="text-xs uppercase tracking-wider text-white/60">Total Pipeline Value</p>
-              <p className="mt-2 text-3xl font-semibold">{formatCurrencyCad(metrics.totalPipelineValue)}</p>
             </article>
           </section>
         )}
@@ -999,386 +667,191 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
         {loading ? <p className="mt-3 text-sm text-white/60">Refreshing dockets...</p> : null}
       </div>
 
-      {selectedDocket ? (
-        <div className="fixed inset-0 z-30 bg-black/55" onClick={() => setSelectedDocketId(null)}>
-          <aside
-            className="absolute inset-y-0 right-0 w-full max-w-[480px] overflow-y-auto border-l border-white/10 bg-[#111111] p-5"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-5 flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">{getCustomerName(selectedDocket)}</h2>
-                <p className="text-sm text-white/65">{getVehicleLabel(selectedDocket)}</p>
-              </div>
-              <button
-                className="rounded-md border border-white/20 px-2 py-1 text-sm hover:bg-white/10"
-                onClick={() => setSelectedDocketId(null)}
-                type="button"
-              >
-                X
-              </button>
-            </div>
+      {selectedDocket
+        ? (() => {
+            const statusDisplay = getStatusDisplay(selectedDocket);
+            const vehicleDescription = selectedDocket.vehicle_description?.trim() || getVehicleLabel(selectedDocket);
+            const isArchived = selectedDocket.is_archived === true;
+            const isLost = selectedDocket.status === "lost";
 
-            <section className="space-y-2 border-b border-white/10 pb-4 text-sm">
-              <p><span className="text-white/60">Email:</span> {selectedDocket.customer_email || "N/A"}</p>
-              <p><span className="text-white/60">Phone:</span> {selectedDocket.customer_phone || "N/A"}</p>
-              <p>
-                <span className="text-white/60">Location:</span>{" "}
-                {[selectedDocket.destination_city, selectedDocket.destination_province].filter(Boolean).join(", ") || "N/A"}
-              </p>
-              <p><span className="text-white/60">Vehicle:</span> {getVehicleLabel(selectedDocket)}</p>
-              {selectedDocket.vehicle_description?.trim() ? (
-                <p>
-                  <span className="text-white/60">Customer&apos;s Vehicle Request:</span> {selectedDocket.vehicle_description}
-                </p>
-              ) : null}
-              {selectedDocket.report_url_token ? (
-                <p>
-                  <span className="text-white/60">Customer Report:</span>{" "}
-                  <a
-                    className="font-medium text-[#E55125] underline-offset-4 hover:underline"
-                    href={`https://docket.jdmrushimports.ca/report/${selectedDocket.report_url_token}`}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Customer Report
-                  </a>
-                </p>
-              ) : null}
-              {selectedDocket.questions_url_token ? (
-                <p>
-                  <span className="text-white/60">Customer Questions:</span>{" "}
-                  <a
-                    className="font-medium text-[#E55125] underline-offset-4 hover:underline"
-                    href={`https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Customer Questions
-                  </a>
-                </p>
-              ) : null}
-            </section>
-
-            <section className="mt-4 space-y-3 border-b border-white/10 pb-4">
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                <label className="text-xs uppercase tracking-wider text-white/60">
-                  Status override
-                  <select
-                    className="mt-1 h-10 w-full rounded-md border border-white/15 bg-black/30 px-3 text-sm"
-                    value={statusDraft}
-                    onChange={(event) => setStatusDraft(event.target.value)}
-                  >
-                    {STATUS_ORDER.map((status) => (
-                      <option key={status} value={status}>
-                        {formatStatus(status)}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <button
-                  className="h-10 rounded-md border border-white/20 px-3 text-sm hover:bg-white/10"
-                  onClick={() => void saveStatus()}
-                  type="button"
+            return (
+              <div className="fixed inset-0 z-30 bg-black/55" onClick={() => setSelectedDocketId(null)}>
+                <aside
+                  className="absolute inset-y-0 right-0 w-full max-w-[520px] overflow-y-auto border-l border-white/10 bg-[#111111] p-5"
+                  onClick={(event) => event.stopPropagation()}
                 >
-                  Save
-                </button>
-              </div>
-
-              <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                <label className="text-xs uppercase tracking-wider text-white/60">
-                  Estimated deal value (CAD)
-                  <input
-                    className="mt-1 h-10 w-full rounded-md border border-white/15 bg-black/30 px-3 text-sm"
-                    value={estimatedDealValueDraft}
-                    onChange={(event) => setEstimatedDealValueDraft(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="h-10 rounded-md border border-white/20 px-3 text-sm hover:bg-white/10"
-                  onClick={() => void saveEstimatedDealValue()}
-                  type="button"
-                >
-                  Save
-                </button>
-              </div>
-
-              <label className="block text-xs uppercase tracking-wider text-white/60">
-                Admin notes
-                <textarea
-                  className="mt-1 min-h-[110px] w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm"
-                  onBlur={() => void saveAdminNotes()}
-                  onChange={(event) => {
-                    setAdminNotesDraft(event.target.value);
-                    if (notesSavedState === "saved") {
-                      setNotesSavedState("idle");
-                    }
-                  }}
-                  value={adminNotesDraft}
-                />
-              </label>
-              <p className="text-xs text-white/60">
-                {notesSavedState === "saving" ? "Saving..." : notesSavedState === "saved" ? "Saved ✓" : ""}
-              </p>
-
-              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-                <label className="inline-flex h-10 items-center gap-2 rounded-md border border-white/15 bg-black/30 px-3 text-sm">
-                  <input
-                    checked={pauseDraft}
-                    onChange={(event) => setPauseDraft(event.target.checked)}
-                    type="checkbox"
-                  />
-                  Pause docket
-                </label>
-                <label className="text-xs uppercase tracking-wider text-white/60">
-                  Paused until
-                  <input
-                    className="mt-1 h-10 w-full rounded-md border border-white/15 bg-black/30 px-3 text-sm"
-                    disabled={!pauseDraft}
-                    type="date"
-                    value={pausedUntilDraft}
-                    onChange={(event) => setPausedUntilDraft(event.target.value)}
-                  />
-                </label>
-                <button
-                  className="h-10 rounded-md border border-white/20 px-3 text-sm hover:bg-white/10"
-                  onClick={() => void savePauseSettings()}
-                  type="button"
-                >
-                  Save
-                </button>
-              </div>
-
-              {statusDraft === "lost" ? (
-                <div className="grid gap-2 sm:grid-cols-[1fr_auto] sm:items-end">
-                  <label className="text-xs uppercase tracking-wider text-white/60">
-                    Lost reason
-                    <select
-                      className="mt-1 h-10 w-full rounded-md border border-white/15 bg-black/30 px-3 text-sm"
-                      onChange={(event) => setLostReasonDraft(event.target.value)}
-                      value={lostReasonDraft}
+                  <div className="mb-5 flex items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-1">
+                      <h2 className="truncate text-2xl font-bold">{getCustomerName(selectedDocket)}</h2>
+                      <p className="truncate text-sm text-white/65">
+                        {selectedDocket.customer_email || "N/A"} · {selectedDocket.customer_phone || "N/A"}
+                      </p>
+                      <p className="truncate text-sm text-white/65">{getLocationLabel(selectedDocket)}</p>
+                      <p className="truncate text-sm text-white/80" title={vehicleDescription}>
+                        {vehicleDescription}
+                      </p>
+                      <p className="text-sm text-white/70">
+                        Currently: {statusDisplay.text} · {getProgressStageText(selectedDocket)}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-2">
+                        {selectedDocket.report_url_token ? (
+                          <a
+                            className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-[#E55125] hover:text-[#E55125]"
+                            href={`https://docket.jdmrushimports.ca/report/${selectedDocket.report_url_token}`}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <span aria-hidden="true">📄</span>
+                            View Report
+                          </a>
+                        ) : null}
+                        {selectedDocket.questions_url_token ? (
+                          <a
+                            className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-[#E55125] hover:text-[#E55125]"
+                            href={`https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <span aria-hidden="true">💬</span>
+                            View Questions
+                          </a>
+                        ) : null}
+                        <button
+                          className="inline-flex items-center rounded-md border border-[#E55125]/70 px-3 py-1.5 text-sm text-[#E55125] transition hover:bg-[#E55125]/10 disabled:cursor-not-allowed disabled:opacity-60"
+                          disabled={sendingReminderId === selectedDocket.id}
+                          onClick={() => void handleSendReminder(selectedDocket.id)}
+                          type="button"
+                        >
+                          {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
+                        </button>
+                      </div>
+                      {lastReminder?.sent_at ? (
+                        <p className="pt-1 text-xs text-white/45">
+                          Last reminder: {formatDate(lastReminder.sent_at)} · {formatRelativeTime(lastReminder.sent_at)}
+                        </p>
+                      ) : null}
+                    </div>
+                    <button
+                      className="shrink-0 rounded-md border border-white/20 px-2 py-1 text-sm hover:bg-white/10"
+                      onClick={() => setSelectedDocketId(null)}
+                      type="button"
                     >
-                      <option value="">Select reason</option>
-                      {LOST_REASONS.map((reason) => (
-                        <option key={reason} value={reason}>{reason}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <button
-                    className="h-10 rounded-md border border-white/20 px-3 text-sm hover:bg-white/10"
-                    onClick={() => void saveLostReason()}
-                    type="button"
-                  >
-                    Save
-                  </button>
-                </div>
-              ) : null}
-            </section>
-
-            <section className="mt-4 border-b border-white/10 pb-4">
-              <p className="text-sm text-white/70">
-                Reminder count: {getReminderCount(selectedDocket)}
-              </p>
-              <button
-                className="mt-2 rounded-md border border-[#E55125]/70 px-3 py-2 text-sm text-[#E55125] hover:bg-[#E55125]/10"
-                disabled={sendingReminderId === selectedDocket.id}
-                onClick={() => void handleSendReminder(selectedDocket.id)}
-                type="button"
-              >
-                {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
-              </button>
-            </section>
-
-            <section className="mt-4 border-b border-white/10 pb-4">
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/70">Status history</h3>
-              <div className="space-y-2 text-sm">
-                {selectedDocket.docket_status_history.length === 0 ? <p className="text-white/50">No status history.</p> : null}
-                {selectedDocket.docket_status_history.map((entry) => (
-                  <div className="rounded-md border border-white/10 bg-black/25 p-2" key={entry.id}>
-                    <p className="text-white/85">
-                      {(entry.old_status ?? "none")} → {(entry.new_status ?? "none")}
-                    </p>
-                    <p className="text-xs text-white/60">
-                      {entry.changed_by ?? "system"} • {formatDate(entry.changed_at)}
-                    </p>
+                      X
+                    </button>
                   </div>
-                ))}
-              </div>
-            </section>
 
-            <section className="mt-4 border-b border-white/10 pb-4" ref={customerQaRef}>
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/70">Customer Communication</h3>
-              <div className="space-y-3 text-sm">
-                {customerCommunicationTimeline.length === 0 ? (
-                  <p className="text-white/50">No customer communication yet.</p>
-                ) : null}
-                {customerCommunicationTimeline.map((entry) => {
-                  if (entry.type === "AGENT_QUESTIONS") {
-                    return (
-                      <article
-                        className="rounded-md border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-3"
-                        key={`agent-questions-${entry.timestamp ?? "unknown"}`}
+                  <div className="border-b border-white/10">
+                    <div className="grid grid-cols-2 rounded-md border border-white/10 bg-black/20 p-1">
+                      {(["activity", "notes"] as const).map((tab) => (
+                        <button
+                          className={`rounded px-3 py-2 text-sm font-medium transition ${
+                            activeDrawerTab === tab ? "bg-[#E55125] text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
+                          }`}
+                          key={tab}
+                          onClick={() => handleSelectDrawerTab(tab)}
+                          type="button"
+                        >
+                          {tab === "activity" ? "Activity" : "Notes"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {activeDrawerTab === "activity" ? (
+                    <section className="py-4">
+                      {activityFeed.length === 0 ? <p className="text-sm text-white/50">No activity yet</p> : null}
+                      <div className="space-y-1">
+                        {activityFeed.map((event) => {
+                          const expandable = isExpandableActivityEvent(event) && event.expandable_content;
+                          const expanded = expandedActivityEventIds.has(event.id);
+                          const RowElement = expandable ? "button" : "div";
+
+                          return (
+                            <article className="rounded-md border border-white/10 bg-black/20" key={event.id}>
+                              <RowElement
+                                className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left ${
+                                  expandable ? "transition hover:bg-white/5" : ""
+                                }`}
+                                onClick={expandable ? () => toggleActivityEvent(event) : undefined}
+                                type={expandable ? "button" : undefined}
+                              >
+                                <span aria-hidden="true" className="text-base">
+                                  {event.icon}
+                                </span>
+                                <span className="min-w-0 truncate text-sm text-white/85">{event.title}</span>
+                                <span className="whitespace-nowrap text-xs text-white/45">{formatDate(event.timestamp)}</span>
+                              </RowElement>
+                              {expanded && event.expandable_content ? (
+                                <div className="border-t border-white/10 px-3 py-3 text-sm leading-6 text-white/70">
+                                  <p className="whitespace-pre-line">{event.expandable_content}</p>
+                                </div>
+                              ) : null}
+                            </article>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ) : (
+                    <section className="py-4">
+                      <label className="block text-xs uppercase tracking-wider text-white/60">
+                        Admin notes
+                        <textarea
+                          className="mt-2 min-h-[220px] w-full rounded-md border border-white/15 bg-black/30 px-3 py-2 text-sm text-white outline-none focus:border-[#E55125]"
+                          onBlur={() => void saveAdminNotes()}
+                          onChange={(event) => {
+                            setAdminNotesDraft(event.target.value);
+                            if (notesSavedState === "saved") {
+                              setNotesSavedState("idle");
+                            }
+                          }}
+                          value={adminNotesDraft}
+                        />
+                      </label>
+                      <p className="mt-2 text-xs text-white/45">
+                        {notesSavedState === "saving"
+                          ? "Saving..."
+                          : lastNotesSavedAt
+                            ? `Last saved ${formatDate(lastNotesSavedAt)}`
+                            : ""}
+                      </p>
+                    </section>
+                  )}
+
+                  <section className="mt-2 border-t border-white/10 pt-4">
+                    {isArchived ? (
+                      <button
+                        className="w-full rounded-md border border-[#ef4444] bg-transparent px-4 py-3 text-sm font-medium text-[#ef4444] transition hover:bg-red-500/10"
+                        onClick={() => void handleUnarchiveDocket(selectedDocket.id)}
+                        type="button"
                       >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <h4 className="font-medium text-white">
-                            <span aria-hidden="true" className="mr-2">
-                              📤
-                            </span>
-                            Agent sent {entry.questions.length}{" "}
-                            {entry.questions.length === 1 ? "question" : "questions"}
-                          </h4>
-                          <span className="text-xs text-white/50">{formatDate(entry.timestamp)}</span>
-                        </div>
-                        <ol className="mt-3 list-decimal space-y-2 pl-5 text-white/85">
-                          {entry.questions.map((question) => (
-                            <li key={question.id}>{question.question_text || "Untitled question"}</li>
-                          ))}
-                        </ol>
-                      </article>
-                    );
-                  }
-
-                  if (entry.type === "CUSTOMER_ANSWERS") {
-                    return (
-                      <article
-                        className="rounded-md border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-3"
-                        key={`customer-answers-${entry.timestamp ?? "unknown"}`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <h4 className="font-medium text-white">
-                            <span aria-hidden="true" className="mr-2">
-                              📥
-                            </span>
-                            Customer answered
-                          </h4>
-                          <span className="text-xs text-white/50">{formatDate(entry.timestamp)}</span>
-                        </div>
-                        {entry.answers.length > 1 ? (
-                          <ol className="mt-3 list-decimal space-y-2 pl-5 text-[#E55125]">
-                            {entry.answers.map((question) => (
-                              <li key={question.id}>{question.answer_text || "No answer provided."}</li>
-                            ))}
-                          </ol>
-                        ) : (
-                          <p className="mt-3 text-[#E55125]">
-                            {entry.answers[0]?.answer_text || "No answer provided."}
-                          </p>
-                        )}
-                      </article>
-                    );
-                  }
-
-                  if (entry.type === "CUSTOMER_QUESTION") {
-                    return (
-                      <article
-                        className="rounded-md border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-3"
-                        key={`customer-question-${entry.question.id}`}
-                      >
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <h4 className="font-medium text-white">
-                            <span aria-hidden="true" className="mr-2">
-                              💬
-                            </span>
-                            Customer asked
-                          </h4>
-                          <span className="text-xs text-white/50">{formatDate(entry.timestamp)}</span>
-                        </div>
-                        <p className="mt-3 text-white/85">{entry.question.question_text || "Untitled question"}</p>
-                      </article>
-                    );
-                  }
-
-                  return (
-                    <article
-                      className="rounded-md border border-white/10 border-l-4 border-l-white/20 bg-black/25 p-3"
-                      key="awaiting-customer-response"
-                    >
-                      <h4 className="font-medium text-white/50">
-                        <span aria-hidden="true" className="mr-2">
-                          ⏳
-                        </span>
-                        Awaiting customer response
-                      </h4>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
-
-            <section className="mt-4">
-              <h3 className="mb-3 text-sm font-semibold uppercase tracking-wider text-white/70">Email log</h3>
-              <div className="space-y-4 text-sm">
-                {selectedDocket.email_log.length === 0 ? <p className="text-white/50">No emails logged.</p> : null}
-                {groupedEmailLog.map((group) => (
-                  <div className="space-y-2" key={group.stage}>
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-white/45">{group.stage}</h4>
-                    {group.emails.map((entry) => {
-                      const isExpanded = expandedEmailLogIds.has(entry.id);
-                      const hasError = Boolean(entry.error);
-
-                      return (
-                        <article className="rounded-md border border-white/10 bg-black/25" key={entry.id}>
+                        Unarchive
+                      </button>
+                    ) : (
+                      <div className={isLost ? "grid gap-3" : "grid grid-cols-2 gap-3"}>
+                        {!isLost ? (
                           <button
-                            className="grid w-full grid-cols-[auto_minmax(0,1fr)_6.75rem] items-center gap-3 px-3 py-2 text-left transition hover:bg-white/5"
-                            onClick={() => toggleEmailLogEntry(entry.id)}
+                            className="rounded-md border border-[#ef4444] bg-transparent px-4 py-3 text-sm font-medium text-[#ef4444] transition hover:bg-red-500/10"
+                            onClick={() => void handleMarkSelectedDocketAsLost()}
                             type="button"
                           >
-                            <span
-                              aria-label={hasError ? "Email error" : "Email sent"}
-                              className={`h-2.5 w-2.5 rounded-full ${
-                                hasError ? "bg-red-400" : "bg-emerald-400"
-                              }`}
-                            />
-                            <span className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
-                              <span className="min-w-0 truncate text-white/85">{getEmailTypeLabel(entry.email_type)}</span>
-                              <span className="break-words text-white/60">
-                                {getEmailRecipientLabel(selectedDocket, entry.recipient_email)}
-                              </span>
-                            </span>
-                            <span className="justify-self-end whitespace-nowrap text-right text-xs text-white/50">
-                              {formatEmailTimestamp(entry.sent_at)}
-                            </span>
+                            Mark as Lost
                           </button>
-
-                          {isExpanded ? (
-                            <div className="border-t border-white/10 px-3 py-3 text-xs">
-                              <p className="font-medium text-white/80">{entry.subject || "(No subject)"}</p>
-                              <p className="mt-2 leading-relaxed text-white/55">
-                                {getEmailBodySnippet(entry.body_snapshot)}
-                              </p>
-                            </div>
-                          ) : null}
-                        </article>
-                      );
-                    })}
-                  </div>
-                ))}
+                        ) : null}
+                        <button
+                          className="rounded-md border border-[#ef4444] bg-transparent px-4 py-3 text-sm font-medium text-[#ef4444] transition hover:bg-red-500/10"
+                          onClick={() => void handleArchiveSelectedDocket()}
+                          type="button"
+                        >
+                          Archive
+                        </button>
+                      </div>
+                    )}
+                  </section>
+                </aside>
               </div>
-            </section>
-            {!showArchived ? (
-              <section className="mt-6 border-t border-white/10 pt-4">
-                <button
-                  className="w-full rounded-md border border-[#E55125] bg-[#E55125] px-4 py-3 text-base font-bold text-white hover:bg-[#cf4a22]"
-                  onClick={() => void handleArchiveSelectedDocket()}
-                  type="button"
-                >
-                  Archive
-                </button>
-              </section>
-            ) : (
-              <section className="mt-6 border-t border-white/10 pt-4">
-                <button
-                  className="w-full rounded-md border border-[#E55125] bg-[#E55125] px-4 py-3 text-lg font-bold text-white hover:bg-[#cf4a22]"
-                  onClick={() => void handleUnarchiveDocket(selectedDocket.id)}
-                  type="button"
-                >
-                  Unarchive
-                </button>
-              </section>
-            )}
-          </aside>
-        </div>
-      ) : null}
+            );
+          })()
+        : null}
     </main>
   );
 }
