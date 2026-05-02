@@ -120,6 +120,7 @@ const JPY_FORMATTER = new Intl.NumberFormat("ja-JP", {
 const JPY_NUMBER_FORMATTER = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
+const NAV_TOOLTIP_STORAGE_KEY = "jdm_nav_tooltip_shown";
 
 function formatCad(value: number | null | undefined) {
   if (typeof value !== "number" || Number.isNaN(value)) {
@@ -529,7 +530,38 @@ function ReportFloatingNav({
   onSectionJump: (id: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [shouldRenderTooltip, setShouldRenderTooltip] = useState(false);
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const tooltipTimersRef = useRef<number[]>([]);
+
+  function clearTooltipTimers() {
+    tooltipTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    tooltipTimersRef.current = [];
+  }
+
+  function markTooltipShown() {
+    try {
+      window.sessionStorage.setItem(NAV_TOOLTIP_STORAGE_KEY, "true");
+    } catch {
+      // Ignore storage failures; the tooltip is non-critical.
+    }
+  }
+
+  function hideTooltipImmediately() {
+    markTooltipShown();
+    clearTooltipTimers();
+    setIsTooltipVisible(false);
+    setShouldRenderTooltip(false);
+  }
+
+  function openSectionMenu() {
+    if (shouldRenderTooltip) {
+      hideTooltipImmediately();
+    }
+
+    setIsOpen(true);
+  }
 
   function jumpToSection(id: string) {
     onSectionJump(id);
@@ -537,6 +569,42 @@ function ReportFloatingNav({
     window.history.replaceState(null, "", id === "search-summary" ? window.location.pathname : `#${id}`);
     setIsOpen(false);
   }
+
+  useEffect(() => {
+    let hasShownTooltip = false;
+
+    try {
+      hasShownTooltip = window.sessionStorage.getItem(NAV_TOOLTIP_STORAGE_KEY) === "true";
+    } catch {
+      hasShownTooltip = false;
+    }
+
+    if (hasShownTooltip) {
+      return;
+    }
+
+    const showTimer = window.setTimeout(() => {
+      markTooltipShown();
+      setShouldRenderTooltip(true);
+      window.requestAnimationFrame(() => setIsTooltipVisible(true));
+
+      const hideTimer = window.setTimeout(() => {
+        setIsTooltipVisible(false);
+
+        const removeTimer = window.setTimeout(() => {
+          setShouldRenderTooltip(false);
+        }, 300);
+
+        tooltipTimersRef.current = [removeTimer];
+      }, 5000);
+
+      tooltipTimersRef.current = [hideTimer];
+    }, 500);
+
+    tooltipTimersRef.current = [showTimer];
+
+    return clearTooltipTimers;
+  }, []);
 
   useEffect(() => {
     if (!isOpen) {
@@ -609,11 +677,27 @@ function ReportFloatingNav({
         aria-expanded={isOpen}
         aria-label="Jump to section"
         className="fixed bottom-4 right-4 z-50 mb-[env(safe-area-inset-bottom)] flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#E55125] text-white shadow-lg shadow-black/40 transition-all duration-200 hover:scale-105 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[#E55125] focus:ring-offset-2 focus:ring-offset-[#0d0d0d] sm:bottom-6 sm:right-6 sm:h-14 sm:w-14"
-        onClick={() => setIsOpen(true)}
+        onClick={openSectionMenu}
         type="button"
       >
         <MenuIcon />
       </button>
+
+      {shouldRenderTooltip ? (
+        <div
+          aria-hidden="true"
+          className={`pointer-events-none fixed bottom-[22px] right-[76px] z-50 mb-[env(safe-area-inset-bottom)] whitespace-nowrap rounded-lg border border-[#E55125]/30 bg-[#1a1a1a] px-3 py-2 text-xs font-medium text-white shadow-lg shadow-black/40 transition-opacity duration-300 sm:bottom-[34px] sm:right-[92px] sm:text-sm ${
+            isTooltipVisible ? "opacity-100 ease-out" : "opacity-0 ease-in"
+          }`}
+          role="tooltip"
+        >
+          Jump to Options
+          <span
+            aria-hidden="true"
+            className="absolute right-[-7px] top-1/2 h-0 w-0 -translate-y-1/2 border-y-[7px] border-l-[8px] border-y-transparent border-l-[#1a1a1a]"
+          />
+        </div>
+      ) : null}
 
       {isOpen ? (
         <>
