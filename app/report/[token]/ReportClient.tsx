@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { MouseEvent, UIEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { UIEvent } from "react";
 
 type FeeBreakdown = {
   vehiclePriceCAD?: number;
@@ -102,7 +102,7 @@ type ReportClientProps = {
   previewMode?: boolean;
 };
 
-type ReportTocItem = {
+type ReportNavItem = {
   id: string;
   label: string;
 };
@@ -127,6 +127,14 @@ function formatCad(value: number | null | undefined) {
   }
   const absolute = CAD_FORMATTER.format(Math.abs(value));
   return value < 0 ? `-$${absolute}` : `$${absolute}`;
+}
+
+function formatCompactCad(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "";
+  }
+
+  return `$${Math.round(value / 1000)}K`;
 }
 
 function formatJpy(value: number | null | undefined) {
@@ -490,49 +498,172 @@ function SearchSummaryCard({ docket }: { docket: DocketReportRecord }) {
   );
 }
 
-function ReportTableOfContents({
+function MenuIcon() {
+  return (
+    <svg aria-hidden="true" className="h-6 w-6" fill="none" viewBox="0 0 24 24">
+      <path
+        d="M4 7h16M4 12h16M4 17h16"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2"
+      />
+    </svg>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" className="h-5 w-5" fill="none" viewBox="0 0 24 24">
+      <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeLinecap="round" strokeWidth="2" />
+    </svg>
+  );
+}
+
+function ReportFloatingNav({
   items,
   activeSectionId,
+  onSectionJump,
 }: {
-  items: ReportTocItem[];
+  items: ReportNavItem[];
   activeSectionId: string | null;
+  onSectionJump: (id: string) => void;
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+
+  function jumpToSection(id: string) {
+    onSectionJump(id);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", id === "search-summary" ? window.location.pathname : `#${id}`);
+    setIsOpen(false);
+  }
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const panel = panelRef.current;
+    const focusableSelector = [
+      "button:not([disabled])",
+      "a[href]",
+      "input:not([disabled])",
+      "select:not([disabled])",
+      "textarea:not([disabled])",
+      "[tabindex]:not([tabindex='-1'])",
+    ].join(",");
+
+    function getFocusableElements() {
+      return Array.from(panel?.querySelectorAll<HTMLElement>(focusableSelector) ?? []).filter(
+        (element) => !element.hasAttribute("disabled") && element.tabIndex !== -1
+      );
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setIsOpen(false);
+        return;
+      }
+
+      if (event.key !== "Tab") {
+        return;
+      }
+
+      const focusableElements = getFocusableElements();
+      if (focusableElements.length === 0) {
+        event.preventDefault();
+        return;
+      }
+
+      const firstElement = focusableElements[0];
+      const lastElement = focusableElements[focusableElements.length - 1];
+
+      if (event.shiftKey && document.activeElement === firstElement) {
+        event.preventDefault();
+        lastElement.focus();
+      } else if (!event.shiftKey && document.activeElement === lastElement) {
+        event.preventDefault();
+        firstElement.focus();
+      }
+    }
+
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+    window.setTimeout(() => getFocusableElements()[0]?.focus(), 0);
+
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleKeyDown);
+      previouslyFocused?.focus();
+    };
+  }, [isOpen]);
+
   if (items.length === 0) {
     return null;
   }
 
-  function handleTocClick(event: MouseEvent<HTMLAnchorElement>, id: string) {
-    event.preventDefault();
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.history.replaceState(null, "", `#${id}`);
-  }
-
   return (
-    <nav
-      aria-label="Report sections"
-      className="sticky top-0 z-20 mt-8 border-b border-white/10 bg-[#0d0d0d]/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-[#0d0d0d]/85 sm:px-4 sm:py-3"
-    >
-      <div className="flex min-h-11 items-center gap-3 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {items.map((item, index) => {
-          const isActive = activeSectionId === item.id;
+    <>
+      <button
+        aria-expanded={isOpen}
+        aria-label="Jump to section"
+        className="fixed bottom-4 right-4 z-50 mb-[env(safe-area-inset-bottom)] flex h-[52px] w-[52px] items-center justify-center rounded-full bg-[#E55125] text-white shadow-lg shadow-black/40 transition-all duration-200 hover:scale-105 hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-[#E55125] focus:ring-offset-2 focus:ring-offset-[#0d0d0d] sm:bottom-6 sm:right-6 sm:h-14 sm:w-14"
+        onClick={() => setIsOpen(true)}
+        type="button"
+      >
+        <MenuIcon />
+      </button>
 
-          return (
-            <div className="flex shrink-0 items-center gap-3" key={item.id}>
-              {index > 0 ? <span className="text-white/25" aria-hidden="true">·</span> : null}
-              <a
-                className={`inline-flex min-h-11 items-center border-b border-transparent text-sm font-medium transition hover:border-[#E55125]/60 hover:text-[#E55125] focus:border-[#E55125]/60 focus:text-[#E55125] focus:outline-none ${
-                  isActive ? "border-[#E55125] text-[#E55125]" : "text-white/55"
-                }`}
-                href={`#${item.id}`}
-                onClick={(event) => handleTocClick(event, item.id)}
+      {isOpen ? (
+        <>
+          <button
+            aria-label="Close section menu"
+            className="fixed inset-0 z-50 bg-black/60 backdrop-blur-[1px]"
+            onClick={() => setIsOpen(false)}
+            type="button"
+          />
+          <div
+            aria-label="Jump to section"
+            aria-modal="true"
+            className="fixed inset-x-0 bottom-0 z-[60] max-h-[70vh] overflow-hidden rounded-t-3xl border border-white/10 bg-[#0d0d0d] pb-[env(safe-area-inset-bottom)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:bottom-6 sm:right-6 sm:w-[360px] sm:rounded-2xl"
+            ref={panelRef}
+            role="dialog"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
+              <h2 className="text-base font-semibold text-white">Jump to</h2>
+              <button
+                aria-label="Close section menu"
+                className="flex h-11 w-11 items-center justify-center rounded-full text-white/70 transition hover:bg-white/5 hover:text-white focus:outline-none focus:ring-2 focus:ring-[#E55125]/70"
+                onClick={() => setIsOpen(false)}
+                type="button"
               >
-                {item.label}
-              </a>
+                <CloseIcon />
+              </button>
             </div>
-          );
-        })}
-      </div>
-    </nav>
+
+            <nav aria-label="Report sections" className="max-h-[calc(70vh-76px)] overflow-y-auto px-3 py-2">
+              {items.map((item) => {
+                const isActive = activeSectionId === item.id;
+
+                return (
+                  <button
+                    className={`flex min-h-11 w-full items-center border-b border-white/10 px-2 py-3 text-left text-sm font-medium leading-5 transition last:border-b-0 hover:bg-white/5 focus:bg-white/5 focus:outline-none ${
+                      isActive ? "bg-[#E55125]/10 text-[#E55125]" : "text-white"
+                    }`}
+                    key={item.id}
+                    onClick={() => jumpToSection(item.id)}
+                    type="button"
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
+            </nav>
+          </div>
+        </>
+      ) : null}
+    </>
   );
 }
 
@@ -714,25 +845,31 @@ export function ReportClient({
   const hasAuctionListings = listings.length > 0;
   const hasAuctionEstimate = hasAuctionEstimateData(auctionEstimate);
   const hasAuctionOption = hasAuctionEstimate;
-  const tocItems = useMemo<ReportTocItem[]>(() => {
-    const items: ReportTocItem[] = [];
+  const navItems = useMemo<ReportNavItem[]>(() => {
+    const items: ReportNavItem[] = [{ id: "search-summary", label: "Search Summary" }];
 
     if (hasAuctionSalesHistory) {
-      items.push({ id: "auction-sales-history", label: "Auction History" });
+      items.push({ id: "auction-sales-history", label: "Auction Sales History" });
     }
 
     if (hasAuctionListings) {
-      items.push({ id: "auction-listings", label: "Listings" });
+      items.push({ id: "auction-listings", label: "Current Auction Listings" });
     }
 
     if (hasAuctionOption) {
-      items.push({ id: "auction-option", label: "Auction" });
+      items.push({ id: "auction-option", label: "Auction Option" });
     }
 
     privateDealerOptions.forEach((option) => {
+      const vehicleLabel = [option.year, option.model]
+        .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+        .join(" ");
+      const totalLabel = formatCompactCad(option.total_delivered_cad);
+      const labelDetail = [vehicleLabel, totalLabel].filter(Boolean).join(" · ");
+
       items.push({
         id: `dealer-option-${option.option_number}`,
-        label: `Option ${option.option_number}`,
+        label: labelDetail ? `Option ${option.option_number} — ${labelDetail}` : `Option ${option.option_number}`,
       });
     });
 
@@ -742,36 +879,47 @@ export function ReportClient({
 
     return items;
   }, [hasAuctionListings, hasAuctionOption, hasAuctionSalesHistory, previewMode, privateDealerOptions]);
-  const activeTocSectionId = tocItems.some((item) => item.id === activeSectionId) ? activeSectionId : null;
+  const activeNavSectionId = navItems.some((item) => item.id === activeSectionId) ? activeSectionId : null;
 
   useEffect(() => {
-    if (tocItems.length === 0) {
+    if (navItems.length === 0) {
       return;
     }
 
-    const visibleSections = new Map<string, number>();
+    const visibleSections = new Map<string, Element>();
+
+    function updateActiveSection() {
+      const activeEntry = Array.from(visibleSections.entries())
+        .map(([id, element]) => ({
+          id,
+          top: element.getBoundingClientRect().top,
+        }))
+        .sort((a, b) => Math.abs(a.top - 80) - Math.abs(b.top - 80))[0];
+
+      if (activeEntry) {
+        setActiveSectionId(activeEntry.id);
+      }
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
-            visibleSections.set(entry.target.id, entry.intersectionRatio);
+            visibleSections.set(entry.target.id, entry.target);
           } else {
             visibleSections.delete(entry.target.id);
           }
         });
 
-        const activeEntry = Array.from(visibleSections.entries()).sort((a, b) => b[1] - a[1])[0];
-        if (activeEntry) {
-          setActiveSectionId(activeEntry[0]);
-        }
+        updateActiveSection();
       },
       {
         rootMargin: "-88px 0px -55% 0px",
-        threshold: [0.1, 0.25, 0.5, 0.75],
+        threshold: [0, 0.1, 0.25, 0.5, 0.75],
       }
     );
 
-    tocItems.forEach((item) => {
+    navItems.forEach((item) => {
       const element = document.getElementById(item.id);
       if (element) {
         observer.observe(element);
@@ -779,7 +927,7 @@ export function ReportClient({
     });
 
     return () => observer.disconnect();
-  }, [tocItems]);
+  }, [navItems]);
 
   useEffect(() => {
     if (!lightbox) {
@@ -1005,9 +1153,7 @@ export function ReportClient({
 
         {!approvalConfirmed && (
           <>
-            <ReportTableOfContents items={tocItems} activeSectionId={activeTocSectionId} />
-
-            <section className="pt-10">
+            <section id="search-summary" className="scroll-mt-20 pt-10">
               <h1 className="break-words text-3xl font-semibold text-white sm:text-[2.35rem]">
                 Your Custom JDM Report is Ready{visibleName ? `, ${visibleName}` : ""}
               </h1>
@@ -1320,6 +1466,14 @@ export function ReportClient({
           </>
         )}
       </div>
+
+      {!approvalConfirmed ? (
+        <ReportFloatingNav
+          activeSectionId={activeNavSectionId}
+          items={navItems}
+          onSectionJump={setActiveSectionId}
+        />
+      ) : null}
 
       {lightbox ? (
         <div
