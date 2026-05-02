@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { UIEvent } from "react";
+import type { MouseEvent, UIEvent } from "react";
 
 type FeeBreakdown = {
   vehiclePriceCAD?: number;
@@ -100,6 +100,11 @@ type ReportClientProps = {
   decisionEndpoint: string;
   questionEndpoint: string;
   previewMode?: boolean;
+};
+
+type ReportTocItem = {
+  id: string;
+  label: string;
 };
 
 const CAD_FORMATTER = new Intl.NumberFormat("en-CA", {
@@ -485,6 +490,52 @@ function SearchSummaryCard({ docket }: { docket: DocketReportRecord }) {
   );
 }
 
+function ReportTableOfContents({
+  items,
+  activeSectionId,
+}: {
+  items: ReportTocItem[];
+  activeSectionId: string | null;
+}) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  function handleTocClick(event: MouseEvent<HTMLAnchorElement>, id: string) {
+    event.preventDefault();
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.history.replaceState(null, "", `#${id}`);
+  }
+
+  return (
+    <nav
+      aria-label="Report sections"
+      className="sticky top-0 z-20 mt-8 border-b border-white/10 bg-[#0d0d0d]/95 px-3 py-2 backdrop-blur supports-[backdrop-filter]:bg-[#0d0d0d]/85 sm:px-4 sm:py-3"
+    >
+      <div className="flex min-h-11 items-center gap-3 overflow-x-auto whitespace-nowrap [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        {items.map((item, index) => {
+          const isActive = activeSectionId === item.id;
+
+          return (
+            <div className="flex shrink-0 items-center gap-3" key={item.id}>
+              {index > 0 ? <span className="text-white/25" aria-hidden="true">·</span> : null}
+              <a
+                className={`inline-flex min-h-11 items-center border-b border-transparent text-sm font-medium transition hover:border-[#E55125]/60 hover:text-[#E55125] focus:border-[#E55125]/60 focus:text-[#E55125] focus:outline-none ${
+                  isActive ? "border-[#E55125] text-[#E55125]" : "text-white/55"
+                }`}
+                href={`#${item.id}`}
+                onClick={(event) => handleTocClick(event, item.id)}
+              >
+                {item.label}
+              </a>
+            </div>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
 export function ReportClient({
   docket,
   auctionResearch,
@@ -556,6 +607,7 @@ export function ReportClient({
     index: number;
     label: string;
   } | null>(null);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
 
   const visibleName = useMemo(() => {
     const firstName = docket.customer_first_name?.trim() ?? "";
@@ -662,6 +714,72 @@ export function ReportClient({
   const hasAuctionListings = listings.length > 0;
   const hasAuctionEstimate = hasAuctionEstimateData(auctionEstimate);
   const hasAuctionOption = hasAuctionEstimate;
+  const tocItems = useMemo<ReportTocItem[]>(() => {
+    const items: ReportTocItem[] = [];
+
+    if (hasAuctionSalesHistory) {
+      items.push({ id: "auction-sales-history", label: "Auction History" });
+    }
+
+    if (hasAuctionListings) {
+      items.push({ id: "auction-listings", label: "Listings" });
+    }
+
+    if (hasAuctionOption) {
+      items.push({ id: "auction-option", label: "Auction" });
+    }
+
+    privateDealerOptions.forEach((option) => {
+      items.push({
+        id: `dealer-option-${option.option_number}`,
+        label: `Option ${option.option_number}`,
+      });
+    });
+
+    if (!previewMode) {
+      items.push({ id: "ask-us-anything", label: "Ask Us Anything" });
+    }
+
+    return items;
+  }, [hasAuctionListings, hasAuctionOption, hasAuctionSalesHistory, previewMode, privateDealerOptions]);
+  const activeTocSectionId = tocItems.some((item) => item.id === activeSectionId) ? activeSectionId : null;
+
+  useEffect(() => {
+    if (tocItems.length === 0) {
+      return;
+    }
+
+    const visibleSections = new Map<string, number>();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            visibleSections.set(entry.target.id, entry.intersectionRatio);
+          } else {
+            visibleSections.delete(entry.target.id);
+          }
+        });
+
+        const activeEntry = Array.from(visibleSections.entries()).sort((a, b) => b[1] - a[1])[0];
+        if (activeEntry) {
+          setActiveSectionId(activeEntry[0]);
+        }
+      },
+      {
+        rootMargin: "-88px 0px -55% 0px",
+        threshold: [0.1, 0.25, 0.5, 0.75],
+      }
+    );
+
+    tocItems.forEach((item) => {
+      const element = document.getElementById(item.id);
+      if (element) {
+        observer.observe(element);
+      }
+    });
+
+    return () => observer.disconnect();
+  }, [tocItems]);
 
   useEffect(() => {
     if (!lightbox) {
@@ -887,6 +1005,8 @@ export function ReportClient({
 
         {!approvalConfirmed && (
           <>
+            <ReportTableOfContents items={tocItems} activeSectionId={activeTocSectionId} />
+
             <section className="pt-10">
               <h1 className="break-words text-3xl font-semibold text-white sm:text-[2.35rem]">
                 Your Custom JDM Report is Ready{visibleName ? `, ${visibleName}` : ""}
@@ -907,7 +1027,7 @@ export function ReportClient({
             </section>
 
             {hasAuctionSalesHistory ? (
-              <section className="border-t border-white/10 pt-10">
+              <section id="auction-sales-history" className="scroll-mt-20 border-t border-white/10 pt-10">
                 <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Sales History</h2>
                 <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
                   <p className="text-sm text-white/65">Hammer Price Range</p>
@@ -929,7 +1049,7 @@ export function ReportClient({
             ) : null}
 
             {hasAuctionListings ? (
-              <section className="border-t border-white/10 pt-10">
+              <section id="auction-listings" className="scroll-mt-20 border-t border-white/10 pt-10">
                 <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Current Weekly Auction Listings</h2>
                 <div className="mt-5 space-y-4">
                   {listings.map((listing, index) => (
@@ -972,7 +1092,7 @@ export function ReportClient({
             ) : null}
 
             {hasAuctionOption ? (
-              <section className="border-t border-white/10 pt-10">
+              <section id="auction-option" className="scroll-mt-20 border-t border-white/10 pt-10">
                 <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Option</h2>
                 <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
                   <div className="grid gap-3 text-sm text-white/78 sm:grid-cols-2">
@@ -1025,7 +1145,7 @@ export function ReportClient({
               </section>
             ) : null}
 
-            <section className="border-t border-white/10 pt-10">
+            <section id="dealer-options" className="scroll-mt-20 border-t border-white/10 pt-10">
               <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Private Dealer Options</h2>
               {privateDealerOptions.length === 0 ? (
                 <div className="mt-5 rounded-2xl border border-white/10 bg-[#141414] p-5 text-sm text-white/65">
@@ -1034,7 +1154,11 @@ export function ReportClient({
               ) : (
                 <div className="mt-5 space-y-5">
                   {privateDealerOptions.map((option) => (
-                    <article className="rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7" key={option.option_number}>
+                    <article
+                      className="scroll-mt-20 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7"
+                      id={`dealer-option-${option.option_number}`}
+                      key={option.option_number}
+                    >
                       <div className="flex flex-col gap-2">
                         <h3 className="text-lg font-semibold text-white">
                           Option {option.option_number} —{" "}
@@ -1164,7 +1288,7 @@ export function ReportClient({
             </section>
 
             {!previewMode ? (
-              <section className="border-t border-white/10 pt-10">
+              <section id="ask-us-anything" className="scroll-mt-20 border-t border-white/10 pt-10">
                 <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Ask Us Anything</h2>
                 <p className="mt-2 text-sm leading-6 text-white/65">
                   Questions about these options, timelines, or next steps? Send us a note and we will respond quickly.
