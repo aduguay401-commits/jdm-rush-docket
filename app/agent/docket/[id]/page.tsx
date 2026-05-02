@@ -2365,7 +2365,7 @@ export default function AgentDocketDetailPage({
             {shouldShowResearchForm ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="text-xl font-semibold">Marcus Research Input Form</h2>
+                  <h2 className="text-xl font-semibold">Research Report Builder</h2>
                 </div>
 
                 {draftSavedAt ? (
@@ -2420,159 +2420,161 @@ export default function AgentDocketDetailPage({
                       sectionExpanded.auction ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                     }`}
                   >
-                    <div className="overflow-hidden">
-                      <div className="space-y-4 border-t border-white/10 p-4">
-                        <div className="grid gap-4 sm:grid-cols-3">
-                          <label className="text-sm text-white/85">
-                            Hammer Price Low (JPY)
-                            <input
-                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                    {sectionExpanded.auction ? (
+                      <div className="overflow-hidden">
+                        <div className="space-y-4 border-t border-white/10 p-4">
+                          <div className="grid gap-4 sm:grid-cols-3">
+                            <label className="text-sm text-white/85">
+                              Hammer Price Low (JPY)
+                              <input
+                                className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                disabled={isFormDisabled}
+                                min={0}
+                                onChange={(event) => setHammerPriceLowJpy(event.target.value)}
+                                placeholder="e.g. 1200000"
+                                type="number"
+                                value={hammerPriceLowJpy}
+                              />
+                            </label>
+                            <label className="text-sm text-white/85">
+                              Hammer Price High (JPY)
+                              <input
+                                className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                disabled={isFormDisabled}
+                                min={0}
+                                onChange={(event) => setHammerPriceHighJpy(event.target.value)}
+                                placeholder="e.g. 1700000"
+                                type="number"
+                                value={hammerPriceHighJpy}
+                              />
+                            </label>
+                            <label className="text-sm text-white/85">
+                              Recommended Max Bid (JPY)
+                              <input
+                                className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                disabled={isFormDisabled}
+                                min={0}
+                                onChange={(event) => setRecommendedMaxBidJpy(event.target.value)}
+                                placeholder="e.g. 1600000"
+                                type="number"
+                                value={recommendedMaxBidJpy}
+                              />
+                            </label>
+                          </div>
+                          <label className="block text-sm text-white/85">
+                            Sales History Notes
+                            <textarea
+                              className="mt-1 min-h-28 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                               disabled={isFormDisabled}
-                              min={0}
-                              onChange={(event) => setHammerPriceLowJpy(event.target.value)}
-                              placeholder="e.g. 1200000"
-                              type="number"
-                              value={hammerPriceLowJpy}
+                              onChange={(event) => setSalesHistoryNotes(event.target.value)}
+                              placeholder="Include previous sales and market behavior."
+                              value={salesHistoryNotes}
                             />
                           </label>
-                          <label className="text-sm text-white/85">
-                            Hammer Price High (JPY)
-                            <input
-                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                              disabled={isFormDisabled}
-                              min={0}
-                              onChange={(event) => setHammerPriceHighJpy(event.target.value)}
-                              placeholder="e.g. 1700000"
-                              type="number"
-                              value={hammerPriceHighJpy}
-                            />
-                          </label>
-                          <label className="text-sm text-white/85">
-                            Recommended Max Bid (JPY)
-                            <input
-                              className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                              disabled={isFormDisabled}
-                              min={0}
-                              onChange={(event) => setRecommendedMaxBidJpy(event.target.value)}
-                              placeholder="e.g. 1600000"
-                              type="number"
-                              value={recommendedMaxBidJpy}
-                            />
-                          </label>
-                        </div>
-                        <label className="block text-sm text-white/85">
-                          Sales History Notes
-                          <textarea
-                            className="mt-1 min-h-28 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                            disabled={isFormDisabled}
-                            onChange={(event) => setSalesHistoryNotes(event.target.value)}
-                            placeholder="Include previous sales and market behavior."
-                            value={salesHistoryNotes}
-                          />
-                        </label>
 
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <h3 className="text-lg font-medium">Current Weekly Auction Listings</h3>
-                          <button
-                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isFormDisabled}
-                            onClick={addAuctionListing}
-                            type="button"
-                          >
-                            + Add Another Auction Lot
-                          </button>
-                        </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <h3 className="text-lg font-medium">Current Weekly Auction Listings</h3>
+                            <button
+                              className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                              disabled={isFormDisabled}
+                              onClick={addAuctionListing}
+                              type="button"
+                            >
+                              + Add Another Auction Lot
+                            </button>
+                          </div>
 
-                        <div className="space-y-4">
-                          {auctionListings.map((listing, listingIndex) => (
-                            <div className="space-y-3 rounded-lg border border-white/10 bg-black/25 p-4" key={`auction-listing-${listingIndex + 1}`}>
-                              <div className="flex items-center justify-between gap-3">
-                                <p className="text-sm font-medium text-white/90">Auction Listing {listingIndex + 1}</p>
-                                {auctionListings.length > 1 ? (
-                                  <button
-                                    className="rounded-md border border-red-400/60 px-3 py-1 text-xs text-red-300 transition hover:bg-red-400/10"
+                          <div className="space-y-4">
+                            {auctionListings.map((listing, listingIndex) => (
+                              <div className="space-y-3 rounded-lg border border-white/10 bg-black/25 p-4" key={`auction-listing-${listingIndex + 1}`}>
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-sm font-medium text-white/90">Auction Listing {listingIndex + 1}</p>
+                                  {auctionListings.length > 1 ? (
+                                    <button
+                                      className="rounded-md border border-red-400/60 px-3 py-1 text-xs text-red-300 transition hover:bg-red-400/10"
+                                      disabled={isFormDisabled}
+                                      onClick={() => removeAuctionListing(listingIndex)}
+                                      type="button"
+                                    >
+                                      Remove
+                                    </button>
+                                  ) : null}
+                                </div>
+                                <label className="block text-sm text-white/85">
+                                  Lot Title
+                                  <input
+                                    className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
                                     disabled={isFormDisabled}
-                                    onClick={() => removeAuctionListing(listingIndex)}
-                                    type="button"
-                                  >
-                                    Remove
-                                  </button>
+                                    onChange={(event) => updateAuctionListing(listingIndex, { lotTitle: event.target.value })}
+                                    type="text"
+                                    value={listing.lotTitle}
+                                  />
+                                </label>
+                                <label className="block text-sm text-white/85">
+                                  Specs
+                                  <textarea
+                                    className="mt-1 min-h-24 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
+                                    disabled={isFormDisabled}
+                                    onChange={(event) => updateAuctionListing(listingIndex, { specs: event.target.value })}
+                                    value={listing.specs}
+                                  />
+                                </label>
+                                <label className="block text-sm text-white/85">
+                                  Photos
+                                  <input
+                                    accept="image/*"
+                                    className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
+                                    disabled={isFormDisabled || uploadingTarget === `auction-listing-${listingIndex + 1}`}
+                                    multiple
+                                    onChange={(event) => void handleAuctionListingPhotosUpload(listingIndex, event.target.files)}
+                                    type="file"
+                                  />
+                                </label>
+                                {listing.photos.length > 0 ? (
+                                  <div className="flex flex-wrap gap-3">
+                                    {listing.photos.map((photoPath, photoIndex) => {
+                                      const previewUrl = photoPreviewUrls[photoPath];
+                                      const fileName = extractOriginalFileName(photoPath);
+
+                                      return (
+                                        <div className="w-20" key={`${photoPath}-${photoIndex}`}>
+                                          <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
+                                            {previewUrl ? (
+                                              // eslint-disable-next-line @next/next/no-img-element
+                                              <img
+                                                alt={fileName}
+                                                className="h-full w-full object-cover"
+                                                src={previewUrl}
+                                              />
+                                            ) : (
+                                              <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
+                                                No preview
+                                              </div>
+                                            )}
+                                            <button
+                                              aria-label={`Remove ${fileName}`}
+                                              className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
+                                              disabled={isFormDisabled}
+                                              onClick={() => removeAuctionListingPhoto(listingIndex, photoIndex)}
+                                              type="button"
+                                            >
+                                              ×
+                                            </button>
+                                          </div>
+                                          <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
+                                            {fileName}
+                                          </p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 ) : null}
                               </div>
-                              <label className="block text-sm text-white/85">
-                                Lot Title
-                                <input
-                                  className="mt-1 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                                  disabled={isFormDisabled}
-                                  onChange={(event) => updateAuctionListing(listingIndex, { lotTitle: event.target.value })}
-                                  type="text"
-                                  value={listing.lotTitle}
-                                />
-                              </label>
-                              <label className="block text-sm text-white/85">
-                                Specs
-                                <textarea
-                                  className="mt-1 min-h-24 w-full rounded-lg border border-white/20 bg-black/45 px-3 py-2 text-white outline-none transition focus:border-[#E55125]"
-                                  disabled={isFormDisabled}
-                                  onChange={(event) => updateAuctionListing(listingIndex, { specs: event.target.value })}
-                                  value={listing.specs}
-                                />
-                              </label>
-                              <label className="block text-sm text-white/85">
-                                Photos
-                                <input
-                                  accept="image/*"
-                                  className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
-                                  disabled={isFormDisabled || uploadingTarget === `auction-listing-${listingIndex + 1}`}
-                                  multiple
-                                  onChange={(event) => void handleAuctionListingPhotosUpload(listingIndex, event.target.files)}
-                                  type="file"
-                                />
-                              </label>
-                              {listing.photos.length > 0 ? (
-                                <div className="flex flex-wrap gap-3">
-                                  {listing.photos.map((photoPath, photoIndex) => {
-                                    const previewUrl = photoPreviewUrls[photoPath];
-                                    const fileName = extractOriginalFileName(photoPath);
-
-                                    return (
-                                      <div className="w-20" key={`${photoPath}-${photoIndex}`}>
-                                        <div className="relative h-20 w-20 overflow-hidden rounded-md border border-white/20 bg-black/45">
-                                          {previewUrl ? (
-                                            // eslint-disable-next-line @next/next/no-img-element
-                                            <img
-                                              alt={fileName}
-                                              className="h-full w-full object-cover"
-                                              src={previewUrl}
-                                            />
-                                          ) : (
-                                            <div className="flex h-full w-full items-center justify-center text-[10px] text-white/50">
-                                              No preview
-                                            </div>
-                                          )}
-                                          <button
-                                            aria-label={`Remove ${fileName}`}
-                                            className="absolute right-1 top-1 h-5 w-5 rounded-full bg-black/70 text-xs text-white transition hover:bg-red-500"
-                                            disabled={isFormDisabled}
-                                            onClick={() => removeAuctionListingPhoto(listingIndex, photoIndex)}
-                                            type="button"
-                                          >
-                                            ×
-                                          </button>
-                                        </div>
-                                        <p className="mt-1 truncate text-[10px] text-white/70" title={fileName}>
-                                          {fileName}
-                                        </p>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              ) : null}
-                            </div>
-                          ))}
+                            ))}
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -2614,33 +2616,34 @@ export default function AgentDocketDetailPage({
                       sectionExpanded.dealer ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                     }`}
                   >
-                    <div className="overflow-hidden space-y-3 border-t border-white/10 p-4">
-                      <div className="flex justify-end">
-                        <button
-                          className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                          disabled={isFormDisabled || dealerOptions.length >= 3}
-                          onClick={addDealerOption}
-                          type="button"
-                        >
-                          + Add Dealer Option
-                        </button>
-                      </div>
-                      <div className="space-y-3">
-                    {dealerOptions.map((option) => (
-                      <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>
-                        <button
-                          className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-white/90"
-                          disabled={isFormDisabled}
-                          onClick={() =>
-                            updateDealerOption(option.optionNumber, {
-                              expanded: !option.expanded,
-                            })
-                          }
-                          type="button"
-                        >
-                          <span>Option {option.optionNumber}</span>
-                          <span>{option.expanded ? "Hide" : "Expand"}</span>
-                        </button>
+                    {sectionExpanded.dealer ? (
+                      <div className="overflow-hidden space-y-3 border-t border-white/10 p-4">
+                        <div className="flex justify-end">
+                          <button
+                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isFormDisabled || dealerOptions.length >= 3}
+                            onClick={addDealerOption}
+                            type="button"
+                          >
+                            + Add Dealer Option
+                          </button>
+                        </div>
+                        <div className="space-y-3">
+                          {dealerOptions.map((option) => (
+                            <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>
+                              <button
+                                className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-white/90"
+                                disabled={isFormDisabled}
+                                onClick={() =>
+                                  updateDealerOption(option.optionNumber, {
+                                    expanded: !option.expanded,
+                                  })
+                                }
+                                type="button"
+                              >
+                                <span>Option {option.optionNumber}</span>
+                                <span>{option.expanded ? "Hide" : "Expand"}</span>
+                              </button>
 
                         {option.expanded ? (
                           <div className="space-y-3 border-t border-white/10 px-4 py-4">
@@ -2871,10 +2874,11 @@ export default function AgentDocketDetailPage({
                             </label>
                           </div>
                         ) : null}
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    ))}
-                      </div>
-                  </div>
+                    ) : null}
                 </div>
                 </div>
 
