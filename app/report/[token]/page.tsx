@@ -173,7 +173,7 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
         )
         .eq("docket_id", docket.id)
         .order("option_number", { ascending: true })
-        .limit(3)
+        .limit(6)
         .returns<PrivateDealerOptionRecord[]>(),
       supabase
         .from("auction_estimate")

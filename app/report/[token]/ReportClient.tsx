@@ -503,7 +503,7 @@ export function ReportClient({
   const [decisionError, setDecisionError] = useState<string | null>(null);
   const [decisionState, setDecisionState] = useState<{
     path: "private_dealer" | "auction";
-    optionNumber: 1 | 2 | 3 | null;
+    optionNumber: 1 | 2 | 3 | 4 | 5 | 6 | null;
   } | null>(() => {
     const selectedPath =
       docket.chosen_path === "private_dealer" || docket.chosen_path === "auction"
@@ -513,11 +513,19 @@ export function ReportClient({
           : null;
 
     const selectedOption =
-      docket.chosen_dealer_index === 1 || docket.chosen_dealer_index === 2 || docket.chosen_dealer_index === 3
+      docket.chosen_dealer_index === 1 ||
+      docket.chosen_dealer_index === 2 ||
+      docket.chosen_dealer_index === 3 ||
+      docket.chosen_dealer_index === 4 ||
+      docket.chosen_dealer_index === 5 ||
+      docket.chosen_dealer_index === 6
         ? docket.chosen_dealer_index
         : docket.selected_private_dealer_option === 1 ||
             docket.selected_private_dealer_option === 2 ||
-            docket.selected_private_dealer_option === 3
+            docket.selected_private_dealer_option === 3 ||
+            docket.selected_private_dealer_option === 4 ||
+            docket.selected_private_dealer_option === 5 ||
+            docket.selected_private_dealer_option === 6
           ? docket.selected_private_dealer_option
           : null;
 
@@ -565,7 +573,7 @@ export function ReportClient({
       ? docket.customer_email
       : "No email on file";
 
-  async function submitDecision(path: "private_dealer" | "auction", optionNumber?: 1 | 2 | 3) {
+  async function submitDecision(path: "private_dealer" | "auction", optionNumber?: 1 | 2 | 3 | 4 | 5 | 6) {
     if (hasDecision || isDeciding) {
       return;
     }
@@ -1139,7 +1147,7 @@ export function ReportClient({
                           onClick={() =>
                             submitDecision(
                               "private_dealer",
-                              option.option_number as 1 | 2 | 3
+                              option.option_number as 1 | 2 | 3 | 4 | 5 | 6
                             )
                           }
                           type="button"

@@ -91,7 +91,7 @@ type AuctionListingForm = {
 type TransmissionType = "Manual" | "Auto";
 
 type DealerOptionForm = {
-  optionNumber: 1 | 2 | 3;
+  optionNumber: 1 | 2 | 3 | 4 | 5 | 6;
   expanded: boolean;
   year: string;
   make: string;
@@ -238,6 +238,57 @@ const INITIAL_DEALER_OPTIONS: DealerOptionForm[] = [
     salesSheetUrl: "",
     notes: "",
   },
+  {
+    optionNumber: 4,
+    expanded: false,
+    year: "",
+    make: "",
+    model: "",
+    grade: "",
+    mileage: "",
+    colour: "",
+    transmission: "Manual",
+    trim: "",
+    dealerPriceJpy: "",
+    dealerPriceCad: "",
+    photos: [],
+    salesSheetUrl: "",
+    notes: "",
+  },
+  {
+    optionNumber: 5,
+    expanded: false,
+    year: "",
+    make: "",
+    model: "",
+    grade: "",
+    mileage: "",
+    colour: "",
+    transmission: "Manual",
+    trim: "",
+    dealerPriceJpy: "",
+    dealerPriceCad: "",
+    photos: [],
+    salesSheetUrl: "",
+    notes: "",
+  },
+  {
+    optionNumber: 6,
+    expanded: false,
+    year: "",
+    make: "",
+    model: "",
+    grade: "",
+    mileage: "",
+    colour: "",
+    transmission: "Manual",
+    trim: "",
+    dealerPriceJpy: "",
+    dealerPriceCad: "",
+    photos: [],
+    salesSheetUrl: "",
+    notes: "",
+  },
 ];
 
 function createInitialAuctionListings() {
@@ -252,7 +303,7 @@ function createInitialDealerOptions() {
   return [] as DealerOptionForm[];
 }
 
-function createDealerOption(optionNumber: 1 | 2 | 3, expanded = true) {
+function createDealerOption(optionNumber: 1 | 2 | 3 | 4 | 5 | 6, expanded = true) {
   const template = INITIAL_DEALER_OPTIONS.find((option) => option.optionNumber === optionNumber) ?? INITIAL_DEALER_OPTIONS[0];
 
   return {
@@ -307,12 +358,12 @@ function normalizeAuctionListingDraft(value: unknown): AuctionListingForm {
 function normalizeDealerOptionDraft(value: unknown, fallback: DealerOptionForm): DealerOptionForm {
   const option = value && typeof value === "object" ? (value as Partial<DealerOptionForm>) : {};
   const rawOptionNumber =
-    typeof option.optionNumber === "number" && option.optionNumber >= 1 && option.optionNumber <= 3
+    typeof option.optionNumber === "number" && option.optionNumber >= 1 && option.optionNumber <= 6
       ? option.optionNumber
       : fallback.optionNumber;
 
   return {
-    optionNumber: rawOptionNumber as 1 | 2 | 3,
+    optionNumber: rawOptionNumber as 1 | 2 | 3 | 4 | 5 | 6,
     expanded: typeof option.expanded === "boolean" ? option.expanded : fallback.expanded,
     year: toDraftString(option.year),
     make: toDraftString(option.make),
@@ -1432,7 +1483,9 @@ export default function AgentDocketDetailPage({
   function addDealerOption() {
     setDealerOptions((prev) => {
       const existingNumbers = new Set(prev.map((option) => option.optionNumber));
-      const nextOptionNumber = ([1, 2, 3] as const).find((optionNumber) => !existingNumbers.has(optionNumber));
+      const nextOptionNumber = ([1, 2, 3, 4, 5, 6] as const).find(
+        (optionNumber) => !existingNumbers.has(optionNumber)
+      );
 
       if (!nextOptionNumber) {
         return prev;
@@ -2621,13 +2674,16 @@ export default function AgentDocketDetailPage({
                         <div className="flex justify-end">
                           <button
                             className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isFormDisabled || dealerOptions.length >= 3}
+                            disabled={isFormDisabled || dealerOptions.length >= 6}
                             onClick={addDealerOption}
                             type="button"
                           >
                             + Add Dealer Option
                           </button>
                         </div>
+                        {dealerOptions.length >= 6 ? (
+                          <p className="text-right text-xs text-white/45">Maximum 6 options reached</p>
+                        ) : null}
                         <div className="space-y-3">
                           {dealerOptions.map((option) => (
                             <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>

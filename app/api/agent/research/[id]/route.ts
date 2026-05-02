@@ -224,7 +224,7 @@ function normalizeDealerOptions(value: unknown) {
       (item) =>
         typeof item.option_number === "number" &&
         item.option_number >= 1 &&
-        item.option_number <= 3 &&
+        item.option_number <= 6 &&
         !!item.year &&
         !!item.make &&
         !!item.model &&

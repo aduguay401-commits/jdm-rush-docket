@@ -4,11 +4,11 @@ import { createServerClient } from "@/lib/supabase/server";
 
 type DecisionPayload = {
   path?: "private_dealer" | "auction";
-  optionNumber?: 1 | 2 | 3;
+  optionNumber?: 1 | 2 | 3 | 4 | 5 | 6;
 };
 
-function isValidOptionNumber(value: unknown): value is 1 | 2 | 3 {
-  return value === 1 || value === 2 || value === 3;
+function isValidOptionNumber(value: unknown): value is 1 | 2 | 3 | 4 | 5 | 6 {
+  return value === 1 || value === 2 || value === 3 || value === 4 || value === 5 || value === 6;
 }
 
 export async function POST(
@@ -25,7 +25,7 @@ export async function POST(
 
     if (payload.path === "private_dealer" && !isValidOptionNumber(payload.optionNumber)) {
       return Response.json(
-        { success: false, error: "optionNumber (1, 2, or 3) is required for private_dealer" },
+        { success: false, error: "optionNumber 1 through 6 is required for private_dealer" },
         { status: 400 }
       );
     }
