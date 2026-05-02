@@ -146,6 +146,9 @@ const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
   montreal: "montreal-qc",
   vancouver: "richmond-bc",
   halifax: "montreal-qc",
+  "vancouver/richmond": "richmond-bc",
+  "kelowna/okanagan": "kelowna-bc",
+  "toronto/ottawa": "toronto-on",
 
   // Province variants
   "victoria bc": "victoria-bc",
@@ -170,6 +173,9 @@ const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
   "montreal quebec": "montreal-qc",
   "vancouver bc": "richmond-bc",
   "vancouver british columbia": "richmond-bc",
+  "vancouver/richmond bc": "richmond-bc",
+  "kelowna/okanagan bc": "kelowna-bc",
+  "toronto/ottawa on": "toronto-on",
   "halifax ns": "montreal-qc",
   "halifax nova scotia": "montreal-qc",
 
@@ -196,6 +202,9 @@ const DESTINATION_CITY_ALIASES: Record<string, DestinationCity> = {
   "montreal, quebec": "montreal-qc",
   "vancouver, bc": "richmond-bc",
   "vancouver, british columbia": "richmond-bc",
+  "vancouver/richmond, bc": "richmond-bc",
+  "kelowna/okanagan, bc": "kelowna-bc",
+  "toronto/ottawa, on": "toronto-on",
   "halifax, ns": "montreal-qc",
   "halifax, nova scotia": "montreal-qc",
 };
@@ -239,14 +248,19 @@ export function normalizeDestinationCity(raw: string): DestinationCity | null {
   const cleanedSlug = cleanedNoComma.replace(/\s+/g, "-");
   const withoutProvinceSlug = withoutProvince.replace(/\s+/g, "-");
 
-  return (
+  const destinationCity =
     DESTINATION_CITY_ALIASES[cleaned] ??
     DESTINATION_CITY_ALIASES[cleanedNoComma] ??
     DESTINATION_CITY_ALIASES[cleanedSlug] ??
     DESTINATION_CITY_ALIASES[withoutProvince] ??
     DESTINATION_CITY_ALIASES[withoutProvinceSlug] ??
-    null
-  );
+    null;
+
+  if (!destinationCity) {
+    console.warn(`[calculator] Unrecognized destination_city: '${raw}' could not be normalized`);
+  }
+
+  return destinationCity;
 }
 
 export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
