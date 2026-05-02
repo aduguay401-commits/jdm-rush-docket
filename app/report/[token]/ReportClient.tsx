@@ -375,6 +375,71 @@ function DealerPhotoGallery({
   );
 }
 
+function DealerSalesSheetImage({
+  optionNumber,
+  salesSheetUrl,
+}: {
+  optionNumber: number;
+  salesSheetUrl: string;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const salesSheetContainerId = `dealer-option-${optionNumber}-sales-sheet`;
+  const toggleLabel = isExpanded ? "Collapse Sales Sheet ↑" : "View Sales Sheet ↓";
+
+  function toggleSalesSheet() {
+    setIsExpanded((current) => !current);
+  }
+
+  return (
+    <>
+      <a
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+        href={salesSheetUrl}
+        rel="noreferrer"
+        target="_blank"
+      >
+        Open full-size sales sheet
+      </a>
+
+      <button
+        aria-controls={salesSheetContainerId}
+        aria-expanded={isExpanded}
+        aria-label={`${isExpanded ? "Collapse" : "View"} Sales Sheet`}
+        className="mt-3 block w-full cursor-pointer rounded-xl border border-white/10 bg-black/20 p-2 transition hover:border-[#E55125]/50 focus:outline-none focus:ring-2 focus:ring-[#E55125]/40"
+        onClick={toggleSalesSheet}
+        type="button"
+      >
+        <span
+          className={`block overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+            isExpanded ? "max-h-[900px] opacity-100" : "max-h-[120px] opacity-95 sm:max-h-[150px]"
+          }`}
+          id={salesSheetContainerId}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            alt={`Dealer option ${optionNumber} sales sheet`}
+            className={`mx-auto w-full max-w-full rounded-md object-contain transition-[max-height] duration-300 ease-in-out ${
+              isExpanded ? "max-h-[520px]" : "max-h-[120px] sm:max-h-[150px]"
+            }`}
+            loading="lazy"
+            src={salesSheetUrl}
+          />
+        </span>
+      </button>
+
+      <button
+        aria-controls={salesSheetContainerId}
+        aria-expanded={isExpanded}
+        className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-white/85 transition hover:border-[#E55125]/60 hover:text-[#E55125] focus:outline-none focus:ring-2 focus:ring-[#E55125]/40"
+        onClick={toggleSalesSheet}
+        type="button"
+      >
+        {toggleLabel}
+      </button>
+    </>
+  );
+}
+
 function FeeBreakdownTable({
   breakdown,
   destination,
@@ -1410,23 +1475,10 @@ export function ReportClient({
                         <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
                           <p className="text-sm font-medium text-white">Sales Sheet</p>
                           {isReportImageFile(option.sales_sheet_url) ? (
-                            <>
-                              <a
-                                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
-                                href={option.sales_sheet_url}
-                                rel="noreferrer"
-                                target="_blank"
-                              >
-                                Open full-size sales sheet
-                              </a>
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                alt={`Dealer option ${option.option_number} sales sheet`}
-                                className="mt-3 max-h-[520px] w-full max-w-full rounded-xl border border-white/10 object-contain"
-                                loading="lazy"
-                                src={option.sales_sheet_url}
-                              />
-                            </>
+                            <DealerSalesSheetImage
+                              optionNumber={option.option_number}
+                              salesSheetUrl={option.sales_sheet_url}
+                            />
                           ) : isReportPdfFile(option.sales_sheet_url) ? (
                             <a
                               className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
