@@ -1,5 +1,9 @@
 import { sendEmail } from '@/lib/email';
 
+import {
+  buildReportReadyAdminEmail,
+  type ReportReadyDealerOptionSummary,
+} from "@/lib/emails/reportReadyAdmin";
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
 import {
   calculateImportCost,
@@ -606,7 +610,7 @@ export async function POST(
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, vehicle_type, duty_type"
+        "id, status, customer_first_name, customer_last_name, vehicle_year, vehicle_make, vehicle_model, destination_city, destination_province, timeline, report_url_token, vehicle_type, duty_type"
       )
       .eq("id", id)
       .maybeSingle();
@@ -670,6 +674,26 @@ export async function POST(
           })
         : null;
     const midpointHammerCad = auctionEstimateFees?.dealerPriceCAD ?? null;
+    const auctionLowEstimateFees =
+      validHammerPriceLowJpy !== null
+        ? calculateImportCost({
+            vehiclePriceJPY: validHammerPriceLowJpy,
+            destinationCity,
+            vehicleType: vehicleTypeRaw,
+            dutyType: dutyTypeRaw,
+            exchangeRate: exchange.rate,
+          })
+        : null;
+    const auctionHighEstimateFees =
+      validHammerPriceHighJpy !== null
+        ? calculateImportCost({
+            vehiclePriceJPY: validHammerPriceHighJpy,
+            destinationCity,
+            vehicleType: vehicleTypeRaw,
+            dutyType: dutyTypeRaw,
+            exchangeRate: exchange.rate,
+          })
+        : null;
     logStep("exchange.rate_fetched", {
       docketId: id,
       exchange,
@@ -748,6 +772,7 @@ export async function POST(
     }
 
     const insertedDealerRows: Array<{ id: string; option_number: number }> = [];
+    const dealerOptionEmailSummaries: ReportReadyDealerOptionSummary[] = [];
     if (!hasPrivateDealerData) {
       logStep("supabase.private_dealer_options.insert.skipped", {
         docketId: id,
@@ -830,6 +855,14 @@ export async function POST(
       }
 
       insertedDealerRows.push(updatedDealerRow);
+      dealerOptionEmailSummaries.push({
+        optionNumber: item.option_number,
+        year: item.year,
+        make: item.make,
+        model: item.model,
+        dealerPriceJpy: item.dealer_price_jpy,
+        totalDeliveredCad: dealerFees.totalDeliveredCAD,
+      });
     }
 
     const { data: clearedEstimateRows, error: clearEstimateError } = await supabase
@@ -933,11 +966,32 @@ export async function POST(
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
-    const vehicleSummary = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
+    const destinationLabel = [docket.destination_city, docket.destination_province]
       .map((value) => (typeof value === "string" ? value.trim() : ""))
       .filter(Boolean)
-      .join(" ");
-    const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
+      .join(", ");
+    const reportReadyEmail = buildReportReadyAdminEmail({
+      docketId: id,
+      reportUrlToken: typeof docket.report_url_token === "string" ? docket.report_url_token : null,
+      customerName: customerName || "Unknown Customer",
+      agentName: null,
+      destination: destinationLabel,
+      timeline: typeof docket.timeline === "string" ? docket.timeline.trim() : "",
+      overallNotes,
+      dealerOptions: dealerOptionEmailSummaries,
+      auction: auctionEstimateFees
+        ? {
+            hammerLowJpy: validHammerPriceLowJpy,
+            hammerHighJpy: validHammerPriceHighJpy,
+            recommendedMaxBidJpy: validRecommendedMaxBidJpy,
+            estimateLowCad: auctionLowEstimateFees?.totalDeliveredCAD ?? null,
+            estimateHighCad: auctionHighEstimateFees?.totalDeliveredCAD ?? null,
+            midpointCad: auctionEstimateFees.totalDeliveredCAD,
+            auctionSalesCount: null,
+            auctionListingsCount: auctionListings.length,
+          }
+        : null,
+    });
 
     try {
       logStep("email.send.attempt", {
@@ -945,33 +999,15 @@ export async function POST(
         to: adminEmail ?? "adam@jdmrushimports.ca",
         from: fromEmail,
       });
-      const subject = `Research report submitted for docket ${id}`;
-      const bodySnapshot = `${devPrefix}Marcus submitted research for docket ${id}.
-
-Customer: ${customerName || "Unknown Customer"}
-Vehicle: ${vehicleSummary || "Unknown Vehicle"}
-Hammer Range (JPY): ${
-        validHammerPriceLowJpy !== null && validHammerPriceHighJpy !== null
-          ? `${validHammerPriceLowJpy.toLocaleString()} - ${validHammerPriceHighJpy.toLocaleString()}`
-          : "Not provided"
-      }
-Recommended Max Bid (JPY): ${
-        validRecommendedMaxBidJpy !== null ? validRecommendedMaxBidJpy.toLocaleString() : "Not provided"
-      }
-Midpoint Hammer (JPY): ${midpointHammerJpy !== null ? midpointHammerJpy.toLocaleString() : "Not provided"}
-FX (JPY->CAD): ${exchange.rate}
-Midpoint Hammer (CAD): ${midpointHammerCad !== null ? midpointHammerCad.toLocaleString() : "Not provided"}
-Auction Listings: ${auctionListings.length}
-Private Dealer Options: ${privateDealerOptions.length}
-
-Overall Notes:
-${overallNotes}`;
+      const subject = reportReadyEmail.subject;
+      const bodySnapshot = reportReadyEmail.text;
       const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
 
       const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
         subject,
+        html: reportReadyEmail.html,
         text: bodySnapshot,
       });
 
