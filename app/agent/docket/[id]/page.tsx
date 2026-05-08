@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useRef, useState } from "react";
+import { use, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import CustomerCommunicationTimeline, {
@@ -144,6 +144,13 @@ type ResearchSubmitPayload = {
     notes: string;
   }>;
   overallNotes: string;
+};
+
+type PhotoUploadDropzoneProps = {
+  disabled: boolean;
+  isUploading: boolean;
+  label: string;
+  onFilesSelected: (files: FileList | null) => void;
 };
 
 const MAX_QUESTIONS = 10;
@@ -319,6 +326,12 @@ function createAllDealerOptions() {
     ...option,
     photos: [...option.photos],
   }));
+}
+
+function getNextDealerOptionNumber(options: DealerOptionForm[]) {
+  const existingNumbers = new Set(options.map((option) => option.optionNumber));
+
+  return ([1, 2, 3, 4, 5, 6] as const).find((optionNumber) => !existingNumbers.has(optionNumber)) ?? null;
 }
 
 function createEmptyResearchDraft(): ResearchDraft {
@@ -640,6 +653,81 @@ function formatCad(value: string | number | null | undefined) {
     : "N/A";
 }
 
+function formatDealerOptionHeader(option: DealerOptionForm) {
+  const vehicle = [option.year, option.make, option.model].map((value) => value.trim()).filter(Boolean).join(" ");
+  const details = [
+    vehicle,
+    formatJpy(option.dealerPriceJpy),
+    option.photos.length > 0 ? `${option.photos.length} ${option.photos.length === 1 ? "photo" : "photos"}` : "",
+  ].filter((value) => value && value !== "N/A");
+
+  return details.length > 0 ? `Option ${option.optionNumber} · ${details.join(" · ")}` : `Option ${option.optionNumber}`;
+}
+
+function PhotoUploadDropzone({ disabled, isUploading, label, onFilesSelected }: PhotoUploadDropzoneProps) {
+  const [isDragging, setIsDragging] = useState(false);
+
+  function handleFiles(files: FileList | null) {
+    if (disabled || isUploading || !files || files.length === 0) {
+      return;
+    }
+
+    onFilesSelected(files);
+  }
+
+  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+    handleFiles(event.target.files);
+    event.target.value = "";
+  }
+
+  function handleDragOver(event: DragEvent<HTMLSpanElement>) {
+    event.preventDefault();
+
+    if (!disabled && !isUploading) {
+      setIsDragging(true);
+    }
+  }
+
+  function handleDragLeave() {
+    setIsDragging(false);
+  }
+
+  function handleDrop(event: DragEvent<HTMLSpanElement>) {
+    event.preventDefault();
+    setIsDragging(false);
+    handleFiles(event.dataTransfer.files);
+  }
+
+  return (
+    <label className="block text-sm text-white/85">
+      {label}
+      <span
+        className={`mt-1 flex min-h-32 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-6 text-center transition ${
+          isDragging
+            ? "border-[#E55125] bg-[#E55125]/10"
+            : "border-white/25 bg-black/35 hover:border-[#E55125] hover:bg-white/[0.04]"
+        } ${disabled || isUploading ? "cursor-not-allowed opacity-60" : ""}`}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        <input
+          accept="image/*"
+          className="sr-only"
+          disabled={disabled || isUploading}
+          multiple
+          onChange={handleChange}
+          type="file"
+        />
+        <span className="text-sm font-medium text-white">
+          {isUploading ? "Uploading photos..." : "Drag photos here, or click to select multiple images"}
+        </span>
+        <span className="mt-1 text-xs text-white/50">JPG, PNG, HEIC, or WEBP. Multiple files are supported.</span>
+      </span>
+    </label>
+  );
+}
+
 function isStatusAtOrAfter(status: string | null | undefined, baseStatus: string) {
   const normalized = status ?? "new";
   const currentIndex = STATUS_ORDER.indexOf(normalized as (typeof STATUS_ORDER)[number]);
@@ -767,6 +855,9 @@ export default function AgentDocketDetailPage({
   const lastSavedDraftRef = useRef<string | null>(null);
   const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
   const reminderSentTimeoutRef = useRef<number | null>(null);
+  const researchBuilderTopRef = useRef<HTMLElement | null>(null);
+  const researchBuilderBottomRef = useRef<HTMLDivElement | null>(null);
+  const dealerOptionRefs = useRef<Record<number, HTMLDivElement | null>>({});
 
   const currentStatus = docket?.status ?? "new";
   const isResearchInProgress = currentStatus === "research_in_progress";
@@ -1480,21 +1571,40 @@ export default function AgentDocketDetailPage({
     );
   }
 
+  function scrollToResearchBuilderTop() {
+    researchBuilderTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function scrollToResearchBuilderBottom() {
+    researchBuilderBottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }
+
+  function scrollToDealerOption(optionNumber: number) {
+    window.requestAnimationFrame(() => {
+      dealerOptionRefs.current[optionNumber]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
   function addDealerOption() {
+    let addedOptionNumber: DealerOptionForm["optionNumber"] | null = null;
+
     setDealerOptions((prev) => {
-      const existingNumbers = new Set(prev.map((option) => option.optionNumber));
-      const nextOptionNumber = ([1, 2, 3, 4, 5, 6] as const).find(
-        (optionNumber) => !existingNumbers.has(optionNumber)
-      );
+      const nextOptionNumber = getNextDealerOptionNumber(prev);
 
       if (!nextOptionNumber) {
         return prev;
       }
 
+      addedOptionNumber = nextOptionNumber;
+
       return [...prev, createDealerOption(nextOptionNumber, true)].sort(
         (first, second) => first.optionNumber - second.optionNumber
       );
     });
+
+    if (addedOptionNumber) {
+      scrollToDealerOption(addedOptionNumber);
+    }
   }
 
   function toggleDealerSection() {
@@ -2416,9 +2526,27 @@ export default function AgentDocketDetailPage({
             ) : null}
 
             {shouldShowResearchForm ? (
-              <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
+              <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5" ref={researchBuilderTopRef}>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-xl font-semibold">Research Report Builder</h2>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isFormDisabled}
+                      onClick={scrollToResearchBuilderTop}
+                      type="button"
+                    >
+                      Top
+                    </button>
+                    <button
+                      className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={isFormDisabled}
+                      onClick={scrollToResearchBuilderBottom}
+                      type="button"
+                    >
+                      Bottom
+                    </button>
+                  </div>
                 </div>
 
                 {draftSavedAt ? (
@@ -2671,22 +2799,15 @@ export default function AgentDocketDetailPage({
                   >
                     {sectionExpanded.dealer ? (
                       <div className="overflow-hidden space-y-3 border-t border-white/10 p-4">
-                        <div className="flex justify-end">
-                          <button
-                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                            disabled={isFormDisabled || dealerOptions.length >= 6}
-                            onClick={addDealerOption}
-                            type="button"
-                          >
-                            + Add Dealer Option
-                          </button>
-                        </div>
-                        {dealerOptions.length >= 6 ? (
-                          <p className="text-right text-xs text-white/45">Maximum 6 options reached</p>
-                        ) : null}
                         <div className="space-y-3">
                           {dealerOptions.map((option) => (
-                            <div className="rounded-lg border border-white/10 bg-black/25" key={`dealer-option-${option.optionNumber}`}>
+                            <div
+                              className="rounded-lg border border-white/10 bg-black/25"
+                              key={`dealer-option-${option.optionNumber}`}
+                              ref={(element) => {
+                                dealerOptionRefs.current[option.optionNumber] = element;
+                              }}
+                            >
                               <button
                                 className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-white/90"
                                 disabled={isFormDisabled}
@@ -2697,7 +2818,7 @@ export default function AgentDocketDetailPage({
                                 }
                                 type="button"
                               >
-                                <span>Option {option.optionNumber}</span>
+                                <span className="min-w-0 truncate pr-3">{formatDealerOptionHeader(option)}</span>
                                 <span>{option.expanded ? "Hide" : "Expand"}</span>
                               </button>
 
@@ -2824,17 +2945,12 @@ export default function AgentDocketDetailPage({
                               </label>
                             </div>
 
-                            <label className="block text-sm text-white/85">
-                              Photos
-                              <input
-                                accept="image/*"
-                                className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
-                                disabled={isFormDisabled || uploadingTarget === `dealer-option-${option.optionNumber}-photos`}
-                                multiple
-                                onChange={(event) => void handleDealerOptionPhotosUpload(option.optionNumber, event.target.files)}
-                                type="file"
-                              />
-                            </label>
+                            <PhotoUploadDropzone
+                              disabled={isFormDisabled}
+                              isUploading={uploadingTarget === `dealer-option-${option.optionNumber}-photos`}
+                              label="Photos"
+                              onFilesSelected={(files) => void handleDealerOptionPhotosUpload(option.optionNumber, files)}
+                            />
 
                             <label className="block text-sm text-white/85">
                               Sales Sheet
@@ -2933,6 +3049,19 @@ export default function AgentDocketDetailPage({
                             </div>
                           ))}
                         </div>
+                        <div className="flex flex-wrap items-center justify-end gap-3 border-t border-white/10 pt-3">
+                          {dealerOptions.length >= 6 ? (
+                            <p className="text-xs text-white/45">Maximum 6 options reached</p>
+                          ) : null}
+                          <button
+                            className="rounded-lg border border-[#E55125] px-4 py-2 text-sm font-medium text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                            disabled={isFormDisabled || dealerOptions.length >= 6}
+                            onClick={addDealerOption}
+                            type="button"
+                          >
+                            + Add Dealer Option
+                          </button>
+                        </div>
                       </div>
                     ) : null}
                 </div>
@@ -2952,7 +3081,7 @@ export default function AgentDocketDetailPage({
                 </div>
 
                 {!isFormReadOnly ? (
-                  <div className="flex flex-wrap items-center justify-end gap-3">
+                  <div className="flex flex-wrap items-center justify-end gap-3" ref={researchBuilderBottomRef}>
                     {!auctionHasMeaningfulData && !dealerHasMeaningfulData ? (
                       <p className="w-full text-right text-sm text-white/45">
                         Add at least one auction lot or dealer option
