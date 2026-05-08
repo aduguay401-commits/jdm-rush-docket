@@ -14,6 +14,7 @@ export type DashboardMarcusQuestionItem = {
 export type DashboardCustomerQuestionItem = {
   question_text: string | null;
   created_at: string | null;
+  read_at?: string | null;
 };
 
 export type DashboardEmailLogItem = {
@@ -30,6 +31,7 @@ export type DashboardDisplayDocket = {
   docket_status_history?: DashboardDocketStatusHistoryItem[] | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
+  unreadCount?: number | null;
   marcus_questions?: DashboardMarcusQuestionItem[] | null;
   customer_questions?: DashboardCustomerQuestionItem[] | null;
   email_log?: DashboardEmailLogItem[] | null;
@@ -53,6 +55,7 @@ export type StatusDisplay = {
   text: string;
   className: string;
   stripeColor: string;
+  unreadCount: number;
 };
 
 export type ProgressBarStageState = {
@@ -370,11 +373,20 @@ function isOutboundCommunication(sourceType: LatestActivity["source_type"] | und
   return sourceType === "agent_question" || sourceType === "agent_email" || sourceType === "system_email";
 }
 
+export function getUnreadCustomerMessageCount(docket: DashboardDisplayDocket) {
+  if (typeof docket.unreadCount === "number" && Number.isFinite(docket.unreadCount)) {
+    return Math.max(0, docket.unreadCount);
+  }
+
+  return (docket.customer_questions ?? []).filter((question) => question.read_at === null).length;
+}
+
 export function getStatusDisplay(
   docket: DashboardDisplayDocket,
   latestActivity: LatestActivity | null = getLatestActivity(docket)
 ): StatusDisplay {
   const normalizedStatus = docket.status ?? "new";
+  const unreadCount = getUnreadCustomerMessageCount(docket);
   const defaultStatusLine = STATUS_LINE_CONTENT[normalizedStatus] ?? {
     text: formatStatus(normalizedStatus),
     className: "font-normal text-[#888]",
@@ -386,12 +398,14 @@ export function getStatusDisplay(
         text: "🏎️ Customer asked a question — respond",
         className: "font-semibold text-[#4ade80]",
         stripeColor: ACTION_STRIPE_COLOR,
+        unreadCount,
       };
     }
 
     return {
       ...defaultStatusLine,
       stripeColor: getStripeColor(normalizedStatus),
+      unreadCount,
     };
   }
 
@@ -401,6 +415,7 @@ export function getStatusDisplay(
         text: "🏎️ Customer asked a question — respond",
         className: "font-semibold text-[#4ade80]",
         stripeColor: ACTION_STRIPE_COLOR,
+        unreadCount,
       };
     }
 
@@ -409,6 +424,7 @@ export function getStatusDisplay(
         text: "🏎️ Customer answered — respond or pull research",
         className: "font-semibold text-[#4ade80]",
         stripeColor: ACTION_STRIPE_COLOR,
+        unreadCount,
       };
     }
   }
@@ -419,6 +435,7 @@ export function getStatusDisplay(
         text: "🏎️ Customer asked a question — respond",
         className: "font-semibold text-[#4ade80]",
         stripeColor: ACTION_STRIPE_COLOR,
+        unreadCount,
       };
     }
 
@@ -426,6 +443,7 @@ export function getStatusDisplay(
       return {
         ...defaultStatusLine,
         stripeColor: getStripeColor(normalizedStatus),
+        unreadCount,
       };
     }
 
@@ -434,6 +452,7 @@ export function getStatusDisplay(
         text: "⏳ Follow-up sent. Awaiting customer response.",
         className: "font-normal text-[#aaa]",
         stripeColor: WAITING_STRIPE_COLOR,
+        unreadCount,
       };
     }
   }
@@ -441,6 +460,7 @@ export function getStatusDisplay(
   return {
     ...defaultStatusLine,
     stripeColor: getStripeColor(normalizedStatus),
+    unreadCount,
   };
 }
 

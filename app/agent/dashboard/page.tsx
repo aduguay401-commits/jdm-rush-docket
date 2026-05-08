@@ -19,6 +19,7 @@ type Docket = {
   docket_status_history: DocketStatusHistoryItem[] | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
+  unreadCount?: number | null;
   marcus_questions: MarcusQuestionItem[] | null;
   customer_questions: CustomerQuestionItem[] | null;
   email_log: EmailLogItem[] | null;
@@ -40,6 +41,7 @@ type MarcusQuestionItem = {
 type CustomerQuestionItem = {
   question_text: string | null;
   created_at: string | null;
+  read_at?: string | null;
 };
 
 type EmailLogItem = {
@@ -139,6 +141,14 @@ function formatRelativeTime(timestamp: string) {
 
   const days = Math.floor(hours / 24);
   return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+function getNewMessageBadgeLabel(unreadCount: number) {
+  if (unreadCount === 1) {
+    return "NEW MESSAGE";
+  }
+
+  return `NEW MESSAGES (${unreadCount})`;
 }
 
 function DocketProgressBar({ docket }: { docket: Docket }) {
@@ -259,7 +269,38 @@ export default function AgentDashboardPage() {
     }
 
     setError(null);
-    setDockets(sortDocketsByUrgency((data as Docket[]) ?? []));
+    const loadedDockets = ((data as Docket[]) ?? []).map((docket) => ({ ...docket, unreadCount: 0 }));
+    const docketIds = loadedDockets.map((docket) => docket.id);
+
+    if (docketIds.length > 0) {
+      const { data: unreadRows, error: unreadError } = await supabase
+        .from("customer_questions")
+        .select("docket_id")
+        .in("docket_id", docketIds)
+        .is("read_at", null);
+
+      if (unreadError) {
+        setError(unreadError.message);
+        setLoading(false);
+        return;
+      }
+
+      const unreadCountByDocketId = new Map<string, number>();
+      for (const row of unreadRows ?? []) {
+        const docketId = typeof row.docket_id === "string" ? row.docket_id : null;
+        if (!docketId) {
+          continue;
+        }
+
+        unreadCountByDocketId.set(docketId, (unreadCountByDocketId.get(docketId) ?? 0) + 1);
+      }
+
+      for (const docket of loadedDockets) {
+        docket.unreadCount = unreadCountByDocketId.get(docket.id) ?? 0;
+      }
+    }
+
+    setDockets(sortDocketsByUrgency(loadedDockets));
     setLastRefreshedAt(new Date().toISOString());
     setLoading(false);
   }, [router, supabase]);
@@ -374,6 +415,7 @@ export default function AgentDashboardPage() {
               {dockets.map((docket) => {
                 const lastCommunication = getLatestActivity(docket);
                 const statusDisplay = getStatusDisplay(docket, lastCommunication);
+                const unreadCount = statusDisplay.unreadCount;
                 const stripeColor = statusDisplay.stripeColor;
                 const customerName =
                   `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
@@ -395,7 +437,14 @@ export default function AgentDashboardPage() {
                         </Link>
                       </div>
                       <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
-                      <p className={`mb-4 text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+                      <div className="mb-4 flex flex-wrap items-center gap-2">
+                        <p className={`text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+                        {unreadCount > 0 ? (
+                          <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
+                            {getNewMessageBadgeLabel(unreadCount)}
+                          </span>
+                        ) : null}
+                      </div>
                       <div
                         className="rounded bg-white/[0.03] px-[14px] py-2.5"
                         style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}

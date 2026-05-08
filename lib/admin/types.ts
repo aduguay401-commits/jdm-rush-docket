@@ -58,6 +58,7 @@ export type AdminDocket = {
   archived_at: string | null;
   report_url_token: string | null;
   questions_url_token: string | null;
+  unreadCount?: number | null;
   marcus_questions_count: CountRelation[] | null;
   customer_questions_count: CountRelation[] | null;
   email_log_count: CountRelation[] | null;
@@ -71,6 +72,7 @@ export type AdminDocket = {
 };
 
 export type NormalizedAdminDocket = AdminDocket & {
+  unreadCount: number;
   marcus_questions_total: number;
   customer_questions_total: number;
   reminders_sent_total: number;

@@ -9,9 +9,24 @@ function extractCount(value: CountRelation[] | null | undefined) {
   return typeof value[0]?.count === "number" ? value[0].count : 0;
 }
 
-export function normalizeAdminDocket(raw: AdminDocket) {
+function buildUnreadCountMap(rows: { docket_id: string | null }[] | null | undefined) {
+  const unreadCountByDocketId = new Map<string, number>();
+
+  for (const row of rows ?? []) {
+    if (!row.docket_id) {
+      continue;
+    }
+
+    unreadCountByDocketId.set(row.docket_id, (unreadCountByDocketId.get(row.docket_id) ?? 0) + 1);
+  }
+
+  return unreadCountByDocketId;
+}
+
+export function normalizeAdminDocket(raw: AdminDocket, unreadCount = raw.unreadCount ?? 0) {
   return {
     ...raw,
+    unreadCount,
     marcus_questions_total: extractCount(raw.marcus_questions_count),
     customer_questions_total: extractCount(raw.customer_questions_count),
     reminders_sent_total: extractCount(raw.email_log_count),
@@ -61,5 +76,23 @@ export async function fetchAdminDockets(options?: { archivedOnly?: boolean }) {
     throw new Error(error.message);
   }
 
-  return ((data ?? []) as AdminDocket[]).map(normalizeAdminDocket);
+  const rawDockets = (data ?? []) as AdminDocket[];
+  const docketIds = rawDockets.map((docket) => docket.id);
+
+  if (docketIds.length === 0) {
+    return [];
+  }
+
+  const { data: unreadCustomerQuestions, error: unreadError } = await supabase
+    .from("customer_questions")
+    .select("docket_id")
+    .in("docket_id", docketIds)
+    .is("read_at", null);
+
+  if (unreadError) {
+    throw new Error(unreadError.message);
+  }
+
+  const unreadCountByDocketId = buildUnreadCountMap(unreadCustomerQuestions);
+  return rawDockets.map((docket) => normalizeAdminDocket(docket, unreadCountByDocketId.get(docket.id) ?? 0));
 }

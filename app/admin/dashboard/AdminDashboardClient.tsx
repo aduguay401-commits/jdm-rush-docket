@@ -125,6 +125,14 @@ function formatRelativeTime(timestamp: string) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
+function getNewMessageBadgeLabel(unreadCount: number) {
+  if (unreadCount === 1) {
+    return "NEW MESSAGE";
+  }
+
+  return `NEW MESSAGES (${unreadCount})`;
+}
+
 function isPaused(docket: NormalizedAdminDocket) {
   return docket.status === "paused";
 }
@@ -615,6 +623,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           {filteredDockets.map((docket) => {
             const lastCommunication = getLatestActivity(docket);
             const statusLine = getStatusDisplay(docket, lastCommunication);
+            const unreadCount = statusLine.unreadCount;
             const stripeColor = statusLine.stripeColor;
 
             return (
@@ -631,7 +640,14 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                     </button>
                   </div>
                   <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
-                  <p className={`mb-4 text-sm ${statusLine.className}`}>{statusLine.text}</p>
+                  <div className="mb-4 flex flex-wrap items-center gap-2">
+                    <p className={`text-sm ${statusLine.className}`}>{statusLine.text}</p>
+                    {unreadCount > 0 ? (
+                      <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
+                        {getNewMessageBadgeLabel(unreadCount)}
+                      </span>
+                    ) : null}
+                  </div>
                   <div
                     className="rounded bg-white/[0.03] px-[14px] py-2.5"
                     style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
