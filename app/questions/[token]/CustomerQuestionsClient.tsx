@@ -2,6 +2,8 @@
 
 import { useMemo, useState } from "react";
 
+import MarkdownMessage from "@/components/MarkdownMessage";
+
 type Question = {
   id: string;
   question_text: string;
@@ -173,9 +175,15 @@ export function CustomerQuestionsClient({
                   <>
                     {unansweredQuestions.map((question, index) => (
                       <label className="block" key={question.id}>
-                        <span className="text-sm font-medium text-white/80">
-                          {index + 1}. {question.question_text}
-                        </span>
+                        <div className="flex gap-2 text-sm font-medium text-white/80">
+                          <span aria-hidden="true" className="shrink-0">
+                            {index + 1}.
+                          </span>
+                          <MarkdownMessage
+                            className="min-w-0 flex-1 font-medium text-white/80"
+                            content={question.question_text}
+                          />
+                        </div>
                         <textarea
                           className="mt-3 min-h-20 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
                           disabled={answersSubmitted || isSubmittingAnswers}

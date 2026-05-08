@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
+import MarkdownMessage from "@/components/MarkdownMessage";
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import {
   getLatestActivity,
@@ -168,12 +169,26 @@ function isExpandableActivityEvent(event: DocketActivityEvent) {
   return event.category === "customer_message" || event.category === "agent_message";
 }
 
-function ActivityExpandableContent({ content }: { content: DocketActivityExpandableContent }) {
+function ActivityExpandableContent({
+  category,
+  content,
+}: {
+  category: DocketActivityEvent["category"];
+  content: DocketActivityExpandableContent;
+}) {
+  const isCustomerAgentMessage = category === "customer_message" || category === "agent_message";
+
   if (content.type === "questions") {
     return (
       <ol className="list-decimal space-y-2 pl-5">
         {content.items.map((question, index) => (
-          <li key={`${question}-${index}`}>{question}</li>
+          <li key={`${question}-${index}`}>
+            {isCustomerAgentMessage ? (
+              <MarkdownMessage className="text-white/70" content={question} />
+            ) : (
+              question
+            )}
+          </li>
         ))}
       </ol>
     );
@@ -184,15 +199,28 @@ function ActivityExpandableContent({ content }: { content: DocketActivityExpanda
       <ol className="list-decimal space-y-3 pl-5">
         {content.items.map((item, index) => (
           <li key={`${item.question}-${index}`}>
-            <p className="text-white/85">{item.question}</p>
-            <p className="mt-1 text-[#E55125]">{item.answer}</p>
+            {isCustomerAgentMessage ? (
+              <>
+                <MarkdownMessage className="text-white/85" content={item.question} />
+                <MarkdownMessage className="mt-1 text-[#E55125]" content={item.answer} />
+              </>
+            ) : (
+              <>
+                <p className="text-white/85">{item.question}</p>
+                <p className="mt-1 text-[#E55125]">{item.answer}</p>
+              </>
+            )}
           </li>
         ))}
       </ol>
     );
   }
 
-  return <p className="whitespace-pre-line">{content.text}</p>;
+  return isCustomerAgentMessage ? (
+    <MarkdownMessage className="text-white/70" content={content.text} />
+  ) : (
+    <p className="whitespace-pre-line">{content.text}</p>
+  );
 }
 
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
@@ -837,7 +865,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                                 </RowElement>
                               {expanded && event.expandable_content ? (
                                 <div className="border-t border-white/10 px-3 py-3 text-sm leading-6 text-white/70">
-                                  <ActivityExpandableContent content={event.expandable_content} />
+                                  <ActivityExpandableContent
+                                    category={event.category}
+                                    content={event.expandable_content}
+                                  />
                                 </div>
                               ) : null}
                               </div>

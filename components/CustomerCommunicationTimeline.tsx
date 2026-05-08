@@ -1,3 +1,5 @@
+import MarkdownMessage from "@/components/MarkdownMessage";
+
 export type TimelineMarcusQuestion = {
   id: string;
   question_text: string | null;
@@ -130,7 +132,9 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
               </div>
               <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-white/85">
                 {entry.questions.map((question) => (
-                  <li key={question.id}>{question.question_text}</li>
+                  <li key={question.id}>
+                    <MarkdownMessage className="text-white/85" content={question.question_text} />
+                  </li>
                 ))}
               </ol>
             </article>
@@ -157,13 +161,19 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
               {entry.answers.length > 1 ? (
                 <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-[#E55125]">
                   {entry.answers.map((answer) => (
-                    <li key={answer.id}>{answer.answer_text || "No answer provided."}</li>
+                    <li key={answer.id}>
+                      <MarkdownMessage
+                        className="text-[#E55125]"
+                        content={answer.answer_text || "No answer provided."}
+                      />
+                    </li>
                   ))}
                 </ol>
               ) : (
-                <p className="mt-3 text-sm text-[#E55125]">
-                  {entry.answers[0]?.answer_text || "No answer provided."}
-                </p>
+                <MarkdownMessage
+                  className="mt-3 text-[#E55125]"
+                  content={entry.answers[0]?.answer_text || "No answer provided."}
+                />
               )}
             </article>
           );
@@ -191,7 +201,7 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
                 <span className="text-xs text-white/60">Unknown time</span>
               )}
             </div>
-            <p className="mt-3 text-sm text-white/90">{entry.question.question_text}</p>
+            <MarkdownMessage className="mt-3 text-white/90" content={entry.question.question_text} />
           </article>
         );
       })}
