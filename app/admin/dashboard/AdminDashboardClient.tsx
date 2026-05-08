@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
-import MarkdownMessage from "@/components/MarkdownMessage";
+import CustomerCommunicationTimeline from "@/components/CustomerCommunicationTimeline";
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import {
   getLatestActivity,
@@ -11,11 +11,6 @@ import {
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
-import {
-  getDocketActivityFeed,
-  type DocketActivityEvent,
-  type DocketActivityExpandableContent,
-} from "@/lib/dockets/activityFeed";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Props = {
@@ -165,64 +160,6 @@ function hasUnansweredMarcusQuestions(docket: NormalizedAdminDocket) {
   return docket.marcus_questions.some((question) => !question.answer_text?.trim());
 }
 
-function isExpandableActivityEvent(event: DocketActivityEvent) {
-  return event.category === "customer_message" || event.category === "agent_message";
-}
-
-function ActivityExpandableContent({
-  category,
-  content,
-}: {
-  category: DocketActivityEvent["category"];
-  content: DocketActivityExpandableContent;
-}) {
-  const isCustomerAgentMessage = category === "customer_message" || category === "agent_message";
-
-  if (content.type === "questions") {
-    return (
-      <ol className="list-decimal space-y-2 pl-5">
-        {content.items.map((question, index) => (
-          <li key={`${question}-${index}`}>
-            {isCustomerAgentMessage ? (
-              <MarkdownMessage className="text-white/70" content={question} />
-            ) : (
-              question
-            )}
-          </li>
-        ))}
-      </ol>
-    );
-  }
-
-  if (content.type === "qa_pairs") {
-    return (
-      <ol className="list-decimal space-y-3 pl-5">
-        {content.items.map((item, index) => (
-          <li key={`${item.question}-${index}`}>
-            {isCustomerAgentMessage ? (
-              <>
-                <MarkdownMessage className="text-white/85" content={item.question} />
-                <MarkdownMessage className="mt-1 text-[#E55125]" content={item.answer} />
-              </>
-            ) : (
-              <>
-                <p className="text-white/85">{item.question}</p>
-                <p className="mt-1 text-[#E55125]">{item.answer}</p>
-              </>
-            )}
-          </li>
-        ))}
-      </ol>
-    );
-  }
-
-  return isCustomerAgentMessage ? (
-    <MarkdownMessage className="text-white/70" content={content.text} />
-  ) : (
-    <p className="whitespace-pre-line">{content.text}</p>
-  );
-}
-
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
   const progressState = getProgressBarStage(docket.status, docket);
   const { currentIndex, status } = progressState;
@@ -284,7 +221,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [selectedDocketId, setSelectedDocketId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
   const [activeDrawerTab, setActiveDrawerTab] = useState<DrawerTab>("activity");
-  const [expandedActivityEventIds, setExpandedActivityEventIds] = useState<Set<string>>(new Set());
+  const [isCustomerCommunicationExpanded, setIsCustomerCommunicationExpanded] = useState(false);
   const [adminNotesDraft, setAdminNotesDraft] = useState("");
   const [notesSavedState, setNotesSavedState] = useState<"idle" | "saving" | "saved">("idle");
   const [lastNotesSavedAt, setLastNotesSavedAt] = useState<string | null>(null);
@@ -293,14 +230,6 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     () => dockets.find((docket) => docket.id === selectedDocketId) ?? null,
     [dockets, selectedDocketId]
   );
-
-  const activityFeed = useMemo(() => {
-    if (!selectedDocket) {
-      return [];
-    }
-
-    return getDocketActivityFeed(selectedDocket);
-  }, [selectedDocket]);
 
   const lastReminder = useMemo(() => {
     if (!selectedDocket) {
@@ -327,7 +256,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   }, [selectedDocketId]);
 
   useEffect(() => {
-    setExpandedActivityEventIds(new Set());
+    setIsCustomerCommunicationExpanded(false);
   }, [selectedDocketId]);
 
   async function refreshDockets(archivedOnly: boolean = showArchived) {
@@ -430,6 +359,28 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     setSendingReminderId(null);
   }
 
+  async function markCustomerQuestionsAsRead(docketId: string) {
+    const docket = dockets.find((item) => item.id === docketId);
+    const hasUnreadCustomerQuestions = docket?.customer_questions.some((question) => question.read_at === null) ?? false;
+    if (!hasUnreadCustomerQuestions) {
+      return;
+    }
+
+    const supabase = createBrowserSupabaseClient();
+    const { error: updateError } = await supabase
+      .from("customer_questions")
+      .update({ read_at: new Date().toISOString() })
+      .eq("docket_id", docketId)
+      .is("read_at", null);
+
+    if (updateError) {
+      console.error("[Admin Dashboard] Failed to mark customer questions as read", {
+        docketId,
+        error: updateError.message,
+      });
+    }
+  }
+
   function handleOpenDrawer(docketId: string) {
     const docket = dockets.find((item) => item.id === docketId);
     setAdminNotesDraft(docket?.admin_notes ?? "");
@@ -437,22 +388,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     setLastNotesSavedAt(null);
     setActiveDrawerTab("activity");
     setSelectedDocketId(docketId);
-  }
-
-  function toggleActivityEvent(event: DocketActivityEvent) {
-    if (!isExpandableActivityEvent(event)) {
-      return;
-    }
-
-    setExpandedActivityEventIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(event.id)) {
-        next.delete(event.id);
-      } else {
-        next.add(event.id);
-      }
-      return next;
-    });
+    void markCustomerQuestionsAsRead(docketId);
   }
 
   async function saveAdminNotes() {
@@ -737,6 +673,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             const isArchived = selectedDocket.is_archived === true;
             const isLost = selectedDocket.status === "lost";
             const hasUnansweredQuestions = hasUnansweredMarcusQuestions(selectedDocket);
+            const unreadCustomerQuestionsCount = selectedDocket.customer_questions.filter(
+              (question) => question.read_at === null
+            ).length;
             const conversationLink = hasUnansweredQuestions
               ? selectedDocket.questions_url_token
                 ? `https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`
@@ -821,62 +760,80 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                           onClick={() => handleSelectDrawerTab(tab)}
                           type="button"
                         >
-                          {tab === "activity" ? "Activity" : "Notes"}
+                          {tab === "activity" ? "Communication" : "Notes"}
                         </button>
                       ))}
                     </div>
                   </div>
 
                   {activeDrawerTab === "activity" ? (
-                    <section className="py-4">
-                      {activityFeed.length === 0 ? <p className="text-sm text-white/50">No activity yet</p> : null}
-                      <div className="relative space-y-3 before:absolute before:bottom-4 before:left-4 before:top-4 before:w-px before:bg-[#444]">
-                        {activityFeed.map((event, index) => {
-                          const expandable = isExpandableActivityEvent(event) && event.expandable_content;
-                          const expanded = expandedActivityEventIds.has(event.id);
-                          const RowElement = expandable ? "button" : "div";
-
-                          return (
-                            <article className="relative grid grid-cols-[2rem_minmax(0,1fr)] gap-3" key={event.id}>
-                              {index < activityFeed.length - 1 ? (
-                                <span
-                                  aria-hidden="true"
-                                  className="absolute left-4 top-[calc(100%+0.375rem)] z-10 -translate-x-1/2 text-[10px] leading-none text-[#E55125]"
-                                >
-                                  ▼
-                                </span>
-                              ) : null}
-                              <span
-                                aria-hidden="true"
-                                className={`relative z-10 flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-[#111111] text-base ${event.colorClass}`}
-                              >
-                                {event.icon}
+                    <div className="space-y-4 py-4">
+                      <section className="rounded-xl border border-white/12 border-l-4 border-l-[#E55125] bg-[#171717] p-5">
+                        <button
+                          aria-expanded={isCustomerCommunicationExpanded}
+                          className="flex w-full items-center justify-between gap-3 text-left"
+                          onClick={() => setIsCustomerCommunicationExpanded((previous) => !previous)}
+                          type="button"
+                        >
+                          <h3 className="text-lg font-semibold text-white">
+                            Customer Communication
+                            {unreadCustomerQuestionsCount > 0 ? (
+                              <span className="ml-2 inline-flex items-center rounded-full bg-[#E55125]/20 px-2 py-0.5 text-xs font-medium text-[#E55125]">
+                                {unreadCustomerQuestionsCount}
                               </span>
-                              <div className="rounded-md border border-white/10 bg-black/20">
-                                <RowElement
-                                  className={`grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-3 py-2 text-left ${
-                                    expandable ? "transition hover:bg-white/5" : ""
-                                  }`}
-                                  onClick={expandable ? () => toggleActivityEvent(event) : undefined}
-                                  type={expandable ? "button" : undefined}
-                                >
-                                  <span className="min-w-0 truncate text-sm text-white/85">{event.title}</span>
-                                  <span className="whitespace-nowrap text-xs text-white/45">{formatDate(event.timestamp)}</span>
-                                </RowElement>
-                              {expanded && event.expandable_content ? (
-                                <div className="border-t border-white/10 px-3 py-3 text-sm leading-6 text-white/70">
-                                  <ActivityExpandableContent
-                                    category={event.category}
-                                    content={event.expandable_content}
-                                  />
+                            ) : null}
+                          </h3>
+                          <span
+                            aria-hidden="true"
+                            className={`shrink-0 text-xl text-[#E55125] transition-transform ${
+                              isCustomerCommunicationExpanded ? "rotate-180" : ""
+                            }`}
+                          >
+                            v
+                          </span>
+                        </button>
+
+                        {isCustomerCommunicationExpanded ? (
+                          <div className="mt-5 rounded-lg border border-white/10 bg-black/20 p-4">
+                            <CustomerCommunicationTimeline
+                              customerQuestions={selectedDocket.customer_questions}
+                              marcusQuestions={selectedDocket.marcus_questions}
+                              readOnly={false}
+                            />
+                          </div>
+                        ) : null}
+                      </section>
+
+                      <section className="rounded-xl border border-white/10 bg-[#171717] p-5">
+                        <h3 className="text-lg font-semibold text-white">Email Log</h3>
+                        {selectedDocket.email_log.length === 0 ? (
+                          <p className="mt-3 text-sm text-white/50">No emails logged yet.</p>
+                        ) : (
+                          <div className="mt-4 space-y-3">
+                            {selectedDocket.email_log.map((email, index) => (
+                              <article
+                                className="rounded-md border border-white/10 bg-black/20 px-3 py-2"
+                                key={`${email.id}-${email.sent_at ?? index}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-white/85">
+                                      {email.subject || email.email_type || "Email sent"}
+                                    </p>
+                                    <p className="mt-1 truncate text-xs text-white/45">
+                                      {email.recipient_email || "Unknown recipient"}
+                                    </p>
+                                  </div>
+                                  <time className="shrink-0 whitespace-nowrap text-xs text-white/45">
+                                    {formatDate(email.sent_at)}
+                                  </time>
                                 </div>
-                              ) : null}
-                              </div>
-                            </article>
-                          );
-                        })}
-                      </div>
-                    </section>
+                              </article>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    </div>
                   ) : (
                     <section className="py-4">
                       <label className="block text-xs uppercase tracking-wider text-white/60">
