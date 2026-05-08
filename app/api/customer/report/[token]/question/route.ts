@@ -6,6 +6,10 @@ type QuestionPayload = {
   questionText?: string;
 };
 
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ token: string }> }
@@ -35,6 +39,24 @@ export async function POST(
       return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
     }
 
+    const sixtySecondsAgo = new Date(Date.now() - 60_000).toISOString();
+    const { data: recentDuplicate } = await supabase
+      .from("customer_questions")
+      .select("id")
+      .eq("docket_id", docket.id)
+      .eq("question_text", questionText)
+      .gte("created_at", sixtySecondsAgo)
+      .limit(1)
+      .maybeSingle();
+
+    if (recentDuplicate) {
+      console.log("[ask-us-anything] Duplicate detected within 60s, returning success", {
+        docketId: docket.id,
+        source: "report",
+      });
+      return Response.json({ success: true, duplicate: true }, { status: 200 });
+    }
+
     const { error: insertError } = await supabase.from("customer_questions").insert({
       docket_id: docket.id,
       question_text: questionText,
@@ -47,60 +69,74 @@ export async function POST(
     const adminEmail = process.env.ADMIN_EMAIL;
     const devMode = process.env.DEV_MODE === "true";
 
-    if (!fromEmail) {
-      return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
-    }
     const customerName = [docket.customer_first_name, docket.customer_last_name]
       .filter((value) => typeof value === "string" && value.trim().length > 0)
       .join(" ");
-    const devPrefix = devMode ? "[DEV MODE]\n\n" : "";
+    const marcusEmail = process.env.MARCUS_EMAIL;
+    const marcusCCEmail = process.env.MARCUS_CC_EMAIL;
     const recipientEmail = adminEmail ?? "adam@jdmrushimports.ca";
-    const subject = `New customer question on report docket ${docket.id}`;
-    const bodySnapshot = `${devPrefix}A customer sent a question from the report page.
+    const ccRecipients = devMode ? [] : [marcusEmail, marcusCCEmail].filter((value): value is string => Boolean(value));
+    const normalRecipientSummary = [recipientEmail, ...ccRecipients].join(", ");
+    const devPrefix = devMode ? `[DEV MODE - This email would normally go to: ${normalRecipientSummary}]\n\n` : "";
+    const subject = `Customer submitted a new question for docket ${docket.id}`;
+    const bodySnapshot = `${devPrefix}Customer ${customerName || "Unknown Customer"} sent a question for docket ${docket.id}.
 
 Docket: ${docket.id}
 Customer: ${customerName || "Unknown Customer"}
 Customer Email: ${docket.customer_email ?? "Unknown"}
 
-Question:\n${questionText}`;
+Question:
+${questionText}`;
+
+    if (!fromEmail) {
+      console.error("[ask-us-anything] Email notification failed", {
+        docketId: docket.id,
+        source: "report",
+        error: "Email configuration is missing",
+      });
+      return Response.json({ success: true });
+    }
 
     try {
       const sendResult = await sendEmail({
         from: fromEmail,
         to: recipientEmail,
+        ...(ccRecipients.length > 0 ? { cc: ccRecipients.join(", ") } : {}),
         subject,
         text: bodySnapshot,
       });
 
       if (sendResult.error) {
-        console.error("[Report Question Notification Send Error]", {
+        console.error("[ask-us-anything] Email notification failed", {
           docketId: docket.id,
-          token,
-          recipient: recipientEmail,
-          error: sendResult.error,
+          source: "report",
+          error: getErrorMessage(sendResult.error),
         });
-        return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+        return Response.json({ success: true });
       }
 
       const { error: emailLogError } = await supabase.from("email_log").insert({
         docket_id: docket.id,
-        email_type: "report_question_sent",
+        email_type: "customer_followup_question_sent",
         recipient_email: recipientEmail,
         subject,
         body_snapshot: bodySnapshot,
       });
 
       if (emailLogError) {
-        return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+        console.error("[ask-us-anything] Email log failed", {
+          docketId: docket.id,
+          source: "report",
+          error: emailLogError.message,
+        });
       }
     } catch (error) {
-      console.error("[Report Question Notification Send Error]", {
+      console.error("[ask-us-anything] Email notification failed", {
         docketId: docket.id,
-        token,
-        recipient: recipientEmail,
-        error,
+        source: "report",
+        error: getErrorMessage(error),
       });
-      return Response.json({ success: false, error: "Failed to send email" }, { status: 500 });
+      return Response.json({ success: true });
     }
 
     return Response.json({ success: true });
