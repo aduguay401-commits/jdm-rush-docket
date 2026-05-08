@@ -2700,17 +2700,12 @@ export default function AgentDocketDetailPage({
                                     value={listing.specs}
                                   />
                                 </label>
-                                <label className="block text-sm text-white/85">
-                                  Photos
-                                  <input
-                                    accept="image/*"
-                                    className="mt-1 block w-full text-sm text-white/75 file:mr-4 file:rounded-md file:border-0 file:bg-white/10 file:px-3 file:py-2 file:text-sm file:text-white"
-                                    disabled={isFormDisabled || uploadingTarget === `auction-listing-${listingIndex + 1}`}
-                                    multiple
-                                    onChange={(event) => void handleAuctionListingPhotosUpload(listingIndex, event.target.files)}
-                                    type="file"
-                                  />
-                                </label>
+                                <PhotoUploadDropzone
+                                  disabled={isFormDisabled}
+                                  isUploading={uploadingTarget === `auction-listing-${listingIndex + 1}`}
+                                  label="Photos"
+                                  onFilesSelected={(files) => void handleAuctionListingPhotosUpload(listingIndex, files)}
+                                />
                                 {listing.photos.length > 0 ? (
                                   <div className="flex flex-wrap gap-3">
                                     {listing.photos.map((photoPath, photoIndex) => {
