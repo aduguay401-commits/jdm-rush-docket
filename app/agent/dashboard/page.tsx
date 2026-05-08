@@ -74,6 +74,7 @@ const PROGRESS_STAGES = [
 ] as const;
 
 const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
+const DASHBOARD_SUCCESS_MESSAGE_KEY = "dashboard_success_message";
 
 function withAlpha(color: string, alpha: number) {
   if (color.startsWith("#") && color.length === 7) {
@@ -226,6 +227,7 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
+  const [dashboardSuccessMessage, setDashboardSuccessMessage] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async () => {
@@ -311,6 +313,12 @@ export default function AgentDashboardPage() {
     }
 
     const timeoutId = window.setTimeout(() => {
+      const successMessage = window.sessionStorage.getItem(DASHBOARD_SUCCESS_MESSAGE_KEY);
+      if (successMessage) {
+        window.sessionStorage.removeItem(DASHBOARD_SUCCESS_MESSAGE_KEY);
+        setDashboardSuccessMessage(successMessage);
+      }
+
       void loadDashboard();
     }, 0);
 
@@ -388,6 +396,11 @@ export default function AgentDashboardPage() {
         </header>
 
         {loading ? <p className="text-white/75">Loading dockets...</p> : null}
+        {dashboardSuccessMessage ? (
+          <div className="mb-4 rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 px-4 py-3 text-sm font-medium text-[#4ade80]">
+            {dashboardSuccessMessage}
+          </div>
+        ) : null}
         {error ? <p className="text-red-400">{error}</p> : null}
 
         {!loading && !error && dockets.length === 0 ? (

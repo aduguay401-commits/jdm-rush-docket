@@ -160,6 +160,7 @@ const QUESTIONS_BASE_STATUS = "questions_sent";
 const QUESTIONS_SENT_SUCCESS_MESSAGE =
   "Questions sent to customer. You'll receive an email when the customer submits their answers. Once notified, log back in to review their responses and proceed with research.";
 const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
+const DASHBOARD_SUCCESS_MESSAGE_KEY = "dashboard_success_message";
 const STATUS_ORDER = [
   "new",
   "questions_sent",
@@ -842,6 +843,7 @@ export default function AgentDocketDetailPage({
   const [overallNotes, setOverallNotes] = useState("");
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [submittingResearch, setSubmittingResearch] = useState(false);
+  const [rollingBackResearch, setRollingBackResearch] = useState(false);
   const [researchConfirmation, setResearchConfirmation] = useState<string | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
   const [researchLocked, setResearchLocked] = useState(false);
@@ -1486,6 +1488,38 @@ export default function AgentDocketDetailPage({
     setDocket((prev) => (prev ? { ...prev, status: "research_in_progress" } : prev));
     setProceedConfirmation("Confirmed. You can now complete and send the research report below.");
     setProceeding(false);
+  }
+
+  async function rollbackResearchToCommunication() {
+    if (!isResearchInProgress || rollingBackResearch) {
+      return;
+    }
+
+    const confirmed = window.confirm("Roll this docket back to Communication?");
+    if (!confirmed) {
+      return;
+    }
+
+    setRollingBackResearch(true);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/agent/rollback-research/${id}`, { method: "POST" });
+      const result = (await response.json()) as { success?: boolean; error?: string; status?: string };
+
+      if (!response.ok || !result.success) {
+        setError(result.error ?? "Failed to roll docket back to Communication.");
+        setRollingBackResearch(false);
+        return;
+      }
+
+      window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
+      window.sessionStorage.setItem(DASHBOARD_SUCCESS_MESSAGE_KEY, "Docket rolled back to Communication.");
+      router.push("/agent/dashboard");
+    } catch (rollbackError) {
+      setError(rollbackError instanceof Error ? rollbackError.message : "Failed to roll docket back to Communication.");
+      setRollingBackResearch(false);
+    }
   }
 
   async function sendReportReminder() {
@@ -2530,9 +2564,20 @@ export default function AgentDocketDetailPage({
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="text-xl font-semibold">Research Report Builder</h2>
                   <div className="flex items-center gap-2">
+                    {isResearchInProgress && !isEditingSubmittedReport ? (
+                      <button
+                        className="rounded-lg border border-white/20 bg-transparent px-3 py-1.5 text-xs font-medium text-white/70 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        disabled={rollingBackResearch || submittingResearch}
+                        onClick={() => void rollbackResearchToCommunication()}
+                        title="Roll back to the previous stage"
+                        type="button"
+                      >
+                        {rollingBackResearch ? "Rolling Back..." : "Back to Communication"}
+                      </button>
+                    ) : null}
                     <button
                       className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || rollingBackResearch}
                       onClick={scrollToResearchBuilderTop}
                       type="button"
                     >
@@ -2540,7 +2585,7 @@ export default function AgentDocketDetailPage({
                     </button>
                     <button
                       className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                      disabled={isFormDisabled}
+                      disabled={isFormDisabled || rollingBackResearch}
                       onClick={scrollToResearchBuilderBottom}
                       type="button"
                     >
