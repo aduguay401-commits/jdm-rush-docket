@@ -2177,7 +2177,7 @@ export default function AgentDocketDetailPage({
                   <span className="text-white">Phone:</span> {docket.customer_phone || "N/A"}
                 </p>
                 <p>
-                  <span className="text-white">Vehicle:</span>{" "}
+                  <span className="text-white">Year:</span>{" "}
                   {[docket.vehicle_year, docket.vehicle_make, docket.vehicle_model].filter(Boolean).join(" ") || "N/A"}
                 </p>
                 <p>
