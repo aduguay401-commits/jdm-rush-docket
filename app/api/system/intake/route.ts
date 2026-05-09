@@ -8,6 +8,7 @@ import { sendEmail } from '@/lib/email'
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
+import { normalizePhoneToE164 } from '@/lib/sms'
 
 type IntakePayload = {
   customer_first_name?: string
@@ -235,7 +236,8 @@ export async function POST(request: Request) {
     const additionalInfo = buildAdditionalInfo(payload)
     const customerFirstName = toOptionalString(payload.customer_first_name)
     const customerLastName = toOptionalString(payload.customer_last_name)
-    const customerPhone = toOptionalString(payload.customer_phone)
+    const customerPhoneRaw = toOptionalString(payload.customer_phone)
+    const customerPhone = customerPhoneRaw ? normalizePhoneToE164(customerPhoneRaw) : null
     const vehicleYear = toOptionalString(payload.vehicle_year)
     const vehicleMake = toOptionalString(payload.vehicle_make)
     const vehicleModel = toOptionalString(payload.vehicle_model)
