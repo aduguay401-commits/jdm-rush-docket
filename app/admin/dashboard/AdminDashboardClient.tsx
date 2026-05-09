@@ -566,8 +566,14 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
         </header>
 
         {showArchived ? (
-          <div className="mb-5 rounded-md border border-orange-400/20 border-l-4 border-l-orange-400/70 bg-orange-950/20 px-4 py-3 text-sm text-orange-100">
-            Viewing archived dockets
+          <div className="mb-5 flex items-center justify-between rounded-md border border-orange-400/20 border-l-4 border-l-orange-400/70 bg-orange-950/20 px-4 py-3">
+            <span className="text-sm text-orange-100">Viewing archived dockets</span>
+            <Link
+              className="rounded-md border border-[#333333] bg-transparent px-4 py-2 text-sm text-gray-300 transition-colors hover:border-[#E55125] hover:text-[#E55125]"
+              href="/admin/dashboard"
+            >
+              Back to Dashboard
+            </Link>
           </div>
         ) : (
           <section className="mb-5 grid gap-3 sm:grid-cols-3">
