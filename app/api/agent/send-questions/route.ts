@@ -150,7 +150,7 @@ export async function POST(request: Request) {
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, customer_first_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, questions_url_token"
+        "id, customer_first_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, questions_url_token"
       )
       .eq("id", docketId)
       .maybeSingle();
@@ -185,8 +185,14 @@ export async function POST(request: Request) {
       );
     }
 
+    const vehicleLabel =
+      buildVehicleLabel(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model);
     const vehicle =
-      buildVehicleLabel(docket.vehicle_year, docket.vehicle_make, docket.vehicle_model) || "vehicle";
+      vehicleLabel && vehicleLabel.length > 5
+        ? vehicleLabel
+        : typeof docket.vehicle_description === "string"
+          ? docket.vehicle_description
+          : "vehicle";
     const firstName =
       typeof docket.customer_first_name === "string" && docket.customer_first_name.trim().length > 0
         ? docket.customer_first_name.trim()
