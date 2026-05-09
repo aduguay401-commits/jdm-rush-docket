@@ -1,4 +1,5 @@
 import { sendEmail } from '@/lib/email';
+import { sendSMS } from '@/lib/sms';
 
 import { createServerClient } from "@/lib/supabase/server";
 
@@ -149,7 +150,7 @@ export async function POST(request: Request) {
     const { data: docket, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, customer_first_name, customer_email, vehicle_year, vehicle_make, vehicle_model, questions_url_token"
+        "id, customer_first_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, questions_url_token"
       )
       .eq("id", docketId)
       .maybeSingle();
@@ -249,6 +250,19 @@ support@jdmrushimports.ca`;
 
     if (emailLogError) {
       return Response.json({ success: false, error: emailLogError.message }, { status: 500 });
+    }
+
+    // Send SMS notification alongside email (fire and forget)
+    const customerPhone =
+      typeof docket.customer_phone === "string" && docket.customer_phone.trim().length > 0
+        ? docket.customer_phone
+        : null;
+
+    if (!devMode && customerPhone) {
+      const smsMessage =
+        `JDM Rush: Our export agent has a few quick questions about your ${vehicle} request. ` +
+        `Answer here: ${questionsUrl}`;
+      sendSMS(customerPhone, smsMessage);
     }
 
     return Response.json({ success: true });
