@@ -9,6 +9,7 @@ import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
+import { getAppBaseUrl } from '@/lib/urls'
 
 type IntakePayload = {
   customer_first_name?: string
@@ -440,7 +441,7 @@ Please review and begin follow-up.`
       }
 
       await sendWhatsAppNotification(
-        `🚗 New Lead: ${customerFirstName ?? ''} ${customerLastName ?? ''} - ${vehicleForSummary}. Log in to review: docket.jdmrushimports.ca/agent/login`
+        `🚗 New Lead: ${customerFirstName ?? ''} ${customerLastName ?? ''} - ${vehicleForSummary}. Log in to review: ${getAppBaseUrl()}/agent/login`
       )
 
       const { error: emailLogError } = await supabase.from('email_log').insert({

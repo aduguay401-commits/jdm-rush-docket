@@ -10,6 +10,7 @@ import CustomerCommunicationTimeline, {
 } from "@/components/CustomerCommunicationTimeline";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
+import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
 type Docket = {
   id: string;
@@ -886,7 +887,7 @@ export default function AgentDocketDetailPage({
       ? "w-full rounded-lg bg-[#22c55e] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
       : "w-full rounded-lg bg-[#E55125] px-5 py-3 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70";
   const reportUrl = docket?.report_url_token
-    ? `https://docket.jdmrushimports.ca/report/${docket.report_url_token}`
+    ? getCustomerReportUrl(docket.report_url_token)
     : null;
   const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
   const auctionHasMeaningfulData = hasAuctionMeaningfulData({
@@ -924,7 +925,7 @@ export default function AgentDocketDetailPage({
     ]
   );
   const customerQuestionsLink = docket?.questions_url_token
-    ? `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`
+    ? getCustomerHomeBaseUrl(docket.questions_url_token)
     : null;
   const unreadCustomerQuestionsCount = customerSubmittedQuestions.filter((question) => question.read_at === null).length;
   const timelineMarcusQuestions = useMemo<TimelineMarcusQuestion[]>(() => {

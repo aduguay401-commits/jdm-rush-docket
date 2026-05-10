@@ -2,6 +2,7 @@ import { sendEmail } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 
 import { createServerClient } from "@/lib/supabase/server";
+import { getCustomerHomeBaseUrl } from "@/lib/urls";
 
 type SendQuestionsPayload = {
   docketId?: string;
@@ -197,7 +198,7 @@ export async function POST(request: Request) {
       typeof docket.customer_first_name === "string" && docket.customer_first_name.trim().length > 0
         ? docket.customer_first_name.trim()
         : "there";
-    const questionsUrl = `https://jdm-rush-docket.vercel.app/questions/${docket.questions_url_token}`;
+    const questionsUrl = getCustomerHomeBaseUrl(docket.questions_url_token);
     const subject = "A few quick questions about your JDM request";
     const html = buildQuestionsEmailHtml({
       firstName,

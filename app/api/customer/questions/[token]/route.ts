@@ -2,6 +2,7 @@ import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 import { sendWhatsAppNotification } from "@/lib/whatsapp";
+import { getAppBaseUrl } from "@/lib/urls";
 
 type AnswerPayload = {
   answerText?: string;
@@ -229,7 +230,7 @@ support@jdmrushimports.ca`;
       }
 
       await sendWhatsAppNotification(
-        `✅ Customer ${firstName} submitted answers. Log in to review: docket.jdmrushimports.ca/agent/login`
+        `✅ Customer ${firstName} submitted answers. Log in to review: ${getAppBaseUrl()}/agent/login`
       );
     } catch (error) {
       console.error("[Email #3 Send Error]", {

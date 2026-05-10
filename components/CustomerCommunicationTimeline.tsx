@@ -19,6 +19,7 @@ export type TimelineCustomerQuestion = {
 type Props = {
   marcusQuestions: TimelineMarcusQuestion[];
   customerQuestions: TimelineCustomerQuestion[];
+  perspective?: "agent" | "customer";
   readOnly?: boolean;
 };
 
@@ -35,6 +36,11 @@ type CommunicationTimelineEntry =
     }
   | {
       type: "CUSTOMER_QUESTION";
+      timestamp: string | null;
+      question: TimelineCustomerQuestion;
+    }
+  | {
+      type: "CUSTOMER_QUESTION_REPLY";
       timestamp: string | null;
       question: TimelineCustomerQuestion;
     };
@@ -84,27 +90,53 @@ function buildCommunicationTimeline(
         answers: answersForBatch,
       })
     ),
-    ...customerQuestions.map(
+    ...customerQuestions.flatMap(
       (question): CommunicationTimelineEntry => ({
         type: "CUSTOMER_QUESTION",
         timestamp: question.created_at,
         question,
       })
     ),
+    ...customerQuestions
+      .filter((question) => question.answer_text?.trim())
+      .map(
+        (question): CommunicationTimelineEntry => ({
+          type: "CUSTOMER_QUESTION_REPLY",
+          timestamp: question.created_at,
+          question,
+        })
+      ),
   ].sort((left, right) => {
     const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
     const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : Number.MAX_SAFE_INTEGER;
+
+    if (leftTime === rightTime) {
+      const priorityByType: Record<CommunicationTimelineEntry["type"], number> = {
+        AGENT_QUESTIONS: 0,
+        CUSTOMER_QUESTION: 1,
+        CUSTOMER_QUESTION_REPLY: 2,
+        CUSTOMER_ANSWERS: 3,
+      };
+
+      return priorityByType[left.type] - priorityByType[right.type];
+    }
 
     return leftTime - rightTime;
   });
 }
 
-export default function CustomerCommunicationTimeline({ marcusQuestions, customerQuestions, readOnly = true }: Props) {
+export default function CustomerCommunicationTimeline({
+  marcusQuestions,
+  customerQuestions,
+  perspective = "agent",
+  readOnly = true,
+}: Props) {
   const communicationTimeline = buildCommunicationTimeline(marcusQuestions, customerQuestions);
   const unansweredQuestionsCount = Math.max(
     marcusQuestions.filter((question) => !question.answer_text?.trim()).length,
     0
   );
+  const isCustomerPerspective = perspective === "customer";
 
   if (communicationTimeline.length === 0) {
     return <p className="text-sm text-white/70">No customer communication yet.</p>;
@@ -116,7 +148,11 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
         if (entry.type === "AGENT_QUESTIONS") {
           return (
             <article
-              className="rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-4"
+              className={
+                isCustomerPerspective
+                  ? "rounded-lg border border-[#E55125]/25 border-l-4 border-l-[#E55125] bg-[#E55125]/10 p-4 shadow-[0_12px_40px_rgba(229,81,37,0.12)]"
+                  : "rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-4"
+              }
               key={`agent-questions-${entry.timestamp}`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -124,7 +160,9 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
                   <span aria-hidden="true" className="mr-2">
                     📤
                   </span>
-                  Agent sent {entry.questions.length} {entry.questions.length === 1 ? "question" : "questions"}
+                  {isCustomerPerspective
+                    ? "Message from JDM Rush Team"
+                    : `Agent sent ${entry.questions.length} ${entry.questions.length === 1 ? "question" : "questions"}`}
                 </h3>
                 <time className="text-xs text-white/60" dateTime={entry.timestamp}>
                   {formatCommunicationTimestamp(entry.timestamp)}
@@ -144,7 +182,11 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
         if (entry.type === "CUSTOMER_ANSWERS") {
           return (
             <article
-              className="rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4"
+              className={
+                isCustomerPerspective
+                  ? "rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/20 p-4 text-white/75"
+                  : "rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4"
+              }
               key={`customer-answers-${entry.timestamp}`}
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
@@ -152,7 +194,7 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
                   <span aria-hidden="true" className="mr-2">
                     📥
                   </span>
-                  Customer answered
+                  {isCustomerPerspective ? "Your reply" : "Customer answered"}
                 </h3>
                 <time className="text-xs text-white/60" dateTime={entry.timestamp}>
                   {formatCommunicationTimestamp(entry.timestamp)}
@@ -179,10 +221,44 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
           );
         }
 
+        if (entry.type === "CUSTOMER_QUESTION_REPLY") {
+          return (
+            <article
+              className={
+                isCustomerPerspective
+                  ? "rounded-lg border border-[#E55125]/25 border-l-4 border-l-[#E55125] bg-[#E55125]/10 p-4 shadow-[0_12px_40px_rgba(229,81,37,0.12)]"
+                  : "rounded-lg border border-white/10 border-l-4 border-l-[#E55125] bg-black/25 p-4"
+              }
+              key={`customer-question-reply-${entry.question.id}`}
+            >
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h3 className="text-sm font-medium text-white">
+                  <span aria-hidden="true" className="mr-2">
+                    📤
+                  </span>
+                  Reply from JDM Rush Team
+                </h3>
+                {entry.timestamp ? (
+                  <time className="text-xs text-white/60" dateTime={entry.timestamp}>
+                    {formatCommunicationTimestamp(entry.timestamp)}
+                  </time>
+                ) : (
+                  <span className="text-xs text-white/60">Unknown time</span>
+                )}
+              </div>
+              <MarkdownMessage className="mt-3 text-white/90" content={entry.question.answer_text} />
+            </article>
+          );
+        }
+
         return (
           <article
-            className={`rounded-lg border border-white/10 border-l-4 border-l-[#22c55e] bg-black/25 p-4 ${
-              !readOnly && entry.question.read_at === null ? "border-l-[#E55125] bg-[#E55125]/5" : ""
+            className={`rounded-lg border border-white/10 border-l-4 ${
+              isCustomerPerspective ? "border-l-[#E55125] bg-black/20 text-white/75" : "border-l-[#22c55e] bg-black/25"
+            } ${
+              !isCustomerPerspective && !readOnly && entry.question.read_at === null
+                ? "border-l-[#E55125] bg-[#E55125]/5"
+                : ""
             }`}
             key={`customer-question-${entry.question.id}`}
           >
@@ -191,7 +267,7 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
                 <span aria-hidden="true" className="mr-2">
                   💬
                 </span>
-                Customer asked
+                {isCustomerPerspective ? "You asked" : "Customer asked"}
               </h3>
               {entry.timestamp ? (
                 <time className="text-xs text-white/60" dateTime={entry.timestamp}>
@@ -206,7 +282,7 @@ export default function CustomerCommunicationTimeline({ marcusQuestions, custome
         );
       })}
 
-      {!readOnly && unansweredQuestionsCount > 0 ? (
+      {!isCustomerPerspective && !readOnly && unansweredQuestionsCount > 0 ? (
         <article className="rounded-lg border border-white/10 border-l-4 border-l-white/20 bg-black/25 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <h3 className="text-sm font-medium text-white/60">

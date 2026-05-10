@@ -2,6 +2,7 @@ import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdminOrAgent } from "@/lib/admin/auth";
+import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
 type ReminderCta = {
   message: string;
@@ -23,7 +24,7 @@ function buildReminderCta({
       message:
         "We sent you a few questions to help us find your perfect JDM. Your answers help us narrow down the best options for you.",
       buttonLabel: "Answer Questions →",
-      buttonUrl: `https://docket.jdmrushimports.ca/questions/${questionsUrlToken}`,
+      buttonUrl: getCustomerHomeBaseUrl(questionsUrlToken),
     };
   }
 
@@ -32,7 +33,7 @@ function buildReminderCta({
       message:
         "Your personalized import report is ready and waiting. Take a look at the options our team in Japan found for you.",
       buttonLabel: "View Your Report →",
-      buttonUrl: `https://docket.jdmrushimports.ca/report/${reportUrlToken}`,
+      buttonUrl: getCustomerReportUrl(reportUrlToken),
     };
   }
 
@@ -40,7 +41,7 @@ function buildReminderCta({
     return {
       message: "You are almost there! Complete your next steps to lock in your JDM import.",
       buttonLabel: "Complete Next Steps →",
-      buttonUrl: `https://docket.jdmrushimports.ca/report/${reportUrlToken}`,
+      buttonUrl: getCustomerReportUrl(reportUrlToken),
     };
   }
 

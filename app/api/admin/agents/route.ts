@@ -2,6 +2,7 @@ import { sendEmail } from '@/lib/email';
 
 import { requireAdmin } from "@/lib/admin/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { getAppBaseUrl } from "@/lib/urls";
 
 type AgentRow = {
   id: string;
@@ -17,7 +18,7 @@ type CreateAgentRequestBody = {
   tempPassword?: unknown;
 };
 
-const LOGIN_URL = "https://jdm-rush-docket.vercel.app/agent/login";
+const LOGIN_URL = `${getAppBaseUrl()}/agent/login`;
 
 function escapeHtml(value: string) {
   return value

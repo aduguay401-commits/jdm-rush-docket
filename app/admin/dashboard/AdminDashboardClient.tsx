@@ -13,6 +13,7 @@ import {
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
 type Props = {
   initialDockets: NormalizedAdminDocket[];
@@ -710,7 +711,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             ).length;
             const conversationLink = hasUnansweredQuestions
               ? selectedDocket.questions_url_token
-                ? `https://docket.jdmrushimports.ca/questions/${selectedDocket.questions_url_token}`
+                ? getCustomerHomeBaseUrl(selectedDocket.questions_url_token)
                 : null
               : `/admin/conversation/${selectedDocket.id}`;
             const conversationLinkLabel = hasUnansweredQuestions ? "View Questions" : "View Conversation";
@@ -738,7 +739,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                         {selectedDocket.report_url_token ? (
                           <a
                             className="inline-flex items-center gap-1 rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/80 transition hover:border-[#E55125] hover:text-[#E55125]"
-                            href={`https://docket.jdmrushimports.ca/report/${selectedDocket.report_url_token}`}
+                            href={getCustomerReportUrl(selectedDocket.report_url_token)}
                             rel="noreferrer"
                             target="_blank"
                           >

@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import { getCustomerHomeBaseUrl, getCustomerReportUrl } from '@/lib/urls'
 
 type SequenceType = 'A' | 'B' | 'C'
 
@@ -141,12 +142,12 @@ function buildEmailContent({
     sequenceType === 'A' && questionsUrlToken
       ? {
           label: 'Answer Questions →',
-          url: `https://docket.jdmrushimports.ca/questions/${questionsUrlToken}`,
+          url: getCustomerHomeBaseUrl(questionsUrlToken),
         }
       : (sequenceType === 'B' || sequenceType === 'C') && reportUrlToken
         ? {
             label: sequenceType === 'B' ? 'View Your Report →' : 'Complete Next Steps →',
-            url: `https://docket.jdmrushimports.ca/report/${reportUrlToken}`,
+            url: getCustomerReportUrl(reportUrlToken),
           }
         : null
   const ctaButton = cta

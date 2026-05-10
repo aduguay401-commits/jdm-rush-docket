@@ -1,3 +1,5 @@
+import { getAppBaseUrl, getCustomerReportUrl } from "@/lib/urls";
+
 type NullableNumber = number | null | undefined;
 
 export type ReportReadyDealerOptionSummary = {
@@ -38,7 +40,6 @@ export type ReportReadyAdminEmail = {
   text: string;
 };
 
-const APP_URL = "https://docket.jdmrushimports.ca";
 const BRAND_ORANGE = "#E55125";
 
 function escapeHtml(value: string) {
@@ -327,8 +328,8 @@ export function buildReportReadyAdminEmail(input: ReportReadyAdminEmailInput): R
       ? `The agent just sent ${customerName}'s research report.`
       : `${agentLabel} just sent ${customerName}'s research report.`;
   const summaryLines = renderSummaryLines(input, hasDealerOptions, hasAuction);
-  const reportUrl = input.reportUrlToken ? `${APP_URL}/report/${encodeURIComponent(input.reportUrlToken)}` : null;
-  const dashboardUrl = `${APP_URL}/admin/dashboard?docket=${encodeURIComponent(input.docketId)}`;
+  const reportUrl = input.reportUrlToken ? getCustomerReportUrl(input.reportUrlToken) : null;
+  const dashboardUrl = `${getAppBaseUrl()}/admin/dashboard?docket=${encodeURIComponent(input.docketId)}`;
 
   const ctaHtml = `<div style="margin-top:28px;padding-top:18px;border-top:1px solid #262626;">
     ${
