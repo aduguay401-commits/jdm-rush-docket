@@ -167,10 +167,6 @@ function getLastReminder(docket: NormalizedAdminDocket) {
     .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime())[0] ?? null;
 }
 
-function hasUnansweredMarcusQuestions(docket: NormalizedAdminDocket) {
-  return docket.marcus_questions.some((question) => !question.answer_text?.trim());
-}
-
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
   const progressState = getProgressBarStage(docket.status, docket);
   const { currentIndex, status } = progressState;
@@ -705,16 +701,13 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             const vehicleDescription = selectedDocket.vehicle_description?.trim() || getVehicleLabel(selectedDocket);
             const isArchived = selectedDocket.is_archived === true;
             const isLost = selectedDocket.status === "lost";
-            const hasUnansweredQuestions = hasUnansweredMarcusQuestions(selectedDocket);
             const unreadCustomerQuestionsCount = selectedDocket.customer_questions.filter(
               (question) => question.read_at === null
             ).length;
-            const conversationLink = hasUnansweredQuestions
-              ? selectedDocket.questions_url_token
-                ? getCustomerHomeBaseUrl(selectedDocket.questions_url_token)
-                : null
-              : `/admin/conversation/${selectedDocket.id}`;
-            const conversationLinkLabel = hasUnansweredQuestions ? "View Questions" : "View Conversation";
+            const customerHomeBaseLink = selectedDocket.questions_url_token
+              ? getCustomerHomeBaseUrl(selectedDocket.questions_url_token)
+              : null;
+            const conversationLink = `/admin/conversation/${selectedDocket.id}`;
 
             return (
               <div className="fixed inset-0 z-30 bg-black/55" onClick={() => setSelectedDocketId(null)}>
@@ -755,7 +748,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                             target="_blank"
                           >
                             <span aria-hidden="true">💬</span>
-                            {conversationLinkLabel}
+                            View Conversation
                           </a>
                         ) : null}
                         <button
@@ -767,6 +760,22 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                           {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
                         </button>
                       </div>
+                      {customerHomeBaseLink ? (
+                        <div className="pt-2 text-xs leading-5">
+                          <p className="text-white/80">
+                            <span className="text-white/55">Customer Home Base: </span>
+                            <a
+                              className="text-[#E55125] underline underline-offset-2 transition hover:text-[#f47a55]"
+                              href={customerHomeBaseLink}
+                              rel="noreferrer"
+                              target="_blank"
+                            >
+                              {customerHomeBaseLink}
+                            </a>
+                          </p>
+                          <p className="text-white/45">The customer&apos;s bookmark-able project page</p>
+                        </div>
+                      ) : null}
                       {lastReminder?.sent_at ? (
                         <p className="pt-1 text-xs text-white/45">
                           Last reminder: {formatDate(lastReminder.sent_at)} · {formatRelativeTime(lastReminder.sent_at)}

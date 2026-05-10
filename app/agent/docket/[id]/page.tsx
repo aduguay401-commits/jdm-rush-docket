@@ -2237,6 +2237,22 @@ export default function AgentDocketDetailPage({
                   <span className="text-white">Additional Notes:</span> {docket.additional_notes || "N/A"}
                 </p>
               </div>
+              {customerQuestionsLink ? (
+                <div className="mt-4 border-t border-white/10 pt-4 text-sm leading-6">
+                  <p className="text-white/85">
+                    <span className="text-white/60">Customer Home Base: </span>
+                    <a
+                      className="text-[#E55125] underline underline-offset-2 transition hover:text-[#f47a55]"
+                      href={customerQuestionsLink}
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      {customerQuestionsLink}
+                    </a>
+                  </p>
+                  <p className="text-xs text-white/45">The customer&apos;s bookmark-able project page</p>
+                </div>
+              ) : null}
             </section>
 
             <section className="rounded-xl border border-white/12 border-l-4 border-l-[#E55125] bg-[#171717] p-5">
@@ -2274,19 +2290,22 @@ export default function AgentDocketDetailPage({
                     {isQuestionsLocked ? (
                       <>
                         {customerQuestionsLink ? (
-                          <p className="mt-4 text-xs text-white/80">
-                            Customer questions URL:{" "}
-                            <a
-                              className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
-                              href={customerQuestionsLink}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              {customerQuestionsLink}
-                            </a>
-                          </p>
+                          <div className="mt-4 text-xs leading-5">
+                            <p className="text-white/80">
+                              Customer Home Base:{" "}
+                              <a
+                                className="text-[#E55125] underline underline-offset-2 hover:text-[#f47a55]"
+                                href={customerQuestionsLink}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                {customerQuestionsLink}
+                              </a>
+                            </p>
+                            <p className="text-white/45">The customer&apos;s bookmark-able project page</p>
+                          </div>
                         ) : (
-                          <p className="mt-4 text-xs text-white/70">Customer questions URL unavailable for this docket.</p>
+                          <p className="mt-4 text-xs text-white/70">Customer Home Base unavailable for this docket.</p>
                         )}
 
                         <div className="mt-4">
