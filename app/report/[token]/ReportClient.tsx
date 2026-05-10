@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIEvent } from "react";
 
 import MarkdownMessage from "@/components/MarkdownMessage";
@@ -189,6 +189,28 @@ function decodeTextEntities(value: string) {
 
 function renderNoteText(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? decodeTextEntities(value.trim()) : "";
+}
+
+function getRecommendationPreview(value: string) {
+  const plainText = value
+    .split("\n")
+    .map((line) =>
+      line
+        .replace(/^#{1,6}\s+/, "")
+        .replace(/^[-*+]\s+/, "")
+        .replace(/^\d+\.\s+/, "")
+        .replace(/[*_`>#]/g, "")
+        .trim()
+    )
+    .filter(Boolean)
+    .join(" ");
+  const sentenceMatch = plainText.match(/^.*?[.!?](?:\s|$)/);
+
+  return (
+    sentenceMatch?.[0]?.trim() ||
+    plainText ||
+    "After reviewing the options, here is where we landed and what we recommend."
+  );
 }
 
 function hasDisplayNotes(value: string | null | undefined) {
@@ -649,7 +671,6 @@ function ReportFloatingNav({
 
   function jumpToSection(id: string) {
     onSectionJump(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
     window.history.replaceState(null, "", id === "search-summary" ? window.location.pathname : `#${id}`);
     setIsOpen(false);
   }
@@ -907,6 +928,7 @@ export function ReportClient({
     label: string;
   } | null>(null);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+  const [isRecommendationExpanded, setIsRecommendationExpanded] = useState(false);
 
   const visibleName = useMemo(() => {
     const firstName = docket.customer_first_name?.trim() ?? "";
@@ -1011,6 +1033,9 @@ export function ReportClient({
     : [];
   const agentRecommendation = renderNoteText(docket.agent_recommendation);
   const hasAgentRecommendation = agentRecommendation.length > 0;
+  const recommendationPreview = hasAgentRecommendation
+    ? getRecommendationPreview(agentRecommendation)
+    : "After reviewing the options, here is where we landed and what we recommend.";
   const auctionSalesHistoryNotes = getUniqueAuctionSalesHistoryNotes(
     auctionResearch?.sales_history_notes,
     agentRecommendation
@@ -1074,6 +1099,22 @@ export function ReportClient({
   ]);
   const activeNavSectionId = navItems.some((item) => item.id === activeSectionId) ? activeSectionId : null;
 
+  const scrollToReportSection = useCallback((id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  const handleReportSectionJump = useCallback((id: string) => {
+    setActiveSectionId(id);
+
+    if (id === "our-recommendation") {
+      setIsRecommendationExpanded(true);
+      window.setTimeout(() => scrollToReportSection(id), 320);
+      return;
+    }
+
+    scrollToReportSection(id);
+  }, [scrollToReportSection]);
+
   useEffect(() => {
     if (navItems.length === 0) {
       return;
@@ -1121,6 +1162,39 @@ export function ReportClient({
 
     return () => observer.disconnect();
   }, [navItems]);
+
+  useEffect(() => {
+    if (!hasAgentRecommendation) {
+      return;
+    }
+
+    let scrollTimer: number | null = null;
+
+    function expandRecommendationFromHash() {
+      if (window.location.hash !== "#our-recommendation") {
+        return;
+      }
+
+      setIsRecommendationExpanded(true);
+
+      if (scrollTimer !== null) {
+        window.clearTimeout(scrollTimer);
+      }
+
+      scrollTimer = window.setTimeout(() => scrollToReportSection("our-recommendation"), 320);
+    }
+
+    expandRecommendationFromHash();
+    window.addEventListener("hashchange", expandRecommendationFromHash);
+
+    return () => {
+      window.removeEventListener("hashchange", expandRecommendationFromHash);
+
+      if (scrollTimer !== null) {
+        window.clearTimeout(scrollTimer);
+      }
+    };
+  }, [hasAgentRecommendation, scrollToReportSection]);
 
   useEffect(() => {
     if (!lightbox) {
@@ -1367,9 +1441,39 @@ export function ReportClient({
 
             {hasAgentRecommendation ? (
               <section id="our-recommendation" className="scroll-mt-20 border-t border-white/10 pt-10">
-                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Our Recommendation</h2>
-                <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
-                  <MarkdownMessage content={agentRecommendation} className="text-white/80" />
+                <div className="rounded-3xl border border-white/10 bg-[#141414] shadow-[0_20px_70px_rgba(0,0,0,0.25)] transition hover:border-[#E55125]/35">
+                  <button
+                    aria-controls="our-recommendation-content"
+                    aria-expanded={isRecommendationExpanded}
+                    className="block w-full cursor-pointer p-5 text-left focus:outline-none focus:ring-2 focus:ring-[#E55125]/40 sm:p-7"
+                    onClick={() => setIsRecommendationExpanded((current) => !current)}
+                    type="button"
+                  >
+                    <span className="flex items-start justify-between gap-4">
+                      <span className="min-w-0">
+                        <span className="block text-[18px] font-semibold text-white sm:text-2xl">
+                          Our Recommendation
+                        </span>
+                        <span className="mt-2 block truncate text-sm leading-6 text-white/55">
+                          {recommendationPreview}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full border border-[#E55125]/40 px-3 py-1 text-xs font-semibold text-[#E55125]">
+                        {isRecommendationExpanded ? "Collapse ↑" : "View full ↓"}
+                      </span>
+                    </span>
+                  </button>
+
+                  <div
+                    className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+                      isRecommendationExpanded ? "max-h-[2400px] opacity-100" : "max-h-0 opacity-0"
+                    }`}
+                    id="our-recommendation-content"
+                  >
+                    <div className="border-t border-white/10 px-5 pb-5 pt-5 sm:px-7 sm:pb-7">
+                      <MarkdownMessage content={agentRecommendation} className="text-white/80" />
+                    </div>
+                  </div>
                 </div>
               </section>
             ) : null}
@@ -1664,7 +1768,7 @@ export function ReportClient({
         <ReportFloatingNav
           activeSectionId={activeNavSectionId}
           items={navItems}
-          onSectionJump={setActiveSectionId}
+          onSectionJump={handleReportSectionJump}
         />
       ) : null}
 

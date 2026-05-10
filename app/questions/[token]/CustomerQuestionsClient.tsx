@@ -219,7 +219,9 @@ export function CustomerQuestionsClient({
           ) : null}
 
           <section className="rounded-[24px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] sm:p-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#E55125]">Your JDM Home Base</p>
+            <p className="text-sm font-semibold leading-6 text-[#E55125]">
+              🏠 Your JDM Home Base — see your conversation, status, and report in one place
+            </p>
             <h1 className="mt-3 text-3xl font-semibold text-white sm:text-[2.2rem]">{statusCopy.heading}</h1>
             <p className="mt-3 text-sm leading-6 text-white/68 sm:text-base">{statusCopy.message}</p>
           </section>
@@ -356,7 +358,6 @@ export function CustomerQuestionsClient({
           </section>
 
           <footer className="pb-4 pt-2 text-center text-xs leading-6 text-white/45">
-            <p>Save this link - it is your JDM Home Base for the entire project.</p>
             <p>support@jdmrushimports.ca</p>
           </footer>
         </div>
