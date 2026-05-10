@@ -8,6 +8,7 @@ import CustomerCommunicationTimeline, {
   type TimelineCustomerQuestion,
   type TimelineMarcusQuestion,
 } from "@/components/CustomerCommunicationTimeline";
+import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 
 type Docket = {
@@ -2196,11 +2197,15 @@ export default function AgentDocketDetailPage({
             <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
               <h2 className="mb-4 text-xl font-semibold">Sales Lead Information</h2>
               <div className="grid gap-2 text-sm text-white/85 sm:grid-cols-2">
-                {docket.vehicle_description?.trim() ? (
-                  <p className="sm:col-span-2">
-                    <span className="text-white">Customer&apos;s Vehicle Request:</span> {docket.vehicle_description}
-                  </p>
-                ) : null}
+                <VehicleRequestEditor
+                  docketId={docket.id}
+                  value={docket.vehicle_description}
+                  onSaved={(vehicleDescription) =>
+                    setDocket((previous) =>
+                      previous ? { ...previous, vehicle_description: vehicleDescription } : previous
+                    )
+                  }
+                />
                 <p>
                   <span className="text-white">Name:</span> {docket.customer_first_name || ""} {docket.customer_last_name || ""}
                 </p>

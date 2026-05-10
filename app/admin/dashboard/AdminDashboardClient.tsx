@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import CustomerCommunicationTimeline from "@/components/CustomerCommunicationTimeline";
+import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import {
   getLatestActivity,
@@ -25,6 +26,7 @@ type PatchPayload = {
   admin_notes?: string | null;
   is_archived?: boolean | null;
   archived_at?: string | null;
+  vehicle_description?: string | null;
 };
 
 const PROGRESS_STAGES = [
@@ -306,6 +308,14 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     if (refreshAfter) {
       await refreshDockets(showArchived);
     }
+  }
+
+  function updateDocketVehicleDescription(id: string, vehicleDescription: string) {
+    setDockets((previous) =>
+      previous.map((docket) =>
+        docket.id === id ? { ...docket, vehicle_description: vehicleDescription } : docket
+      )
+    );
   }
 
   async function handleArchiveSelectedDocket() {
@@ -770,6 +780,18 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       X
                     </button>
                   </div>
+
+                  <section className="mb-4 rounded-xl border border-white/10 bg-[#171717] p-5">
+                    <div className="grid gap-2 text-sm text-white/85">
+                      <VehicleRequestEditor
+                        docketId={selectedDocket.id}
+                        value={selectedDocket.vehicle_description}
+                        onSaved={(newVehicleDescription) =>
+                          updateDocketVehicleDescription(selectedDocket.id, newVehicleDescription)
+                        }
+                      />
+                    </div>
+                  </section>
 
                   <div className="border-b border-white/10">
                     <div className="grid grid-cols-2 rounded-md border border-white/10 bg-black/20 p-1">

@@ -58,11 +58,14 @@ export async function sendSMS(to: string, body: string): Promise<boolean> {
     await client.messages.create({ body, from, to: normalized });
     console.log(`[SMS] Sent to ${normalized.slice(-4)}`);
     return true;
-  } catch (err: any) {
-    if (err.code === 21608) {
+  } catch (err: unknown) {
+    const errorCode = typeof err === 'object' && err !== null && 'code' in err ? err.code : null;
+    const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+
+    if (errorCode === 21608) {
       console.warn(`[SMS] Unverified number ${normalized.slice(-4)} — add it in Twilio console`);
     } else {
-      console.error(`[SMS] Failed to ${normalized.slice(-4)}:`, err.message);
+      console.error(`[SMS] Failed to ${normalized.slice(-4)}:`, errorMessage);
     }
     return false;
   }

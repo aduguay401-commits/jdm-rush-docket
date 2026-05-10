@@ -9,7 +9,10 @@ type PatchPayload = {
   is_archived?: boolean | null;
   archived_at?: string | null;
   research_draft?: Record<string, unknown> | null;
+  vehicle_description?: string | null;
 };
+
+const MAX_VEHICLE_REQUEST_LENGTH = 500;
 
 export async function PATCH(
   request: Request,
@@ -25,7 +28,7 @@ export async function PATCH(
     const payload = (await request.json()) as PatchPayload;
     const payloadKeys = Object.keys(payload);
 
-    if (auth.role === "agent" && !payloadKeys.every((key) => key === "research_draft")) {
+    if (auth.role === "agent" && !payloadKeys.every((key) => key === "research_draft" || key === "vehicle_description")) {
       return Response.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
@@ -75,6 +78,24 @@ export async function PATCH(
       updates.research_draft = payload.research_draft;
     }
 
+    if (Object.prototype.hasOwnProperty.call(payload, "vehicle_description")) {
+      const vehicleDescription =
+        typeof payload.vehicle_description === "string" ? payload.vehicle_description.trim() : "";
+
+      if (!vehicleDescription) {
+        return Response.json({ success: false, error: "Vehicle request cannot be empty." }, { status: 400 });
+      }
+
+      if (vehicleDescription.length > MAX_VEHICLE_REQUEST_LENGTH) {
+        return Response.json(
+          { success: false, error: `Vehicle request cannot exceed ${MAX_VEHICLE_REQUEST_LENGTH} characters.` },
+          { status: 400 }
+        );
+      }
+
+      updates.vehicle_description = vehicleDescription;
+    }
+
     if (Object.keys(updates).length === 0) {
       return Response.json({ success: false, error: "No valid fields provided" }, { status: 400 });
     }
@@ -97,13 +118,18 @@ export async function PATCH(
       }
     }
 
-    const { error: updateError } = await supabase.from("dockets").update(updates).eq("id", id);
+    const { data: updatedDocket, error: updateError } = await supabase
+      .from("dockets")
+      .update(updates)
+      .eq("id", id)
+      .select("id, vehicle_description")
+      .maybeSingle<{ id: string; vehicle_description: string | null }>();
 
     if (updateError) {
       return Response.json({ success: false, error: updateError.message }, { status: 500 });
     }
 
-    return Response.json({ success: true });
+    return Response.json({ success: true, docket: updatedDocket });
   } catch {
     return Response.json({ success: false, error: "Invalid request body" }, { status: 400 });
   }
