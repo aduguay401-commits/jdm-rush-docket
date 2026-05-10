@@ -43,28 +43,17 @@ type CustomerQuestionsClientProps = {
 const LOGO_URL =
   "https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png";
 
-const STATUS_LABELS: Record<string, string> = {
-  new: "Request received",
-  questions_sent: "Questions ready",
-  answers_received: "Answers received",
-  research_in_progress: "Research underway",
-  report_sent: "Report ready",
-  decision_made: "Decision received",
-  cleared: "Project complete",
-  paused: "Paused",
-  unresponsive: "Waiting to hear from you",
-  lost: "No longer active",
-};
-
 const toneStyles = {
   active: "border-[#E55125]/35 bg-[#E55125]/10 shadow-[0_18px_60px_rgba(229,81,37,0.14)]",
   waiting: "border-white/12 bg-white/[0.045]",
   closed: "border-white/10 bg-[#151515]",
 } satisfies Record<CustomerHomeBaseStatusCopy["tone"], string>;
 
-function getStageLabel(status: string | null) {
-  return STATUS_LABELS[status ?? "new"] ?? "Project update";
-}
+const tagStyles = {
+  active: "text-[#E55125]",
+  waiting: "text-white/48",
+  closed: "text-white/45",
+} satisfies Record<CustomerHomeBaseStatusCopy["tone"], string>;
 
 function getDestination(docket: HomeBaseDocket) {
   return [docket.destination_city, docket.destination_province].filter(Boolean).join(", ") || "Not specified";
@@ -108,8 +97,19 @@ export function CustomerQuestionsClient({
     () => (answersSubmitted ? [] : unansweredQuestions),
     [answersSubmitted, unansweredQuestions]
   );
+  const displayedStatusCopy: CustomerHomeBaseStatusCopy = answersSubmitted
+    ? {
+        tag: "WE GOT YOUR ANSWERS",
+        heading: "We are on it",
+        message: "Our team is reviewing what you sent and will follow up shortly.",
+        showReportLink: false,
+        showQuestionForm: false,
+        tone: "active",
+      }
+    : statusCopy;
   const shouldRenderQuestionForm = shouldShowQuestionForm && currentUnansweredQuestions.length > 0;
   const conversationExists = hasConversation(allMarcusQuestions, customerQuestions) || answersSubmitted;
+  const shouldShowReportCta = displayedStatusCopy.showReportLink && Boolean(reportUrl);
 
   const allAnswersFilled = useMemo(
     () =>
@@ -210,43 +210,33 @@ export function CustomerQuestionsClient({
         </header>
 
         <div className="mt-10 space-y-5">
-          {answersSubmitted ? (
-            <section className="rounded-lg border-l-4 border-[#E55125] bg-[#1a1a1a] p-5">
-              <p className="text-sm leading-7 text-white/88">
-                Your answers have been submitted. Our team is reviewing what you sent and will follow up shortly.
-              </p>
-            </section>
-          ) : null}
-
-          <section className="rounded-[24px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(0,0,0,0.35)] sm:p-8">
-            <p className="text-sm font-semibold leading-6 text-[#E55125]">
-              🏠 Your JDM Home Base — see your conversation, status, and report in one place
-            </p>
-            <h1 className="mt-3 text-3xl font-semibold text-white sm:text-[2.2rem]">{statusCopy.heading}</h1>
-            <p className="mt-3 text-sm leading-6 text-white/68 sm:text-base">{statusCopy.message}</p>
-          </section>
-
-          <section className={`rounded-[20px] border p-5 transition ${toneStyles[statusCopy.tone]}`}>
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Current stage</p>
-            <h2 className="mt-2 text-xl font-semibold text-white">{getStageLabel(docket.status)}</h2>
-            <p className="mt-2 text-sm leading-6 text-white/68">
-              {shouldRenderQuestionForm
-                ? `${currentUnansweredQuestions.length} ${currentUnansweredQuestions.length === 1 ? "question needs" : "questions need"} your reply.`
-                : statusCopy.message}
+          <section className="text-center">
+            <p className="text-base font-medium text-white/55 sm:text-lg">Welcome to Your</p>
+            <h1 className="mt-2 text-[2rem] font-black leading-none tracking-[0.02em] text-white sm:text-6xl sm:tracking-[0.04em]">
+              JDM <span className="text-[#E55125]">HOME BASE</span>
+            </h1>
+            <p className="mx-auto mt-4 max-w-[520px] text-sm leading-6 text-white/55">
+              Your project hub for everything related to your JDM journey
             </p>
           </section>
 
-          {reportUrl ? (
-            <section className="rounded-[20px] border border-[#E55125]/35 bg-[#E55125]/10 p-5">
-              <p className="text-sm text-white/70">See the JDM options we found for you</p>
+          <section className={`rounded-[20px] border p-6 transition sm:p-7 ${toneStyles[displayedStatusCopy.tone]}`}>
+            <p className={`text-xs font-bold uppercase tracking-[0.18em] ${tagStyles[displayedStatusCopy.tone]}`}>
+              {displayedStatusCopy.tag}
+            </p>
+            <h2 className="mt-3 text-2xl font-semibold leading-tight text-white sm:text-[1.9rem]">
+              {displayedStatusCopy.heading}
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-white/68 sm:text-base">{displayedStatusCopy.message}</p>
+            {shouldShowReportCta && reportUrl ? (
               <a
-                className="mt-4 inline-flex w-full items-center justify-center rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
+                className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
                 href={reportUrl}
               >
                 View Your Custom Report →
               </a>
-            </section>
-          ) : null}
+            ) : null}
+          </section>
 
           {docket.status === "new" ? (
             <section className="rounded-[20px] border border-white/10 bg-[#141414] p-5">
