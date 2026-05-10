@@ -704,6 +704,24 @@ export async function POST(
       dutyType: dutyTypeRaw,
     });
 
+    const { data: recommendationUpdateRows, error: recommendationUpdateError } = await supabase
+      .from("dockets")
+      .update({ agent_recommendation: overallNotes })
+      .eq("id", id)
+      .select("id, agent_recommendation");
+    logStep("supabase.dockets.agent_recommendation.update.result", {
+      data: recommendationUpdateRows,
+      error: toSupabaseError(recommendationUpdateError),
+    });
+
+    if (recommendationUpdateError) {
+      return errorResponse(500, "Failed to save agent recommendation.", {
+        operation: "dockets.agent_recommendation.update",
+        docketId: id,
+        supabase: toSupabaseError(recommendationUpdateError),
+      });
+    }
+
     const { data: clearedAuctionRows, error: clearAuctionResearchError } = await supabase
       .from("auction_research")
       .delete()

@@ -386,6 +386,7 @@ export default async function AgentReportPreviewPage({ params }: PageProps) {
     const exchange = await fetchJPYtoCAD();
     previewDocket = {
       ...docket,
+      agent_recommendation: submitPayload.overallNotes || docket.agent_recommendation,
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
     };

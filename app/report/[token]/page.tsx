@@ -147,7 +147,9 @@ export default async function CustomerReportPage({ params }: ReportPageProps) {
 
   const { data: docket, error: docketError } = await supabase
     .from("dockets")
-    .select("*")
+    .select(
+      "id, customer_first_name, customer_last_name, customer_email, vehicle_year, vehicle_make, vehicle_model, vehicle_description, agent_recommendation, budget_bracket, destination_city, destination_province, timeline, status, selected_path, selected_private_dealer_option, chosen_path, chosen_dealer_index, approved_at, exchange_rate_at_report, exchange_rate_date"
+    )
     .eq("report_url_token", token)
     .maybeSingle<DocketReportRecord>();
 

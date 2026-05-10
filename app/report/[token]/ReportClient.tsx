@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { UIEvent } from "react";
 
+import MarkdownMessage from "@/components/MarkdownMessage";
+
 type FeeBreakdown = {
   vehiclePriceCAD?: number;
   exportAgentFeeCAD?: number;
@@ -43,6 +45,7 @@ export type DocketReportRecord = {
   vehicle_make: string | null;
   vehicle_model: string | null;
   vehicle_description: string | null;
+  agent_recommendation: string | null;
   budget_bracket: string | null;
   destination_city: string | null;
   destination_province: string | null;
@@ -231,14 +234,27 @@ function hasAuctionListingData(listing: AuctionListing) {
   );
 }
 
-function hasAuctionSalesHistoryData(auctionResearch: AuctionResearchRecord | null) {
-  return (
-    !!auctionResearch &&
-    (hasPositiveNumber(auctionResearch.hammer_price_low_jpy) ||
-      hasPositiveNumber(auctionResearch.hammer_price_high_jpy) ||
-      hasPositiveNumber(auctionResearch.recommended_max_bid_jpy) ||
-      hasDisplayNotes(auctionResearch.sales_history_notes))
-  );
+function getUniqueAuctionSalesHistoryNotes(
+  salesHistoryNotes: string | null | undefined,
+  agentRecommendation: string | null | undefined
+) {
+  const salesNotes = renderNoteText(salesHistoryNotes);
+  const recommendation = renderNoteText(agentRecommendation);
+
+  if (!salesNotes || !recommendation) {
+    return salesNotes;
+  }
+
+  if (salesNotes === recommendation) {
+    return "";
+  }
+
+  const recommendationSuffix = `\n\n${recommendation}`;
+  if (salesNotes.endsWith(recommendationSuffix)) {
+    return salesNotes.slice(0, -recommendationSuffix.length).trim();
+  }
+
+  return salesNotes;
 }
 
 function hasAuctionEstimateData(auctionEstimate: AuctionEstimateRecord | null) {
@@ -993,12 +1009,30 @@ export function ReportClient({
   const listings = Array.isArray(auctionResearch?.auction_listings)
     ? auctionResearch?.auction_listings.filter(hasAuctionListingData)
     : [];
-  const hasAuctionSalesHistory = hasAuctionSalesHistoryData(auctionResearch);
+  const agentRecommendation = renderNoteText(docket.agent_recommendation);
+  const hasAgentRecommendation = agentRecommendation.length > 0;
+  const auctionSalesHistoryNotes = getUniqueAuctionSalesHistoryNotes(
+    auctionResearch?.sales_history_notes,
+    agentRecommendation
+  );
+  const hasAuctionSalesHistory = useMemo(
+    () =>
+      !!auctionResearch &&
+      (hasPositiveNumber(auctionResearch.hammer_price_low_jpy) ||
+        hasPositiveNumber(auctionResearch.hammer_price_high_jpy) ||
+        hasPositiveNumber(auctionResearch.recommended_max_bid_jpy) ||
+        hasDisplayNotes(auctionSalesHistoryNotes)),
+    [auctionResearch, auctionSalesHistoryNotes]
+  );
   const hasAuctionListings = listings.length > 0;
   const hasAuctionEstimate = hasAuctionEstimateData(auctionEstimate);
   const hasAuctionOption = hasAuctionEstimate;
   const navItems = useMemo<ReportNavItem[]>(() => {
     const items: ReportNavItem[] = [{ id: "search-summary", label: "Search Summary" }];
+
+    if (hasAgentRecommendation) {
+      items.push({ id: "our-recommendation", label: "Our Recommendation" });
+    }
 
     if (hasAuctionSalesHistory) {
       items.push({ id: "auction-sales-history", label: "Auction Sales History" });
@@ -1030,7 +1064,14 @@ export function ReportClient({
     }
 
     return items;
-  }, [hasAuctionListings, hasAuctionOption, hasAuctionSalesHistory, previewMode, privateDealerOptions]);
+  }, [
+    hasAgentRecommendation,
+    hasAuctionListings,
+    hasAuctionOption,
+    hasAuctionSalesHistory,
+    previewMode,
+    privateDealerOptions,
+  ]);
   const activeNavSectionId = navItems.some((item) => item.id === activeSectionId) ? activeSectionId : null;
 
   useEffect(() => {
@@ -1324,6 +1365,15 @@ export function ReportClient({
               {decisionError ? <p className="mt-4 text-sm text-red-400">{decisionError}</p> : null}
             </section>
 
+            {hasAgentRecommendation ? (
+              <section id="our-recommendation" className="scroll-mt-20 border-t border-white/10 pt-10">
+                <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Our Recommendation</h2>
+                <div className="mt-5 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7">
+                  <MarkdownMessage content={agentRecommendation} className="text-white/80" />
+                </div>
+              </section>
+            ) : null}
+
             {hasAuctionSalesHistory ? (
               <section id="auction-sales-history" className="scroll-mt-20 border-t border-white/10 pt-10">
                 <h2 className="text-[18px] font-semibold text-white sm:text-2xl">Auction Sales History</h2>
@@ -1338,10 +1388,14 @@ export function ReportClient({
                     {formatJpy(auctionResearch?.recommended_max_bid_jpy)}
                   </p>
 
-                  <p className="mt-5 text-sm text-white/65">Sales Notes</p>
-                  <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                    {renderNoteText(auctionResearch?.sales_history_notes) || "N/A"}
-                  </p>
+                  {hasDisplayNotes(auctionSalesHistoryNotes) ? (
+                    <>
+                      <p className="mt-5 text-sm text-white/65">Auction Sales History Notes</p>
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                        {auctionSalesHistoryNotes}
+                      </p>
+                    </>
+                  ) : null}
                 </div>
               </section>
             ) : null}
