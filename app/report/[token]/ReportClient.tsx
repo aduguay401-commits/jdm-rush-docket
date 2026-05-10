@@ -42,6 +42,7 @@ export type DocketReportRecord = {
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
+  vehicle_description: string | null;
   budget_bracket: string | null;
   destination_city: string | null;
   destination_province: string | null;
@@ -535,9 +536,11 @@ function FeeBreakdownTable({
 }
 
 function SearchSummaryCard({ docket }: { docket: DocketReportRecord }) {
-  const vehicle = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
-    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+  const vehicleFallback = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
+    .map((value) => value?.trim())
+    .filter((value): value is string => typeof value === "string" && value.length > 0)
     .join(" ");
+  const vehicle = docket.vehicle_description?.trim() || vehicleFallback || "Not specified";
 
   const destination = [cityLabel(docket.destination_city), docket.destination_province]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
@@ -548,7 +551,7 @@ function SearchSummaryCard({ docket }: { docket: DocketReportRecord }) {
       <h2 className="text-lg font-semibold text-white">Search Summary</h2>
       <div className="mt-4 grid gap-3 text-sm text-white/75 sm:grid-cols-2">
         <p>
-          <span className="text-white/45">Vehicle:</span> {vehicle || "N/A"}
+          <span className="text-white/45">Vehicle:</span> {vehicle}
         </p>
         <p>
           <span className="text-white/45">Budget:</span> {renderText(docket.budget_bracket)}
