@@ -67,12 +67,14 @@ export default async function CustomerQuestionsPage({ params }: CustomerQuestion
   }
 
   const allMarcusQuestions = marcusQuestions ?? [];
-  const unansweredQuestions = allMarcusQuestions.filter((question) => !question.answer_text?.trim());
+  const unansweredQuestions = allMarcusQuestions.filter(
+    (question) => !question.answered_at || !question.answer_text?.trim()
+  );
   const customerName = [docket.customer_first_name, docket.customer_last_name]
     .filter((value) => typeof value === "string" && value.trim().length > 0)
     .join(" ");
   const firstName = docket.customer_first_name?.trim() || customerName.trim().split(/\s+/)[0] || "there";
-  const statusCopy = getCustomerHomeBaseStatusCopy(docket.status, firstName);
+  const statusCopy = getCustomerHomeBaseStatusCopy(docket.status, firstName, unansweredQuestions.length);
   const shouldShowQuestionForm = (statusCopy.showQuestionForm || unansweredQuestions.length > 0) && unansweredQuestions.length > 0;
   const reportUrl =
     statusCopy.showReportLink && docket.report_url_token ? getCustomerReportUrl(docket.report_url_token) : null;

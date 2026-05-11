@@ -9,15 +9,29 @@ export type CustomerHomeBaseStatusCopy = {
   tone: CustomerHomeBaseTone;
 };
 
+const CUSTOMER_ACTION_OVERRIDABLE_STATUSES = new Set([
+  "questions_sent",
+  "answers_received",
+  "research_in_progress",
+  "report_sent",
+  "decision_made",
+]);
+
 function withName(template: string, firstName: string) {
   return template.replace("[Name]", firstName);
 }
 
 export function getCustomerHomeBaseStatusCopy(
   status: string | null | undefined,
-  firstName: string
+  firstName: string,
+  outstandingQuestionCount = 0
 ): CustomerHomeBaseStatusCopy {
-  const normalizedStatus = status ?? "new";
+  const normalizedStatus =
+    outstandingQuestionCount > 0 && CUSTOMER_ACTION_OVERRIDABLE_STATUSES.has(status ?? "")
+      ? "questions_sent"
+      : status === "questions_sent" && outstandingQuestionCount === 0
+        ? "answers_received"
+        : status ?? "new";
   const copyByStatus: Record<string, CustomerHomeBaseStatusCopy> = {
     new: {
       tag: "REQUEST RECEIVED",
