@@ -16,3 +16,34 @@ body {
   color: var(--foreground);
   font-family: var(--font-outfit), sans-serif;
 }
+
+.success-toast {
+  --toast-hidden-transform: translate(-50%, 0.75rem);
+  --toast-visible-transform: translate(-50%, 0);
+  animation: toast-lifecycle 4000ms ease-in-out forwards;
+}
+
+@media (min-width: 640px) {
+  .success-toast {
+    --toast-hidden-transform: translateY(-0.75rem);
+    --toast-visible-transform: translateY(0);
+  }
+}
+
+@keyframes toast-lifecycle {
+  0% {
+    opacity: 0;
+    transform: var(--toast-hidden-transform);
+  }
+
+  7.5%,
+  92.5% {
+    opacity: 1;
+    transform: var(--toast-visible-transform);
+  }
+
+  100% {
+    opacity: 0;
+    transform: var(--toast-hidden-transform);
+  }
+}

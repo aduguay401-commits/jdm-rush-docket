@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { use, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
+import { use, useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import CustomerCommunicationTimeline, {
   type TimelineCustomerQuestion,
   type TimelineMarcusQuestion,
 } from "@/components/CustomerCommunicationTimeline";
+import SuccessToast from "@/components/SuccessToast";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
@@ -644,6 +645,18 @@ function formatChosenPath(path: string | null | undefined) {
   return path ? path.replace(/_/g, " ") : "Path not specified";
 }
 
+function getCustomerDisplayName(docket: Docket | null) {
+  const name = [docket?.customer_first_name, docket?.customer_last_name]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .join(" ");
+
+  return name || "this customer";
+}
+
+function getCustomerFirstName(docket: Docket | null) {
+  return docket?.customer_first_name?.trim() || "customer";
+}
+
 function formatJpy(value: string | number | null | undefined) {
   const amount = typeof value === "number" ? value : Number(value);
   return Number.isFinite(amount) && amount > 0 ? `¥${amount.toLocaleString()}` : "N/A";
@@ -845,6 +858,9 @@ export default function AgentDocketDetailPage({
   const [overallNotes, setOverallNotes] = useState("");
   const [uploadingTarget, setUploadingTarget] = useState<string | null>(null);
   const [submittingResearch, setSubmittingResearch] = useState(false);
+  const [showSendConfirmation, setShowSendConfirmation] = useState(false);
+  const [sendModalError, setSendModalError] = useState<string | null>(null);
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
   const [rollingBackResearch, setRollingBackResearch] = useState(false);
   const [researchConfirmation, setResearchConfirmation] = useState<string | null>(null);
   const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
@@ -902,6 +918,12 @@ export default function AgentDocketDetailPage({
   const meaningfulDealerOptions = dealerOptions.filter((option) => hasAnyDealerData(option));
   const hasAuctionResearchSummary = auctionHasMeaningfulData || salesHistoryNotes.trim().length > 0;
   const submittedDealerOptions = meaningfulDealerOptions;
+  const customerDisplayName = getCustomerDisplayName(docket);
+  const customerFirstName = getCustomerFirstName(docket);
+  const reportIncludesRecommendation = overallNotes.trim().length > 0;
+  const reportIncludesAuctionEstimate =
+    Number(hammerPriceLowJpy) > 0 || Number(hammerPriceHighJpy) > 0 || Number(recommendedMaxBidJpy) > 0;
+  const dismissSuccessToast = useCallback(() => setSuccessToastMessage(null), []);
   const researchDraft = useMemo<ResearchDraft>(
     () => ({
       hammerPriceLowJpy,
@@ -1251,6 +1273,29 @@ export default function AgentDocketDetailPage({
       window.clearInterval(intervalId);
     };
   }, [draftSavedAt]);
+
+  useEffect(() => {
+    if (!showSendConfirmation) {
+      return;
+    }
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape" && !submittingResearch) {
+        setShowSendConfirmation(false);
+        setSendModalError(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [showSendConfirmation, submittingResearch]);
 
   useEffect(() => {
     return () => {
@@ -1998,6 +2043,45 @@ export default function AgentDocketDetailPage({
     }
   }
 
+  function openSendConfirmation() {
+    if (isFormDisabled || uploadingTarget !== null) {
+      return;
+    }
+
+    const validationErrors = validateResearchForm();
+
+    if (validationErrors.length > 0) {
+      const message = `Validation failed. Fix the following fields:\n${validationErrors
+        .map((item) => `- ${item}`)
+        .join("\n")}`;
+      console.error("[Research Submit] VALIDATION_FAILED", { validationErrors });
+      setError(message);
+      return;
+    }
+
+    setError(null);
+    setSendModalError(null);
+    setShowSendConfirmation(true);
+  }
+
+  function closeSendConfirmation() {
+    if (submittingResearch) {
+      return;
+    }
+
+    setShowSendConfirmation(false);
+    setSendModalError(null);
+  }
+
+  function setResearchSubmitError(message: string) {
+    if (showSendConfirmation) {
+      setSendModalError(message);
+      return;
+    }
+
+    setError(message);
+  }
+
   async function submitResearchReport() {
     console.log("[Research Submit] START", {
       docketId: id,
@@ -2020,12 +2104,13 @@ export default function AgentDocketDetailPage({
         .map((item) => `- ${item}`)
         .join("\n")}`;
       console.error("[Research Submit] VALIDATION_FAILED", { validationErrors });
-      setError(message);
+      setResearchSubmitError(message);
       return;
     }
 
     setError(null);
     setResearchConfirmation(null);
+    setSendModalError(null);
     setSubmittingResearch(true);
 
     const payload = buildResearchSubmitPayload();
@@ -2045,7 +2130,7 @@ export default function AgentDocketDetailPage({
       });
     } catch (requestError) {
       console.error("[Research Submit] FETCH_FAILED", { requestError });
-      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
+      setResearchSubmitError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }
@@ -2054,7 +2139,7 @@ export default function AgentDocketDetailPage({
       result = (await response.json()) as { success?: boolean; error?: string; details?: unknown };
     } catch (parseError) {
       console.error("[Research Submit] RESPONSE_PARSE_FAILED", { parseError });
-      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
+      setResearchSubmitError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }
@@ -2064,7 +2149,7 @@ export default function AgentDocketDetailPage({
         status: response.status,
         result,
       });
-      setError(RESEARCH_SUBMIT_ERROR_MESSAGE);
+      setResearchSubmitError(RESEARCH_SUBMIT_ERROR_MESSAGE);
       setSubmittingResearch(false);
       return;
     }
@@ -2082,9 +2167,12 @@ export default function AgentDocketDetailPage({
     setReportSentAt(await loadLatestReportSentAt(id));
     setResearchLocked(true);
     setIsEditingSentReport(false);
+    setShowSendConfirmation(false);
+    setSendModalError(null);
+    setSuccessToastMessage(`Report sent to ${customerFirstName}`);
     window.sessionStorage.setItem(DASHBOARD_REFRESH_FLAG, "true");
-    setRedirectCountdown(3);
-    setResearchConfirmation("✅ Research submitted successfully. Returning to your dockets in 3 seconds...");
+    setRedirectCountdown(4);
+    setResearchConfirmation("Research submitted successfully. Returning to your dockets in 4 seconds...");
     setSubmittingResearch(false);
   }
 
@@ -2169,6 +2257,7 @@ export default function AgentDocketDetailPage({
 
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
+      <SuccessToast message={successToastMessage} onDismiss={dismissSuccessToast} />
       <div className="mx-auto max-w-5xl space-y-8">
         <header className="border-b border-white/10 pb-5">
           <img
@@ -3186,10 +3275,10 @@ export default function AgentDocketDetailPage({
                     <button
                       className="w-full text-right text-xs font-medium text-white/45 transition hover:text-white/70 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={isFormDisabled || uploadingTarget !== null}
-                      onClick={() => void submitResearchReport()}
+                      onClick={openSendConfirmation}
                       type="button"
                     >
-                      Skip preview and send directly →
+                      Send to Customer
                     </button>
                   </div>
                 ) : null}
@@ -3205,6 +3294,81 @@ export default function AgentDocketDetailPage({
           </>
         ) : null}
       </div>
+      {showSendConfirmation && docket ? (
+        <div
+          aria-modal="true"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 px-4 py-6 backdrop-blur-sm"
+          role="dialog"
+        >
+          <div className="w-full max-w-lg rounded-xl border border-white/10 bg-[#141414] p-5 shadow-2xl shadow-black/50 sm:p-6">
+            <div className="space-y-2">
+              <h2 className="text-xl font-semibold text-white">Send Report to Customer?</h2>
+              <p className="text-sm leading-6 text-white/65">
+                Review the delivery details before sending this report.
+              </p>
+            </div>
+
+            <div className="mt-5 space-y-5 rounded-lg border border-white/10 bg-black/25 p-4 text-sm">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Sending to</p>
+                <p className="mt-2 font-semibold text-white">{customerDisplayName}</p>
+                <p className="text-white/65">{docket.customer_email || "No email on file"}</p>
+              </div>
+
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">Report includes</p>
+                <ul className="mt-2 space-y-2 text-white/80">
+                  <li>
+                    {meaningfulAuctionListings.length > 0
+                      ? `${meaningfulAuctionListings.length} auction ${
+                          meaningfulAuctionListings.length === 1 ? "listing" : "listings"
+                        }`
+                      : "No auction listings"}
+                  </li>
+                  <li>
+                    {meaningfulDealerOptions.length > 0
+                      ? `${meaningfulDealerOptions.length} dealer ${
+                          meaningfulDealerOptions.length === 1 ? "option" : "options"
+                        }`
+                      : "No dealer options"}
+                  </li>
+                  <li>{reportIncludesRecommendation ? "Agent recommendation" : "No agent recommendation"}</li>
+                  <li>{reportIncludesAuctionEstimate ? "Auction estimate" : "No auction estimate"}</li>
+                </ul>
+              </div>
+
+              <p className="border-t border-white/10 pt-4 text-sm leading-6 text-white/65">
+                Once sent, the customer will receive an email and can view their custom report.
+              </p>
+            </div>
+
+            {sendModalError ? (
+              <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm leading-6 text-red-200">
+                {sendModalError}
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
+              <button
+                className="inline-flex min-h-11 items-center justify-center rounded-lg border border-white/20 bg-transparent px-5 py-2.5 text-sm font-medium text-white/75 transition hover:border-white/35 hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={submittingResearch}
+                onClick={closeSendConfirmation}
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                className="inline-flex min-h-11 items-center justify-center rounded-lg bg-[#E55125] px-5 py-2.5 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                disabled={submittingResearch}
+                onClick={() => void submitResearchReport()}
+                type="button"
+              >
+                {submittingResearch ? "Sending..." : "Yes, Send Report"}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
