@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import CustomerCommunicationTimeline from "@/components/CustomerCommunicationTimeline";
+import CustomerInfoEditor from "@/components/CustomerInfoEditor";
+import SuccessToast from "@/components/SuccessToast";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import type { NormalizedAdminDocket } from "@/lib/admin/types";
 import {
@@ -161,6 +163,16 @@ function getProgressStageText(docket: NormalizedAdminDocket) {
   return `stage ${Math.min(progress.currentIndex + 1, PROGRESS_STAGES.length)}/${PROGRESS_STAGES.length}`;
 }
 
+function renderDetailValue(value: string | null | undefined, options?: { preserveWhitespace?: boolean }) {
+  const displayValue = value?.trim();
+
+  if (!displayValue) {
+    return <span className="text-white/35">—</span>;
+  }
+
+  return <span className={options?.preserveWhitespace ? "whitespace-pre-wrap text-white/85" : "text-white/85"}>{displayValue}</span>;
+}
+
 function getLastReminder(docket: NormalizedAdminDocket) {
   return docket.email_log
     .filter((entry) => entry.email_type === "manual_reminder" && entry.sent_at)
@@ -232,6 +244,9 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
   const [adminNotesDraft, setAdminNotesDraft] = useState("");
   const [notesSavedState, setNotesSavedState] = useState<"idle" | "saving" | "saved">("idle");
   const [lastNotesSavedAt, setLastNotesSavedAt] = useState<string | null>(null);
+  const [successToastMessage, setSuccessToastMessage] = useState<string | null>(null);
+
+  const dismissSuccessToast = useCallback(() => setSuccessToastMessage(null), []);
 
   const selectedDocket = useMemo(
     () => dockets.find((docket) => docket.id === selectedDocketId) ?? null,
@@ -313,6 +328,31 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
         docket.id === id ? { ...docket, vehicle_description: vehicleDescription } : docket
       )
     );
+  }
+
+  function updateDocketCustomerInfo(
+    id: string,
+    updatedFields: Pick<
+      NormalizedAdminDocket,
+      | "customer_first_name"
+      | "customer_last_name"
+      | "customer_email"
+      | "customer_phone"
+      | "vehicle_year"
+      | "vehicle_make"
+      | "vehicle_model"
+      | "vehicle_description"
+      | "destination_city"
+      | "destination_province"
+      | "budget_bracket"
+      | "timeline"
+      | "additional_notes"
+    >
+  ) {
+    setDockets((previous) =>
+      previous.map((docket) => (docket.id === id ? { ...docket, ...updatedFields } : docket))
+    );
+    setSuccessToastMessage(`Customer info updated for ${updatedFields.customer_first_name?.trim() || "customer"}`);
   }
 
   async function handleArchiveSelectedDocket() {
@@ -728,6 +768,27 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       <p className="text-sm text-white/70">
                         Currently: {statusDisplay.text} · {getProgressStageText(selectedDocket)}
                       </p>
+                      <section className="pt-3">
+                        <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                          Customer Details
+                        </h3>
+                        <div className="mt-2 grid gap-3 text-sm sm:grid-cols-2">
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/45">Budget</p>
+                            <p className="mt-1">{renderDetailValue(selectedDocket.budget_bracket)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/45">Timeline</p>
+                            <p className="mt-1">{renderDetailValue(selectedDocket.timeline)}</p>
+                          </div>
+                          <div className="sm:col-span-2">
+                            <p className="text-xs uppercase tracking-[0.14em] text-white/45">Additional Notes</p>
+                            <p className="mt-1 leading-6">
+                              {renderDetailValue(selectedDocket.additional_notes, { preserveWhitespace: true })}
+                            </p>
+                          </div>
+                        </div>
+                      </section>
                       <div className="flex flex-wrap items-center gap-2 pt-2">
                         {selectedDocket.report_url_token ? (
                           <a
@@ -759,6 +820,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                         >
                           {sendingReminderId === selectedDocket.id ? "Sending..." : "Send Reminder"}
                         </button>
+                        <CustomerInfoEditor
+                          docket={selectedDocket}
+                          onSaved={(updatedFields) => updateDocketCustomerInfo(selectedDocket.id, updatedFields)}
+                        />
                       </div>
                       {customerHomeBaseLink ? (
                         <div className="pt-2 text-xs leading-5">
@@ -949,6 +1014,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
             );
           })()
         : null}
+      <SuccessToast message={successToastMessage} onDismiss={dismissSuccessToast} />
     </main>
   );
 }
