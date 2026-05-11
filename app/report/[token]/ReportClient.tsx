@@ -177,6 +177,13 @@ function renderText(value: string | null | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? decodeTextEntities(value) : "N/A";
 }
 
+function getDealerOptionVehicleName(option: PrivateDealerOptionRecord, fallback = "Vehicle details") {
+  return [option.year, option.make, option.model]
+    .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+    .map((value) => decodeTextEntities(value.trim()))
+    .join(" ") || fallback;
+}
+
 function decodeTextEntities(value: string) {
   return value
     .replace(/&#39;/g, "'")
@@ -1652,11 +1659,8 @@ export function ReportClient({
 
                       <div className="px-5 py-5 sm:px-7 sm:py-7">
                         <div className="flex flex-col gap-2">
-                          <h3 className="text-lg font-semibold text-white">
-                            Option {option.option_number} —{" "}
-                            {[option.year, option.make, option.model]
-                              .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-                              .join(" ") || "N/A"}
+                          <h3 className="text-center text-lg font-bold text-[#E55125]">
+                            {getDealerOptionVehicleName(option)}
                           </h3>
                         </div>
 
@@ -1693,7 +1697,7 @@ export function ReportClient({
                         <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
                           <p>
                             <span className="text-white/45">Vehicle:</span>{" "}
-                            {[option.year, option.make, option.model].filter(Boolean).join(" ") || "N/A"}
+                            {getDealerOptionVehicleName(option, "N/A")}
                           </p>
                           <p>
                             <span className="text-white/45">Grade:</span> {renderText(option.grade)}
