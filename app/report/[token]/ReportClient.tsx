@@ -338,7 +338,9 @@ function DealerPhotoGallery({
   onOpenLightbox: (photos: string[], index: number, label: string) => void;
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const carouselRef = useRef<HTMLDivElement | null>(null);
   const label = `Dealer option ${optionNumber}`;
+  const hasMultiplePhotos = photos.length > 1;
 
   function updateActivePhoto(event: UIEvent<HTMLDivElement>) {
     const container = event.currentTarget;
@@ -346,70 +348,95 @@ function DealerPhotoGallery({
     setActiveIndex(Math.min(Math.max(nextIndex, 0), photos.length - 1));
   }
 
+  function showInlinePhoto(nextIndex: number) {
+    const boundedIndex = Math.min(Math.max(nextIndex, 0), photos.length - 1);
+    const container = carouselRef.current;
+    setActiveIndex(boundedIndex);
+    container?.scrollTo({
+      left: boundedIndex * container.clientWidth,
+      behavior: "smooth",
+    });
+  }
+
   if (photos.length === 0) {
     return null;
   }
 
   return (
-    <div className="mt-4">
-      <div className="sm:hidden">
+    <div>
+      <div className="group relative">
         <div
-          className="-mx-5 flex snap-x snap-mandatory overflow-x-auto px-5 pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className="flex aspect-[4/3] snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           onScroll={updateActivePhoto}
+          ref={carouselRef}
         >
           {photos.map((photo, index) => (
-            <div className="w-full shrink-0 snap-center pr-3 last:pr-0" key={`${photo}-${index}`}>
-              <button
-                aria-label={`Open ${label} photo ${index + 1}`}
-                className="block w-full"
-                onClick={() => onOpenLightbox(photos, index, label)}
-                type="button"
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  alt={`${label} photo ${index + 1}`}
-                  className="aspect-[4/3] w-full rounded-xl border border-white/10 object-cover"
-                  loading="lazy"
-                  src={photo}
-                />
-              </button>
-            </div>
+            <button
+              aria-label={`Open ${label} photo ${index + 1}`}
+              className="block w-full shrink-0 snap-center"
+              key={`${photo}-${index}`}
+              onClick={() => onOpenLightbox(photos, index, label)}
+              type="button"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                alt={`${label} photo ${index + 1}`}
+                className="h-full w-full object-cover"
+                loading={index === 0 ? "eager" : "lazy"}
+                src={photo}
+              />
+            </button>
           ))}
         </div>
-        {photos.length > 1 ? (
-          <div className="mt-3 flex justify-center gap-2">
-            {photos.map((photo, index) => (
-              <span
-                aria-hidden="true"
-                className={`h-2 w-2 rounded-full transition ${
-                  index === activeIndex ? "bg-[#E55125]" : "bg-white/25"
-                }`}
-                key={`dot-${photo}-${index}`}
-              />
-            ))}
-          </div>
+
+        {hasMultiplePhotos ? (
+          <>
+            <span
+              aria-label={`Photo ${activeIndex + 1} of ${photos.length}`}
+              className="absolute bottom-3 right-3 z-10 rounded-md bg-black/60 px-2 py-1 text-xs font-medium text-white"
+            >
+              {activeIndex + 1}/{photos.length}
+            </span>
+
+            <button
+              aria-label="Previous photo"
+              className="absolute left-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-3xl leading-none text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100 sm:flex"
+              onClick={(event) => {
+                event.stopPropagation();
+                showInlinePhoto(activeIndex - 1);
+              }}
+              type="button"
+            >
+              ‹
+            </button>
+
+            <button
+              aria-label="Next photo"
+              className="absolute right-3 top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/60 text-3xl leading-none text-white opacity-0 transition hover:bg-black/80 group-hover:opacity-100 sm:flex"
+              onClick={(event) => {
+                event.stopPropagation();
+                showInlinePhoto(activeIndex + 1);
+              }}
+              type="button"
+            >
+              ›
+            </button>
+          </>
         ) : null}
       </div>
 
-      <div className="hidden grid-cols-3 gap-3 sm:grid">
-        {photos.map((photo, index) => (
-          <button
-            aria-label={`Open ${label} photo ${index + 1}`}
-            className="group block w-full overflow-hidden rounded-xl border border-white/10"
-            key={`${photo}-${index}`}
-            onClick={() => onOpenLightbox(photos, index, label)}
-            type="button"
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              alt={`${label} photo ${index + 1}`}
-              className="aspect-[4/3] w-full object-cover transition duration-200 group-hover:scale-[1.03]"
-              loading="lazy"
-              src={photo}
+      {hasMultiplePhotos ? (
+        <div className="mt-4 flex justify-center gap-2" aria-hidden="true">
+          {photos.map((photo, index) => (
+            <span
+              className={`h-2 w-2 rounded-full transition ${
+                index === activeIndex ? "bg-[#E55125]" : "bg-white/25"
+              }`}
+              key={`dot-${photo}-${index}`}
             />
-          </button>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1611,19 +1638,10 @@ export function ReportClient({
                 <div className="mt-5 space-y-5">
                   {privateDealerOptions.map((option) => (
                     <article
-                      className="scroll-mt-20 rounded-3xl border border-white/10 bg-[#141414] p-5 sm:p-7"
+                      className="scroll-mt-20 overflow-hidden rounded-3xl border border-white/10 bg-[#141414]"
                       id={`dealer-option-${option.option_number}`}
                       key={option.option_number}
                     >
-                      <div className="flex flex-col gap-2">
-                        <h3 className="text-lg font-semibold text-white">
-                          Option {option.option_number} —{" "}
-                          {[option.year, option.make, option.model]
-                            .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
-                            .join(" ") || "N/A"}
-                        </h3>
-                      </div>
-
                       {Array.isArray(option.photos) && option.photos.length > 0 ? (
                         <DealerPhotoGallery
                           onOpenLightbox={openLightbox}
@@ -1632,98 +1650,109 @@ export function ReportClient({
                         />
                       ) : null}
 
-                      {option.sales_sheet_url ? (
-                        <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
-                          <p className="text-sm font-medium text-white">Sales Sheet</p>
-                          {isReportImageFile(option.sales_sheet_url) ? (
-                            <DealerSalesSheetImage
-                              optionNumber={option.option_number}
-                              salesSheetUrl={option.sales_sheet_url}
-                            />
-                          ) : isReportPdfFile(option.sales_sheet_url) ? (
-                            <a
-                              className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
-                              href={option.sales_sheet_url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              Open sales sheet PDF
-                            </a>
-                          ) : (
-                            <a
-                              className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
-                              href={option.sales_sheet_url}
-                              rel="noreferrer"
-                              target="_blank"
-                            >
-                              Open sales sheet
-                            </a>
-                          )}
+                      <div className="px-5 py-5 sm:px-7 sm:py-7">
+                        <div className="flex flex-col gap-2">
+                          <h3 className="text-lg font-semibold text-white">
+                            Option {option.option_number} —{" "}
+                            {[option.year, option.make, option.model]
+                              .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+                              .join(" ") || "N/A"}
+                          </h3>
                         </div>
-                      ) : null}
 
-                      <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
-                        <p>
-                          <span className="text-white/45">Vehicle:</span>{" "}
-                          {[option.year, option.make, option.model].filter(Boolean).join(" ") || "N/A"}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Grade:</span> {renderText(option.grade)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Mileage:</span> {renderText(option.mileage)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Colour:</span> {renderText(option.colour)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Transmission:</span> {renderText(option.transmission)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Trim:</span> {renderText(option.trim)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Dealer Price (JPY):</span> {formatJpy(option.dealer_price_jpy)}
-                        </p>
-                        <p>
-                          <span className="text-white/45">Dealer Price (CAD):</span> {formatCad(option.dealer_price_cad)}
-                        </p>
-                      </div>
+                        {option.sales_sheet_url ? (
+                          <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
+                            <p className="text-sm font-medium text-white">Sales Sheet</p>
+                            {isReportImageFile(option.sales_sheet_url) ? (
+                              <DealerSalesSheetImage
+                                optionNumber={option.option_number}
+                                salesSheetUrl={option.sales_sheet_url}
+                              />
+                            ) : isReportPdfFile(option.sales_sheet_url) ? (
+                              <a
+                                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                                href={option.sales_sheet_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open sales sheet PDF
+                              </a>
+                            ) : (
+                              <a
+                                className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-[#E55125] underline-offset-4 hover:underline"
+                                href={option.sales_sheet_url}
+                                rel="noreferrer"
+                                target="_blank"
+                              >
+                                Open sales sheet
+                              </a>
+                            )}
+                          </div>
+                        ) : null}
 
-                      {hasDisplayNotes(option.marcus_notes) ? (
-                        <>
-                          <p className="mt-5 text-sm text-white/65">Agent Notes</p>
-                          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
-                            {renderNoteText(option.marcus_notes)}
+                        <div className="mt-5 grid gap-2 text-sm text-white/78 sm:grid-cols-2">
+                          <p>
+                            <span className="text-white/45">Vehicle:</span>{" "}
+                            {[option.year, option.make, option.model].filter(Boolean).join(" ") || "N/A"}
                           </p>
-                        </>
-                      ) : null}
+                          <p>
+                            <span className="text-white/45">Grade:</span> {renderText(option.grade)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Mileage:</span> {renderText(option.mileage)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Colour:</span> {renderText(option.colour)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Transmission:</span> {renderText(option.transmission)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Trim:</span> {renderText(option.trim)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Dealer Price (JPY):</span> {formatJpy(option.dealer_price_jpy)}
+                          </p>
+                          <p>
+                            <span className="text-white/45">Dealer Price (CAD):</span> {formatCad(option.dealer_price_cad)}
+                          </p>
+                        </div>
 
-                      <FeeBreakdownTable
-                        breakdown={option.calculated_fees}
-                        destination={destination}
-                        exchangeRateAtReport={docket.exchange_rate_at_report}
-                        exchangeRateDate={docket.exchange_rate_date}
-                        networkFeeLabel="Inter-dealer Network Fee"
-                      />
+                        {hasDisplayNotes(option.marcus_notes) ? (
+                          <>
+                            <p className="mt-5 text-sm text-white/65">Agent Notes</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-white/80">
+                              {renderNoteText(option.marcus_notes)}
+                            </p>
+                          </>
+                        ) : null}
 
-                      {!hasDecision && !previewMode ? (
-                        <button
-                          className="mt-5 min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                          disabled={isDeciding}
-                          onClick={() =>
-                            submitDecision(
-                              "private_dealer",
-                              option.option_number as 1 | 2 | 3 | 4 | 5 | 6
-                            )
-                          }
-                          type="button"
-                        >
-                          {isDeciding
-                            ? "Saving your choice..."
-                            : "Approve for Purchase — Private Dealer"}
-                        </button>
-                      ) : null}
+                        <FeeBreakdownTable
+                          breakdown={option.calculated_fees}
+                          destination={destination}
+                          exchangeRateAtReport={docket.exchange_rate_at_report}
+                          exchangeRateDate={docket.exchange_rate_date}
+                          networkFeeLabel="Inter-dealer Network Fee"
+                        />
+
+                        {!hasDecision && !previewMode ? (
+                          <button
+                            className="mt-5 min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                            disabled={isDeciding}
+                            onClick={() =>
+                              submitDecision(
+                                "private_dealer",
+                                option.option_number as 1 | 2 | 3 | 4 | 5 | 6
+                              )
+                            }
+                            type="button"
+                          >
+                            {isDeciding
+                              ? "Saving your choice..."
+                              : "Approve for Purchase — Private Dealer"}
+                          </button>
+                        ) : null}
+                      </div>
                     </article>
                   ))}
                 </div>
