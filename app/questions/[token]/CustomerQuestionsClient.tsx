@@ -64,10 +64,79 @@ function formatSummaryValue(value: string | null) {
   return trimmed && trimmed.length > 0 ? trimmed : "Not specified";
 }
 
-function hasConversation(marcusQuestions: TimelineMarcusQuestion[], customerQuestions: TimelineCustomerQuestion[]) {
+function formatMessageTimestamp(timestamp: string | null) {
+  return timestamp ? new Date(timestamp).toLocaleString() : "Unknown time";
+}
+
+function getTimelineMessageCount(
+  marcusQuestions: TimelineMarcusQuestion[],
+  customerQuestions: TimelineCustomerQuestion[]
+) {
+  const agentQuestionBatchCount = new Set(
+    marcusQuestions.filter((question) => question.created_at).map((question) => question.created_at)
+  ).size;
+  const customerAnswerBatchCount = new Set(
+    marcusQuestions.filter((question) => question.answered_at).map((question) => question.answered_at)
+  ).size;
+  const customerQuestionCount = customerQuestions.length;
+  const customerQuestionReplyCount = customerQuestions.filter((question) => question.answer_text?.trim()).length;
+
+  return agentQuestionBatchCount + customerAnswerBatchCount + customerQuestionCount + customerQuestionReplyCount;
+}
+
+function getLatestTimelineTimestamp(
+  marcusQuestions: TimelineMarcusQuestion[],
+  customerQuestions: TimelineCustomerQuestion[]
+) {
+  const timestamps = [
+    ...marcusQuestions.flatMap((question) => [question.created_at, question.answered_at]),
+    ...customerQuestions.map((question) => question.created_at),
+  ].filter((timestamp): timestamp is string => Boolean(timestamp));
+
+  if (timestamps.length === 0) {
+    return null;
+  }
+
+  return timestamps.reduce((latest, timestamp) =>
+    new Date(timestamp).getTime() > new Date(latest).getTime() ? timestamp : latest
+  );
+}
+
+function formatRelativeMessageTime(timestamp: string | null) {
+  if (!timestamp) {
+    return null;
+  }
+
+  const elapsedMs = Date.now() - new Date(timestamp).getTime();
+  const elapsedMinutes = Math.max(0, Math.floor(elapsedMs / 60000));
+
+  if (elapsedMinutes < 1) {
+    return "just now";
+  }
+
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes} ${elapsedMinutes === 1 ? "minute" : "minutes"} ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours} ${elapsedHours === 1 ? "hour" : "hours"} ago`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  return `${elapsedDays} ${elapsedDays === 1 ? "day" : "days"} ago`;
+}
+
+function ChevronIcon({ isExpanded }: { isExpanded: boolean }) {
   return (
-    marcusQuestions.some((question) => question.answer_text?.trim() || question.answered_at) ||
-    customerQuestions.length > 0
+    <svg
+      aria-hidden="true"
+      className={`h-5 w-5 text-[#E55125] transition-transform duration-300 ${isExpanded ? "rotate-180" : ""}`}
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <path d="m6 9 6 6 6-6" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" />
+    </svg>
   );
 }
 
@@ -90,6 +159,7 @@ export function CustomerQuestionsClient({
   const [askError, setAskError] = useState<string | null>(null);
   const [answersSubmitted, setAnswersSubmitted] = useState(false);
   const [askSuccess, setAskSuccess] = useState<string | null>(null);
+  const [isConversationExpanded, setIsConversationExpanded] = useState(false);
   const [isSubmittingAnswers, setIsSubmittingAnswers] = useState(false);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
 
@@ -108,16 +178,65 @@ export function CustomerQuestionsClient({
       }
     : statusCopy;
   const shouldRenderQuestionForm = shouldShowQuestionForm && currentUnansweredQuestions.length > 0;
-  const conversationExists = hasConversation(allMarcusQuestions, customerQuestions) || answersSubmitted;
+  const latestUnansweredQuestionTimestamp = useMemo(() => {
+    if (currentUnansweredQuestions.length === 0) {
+      return null;
+    }
+
+    return currentUnansweredQuestions.reduce<string | null>((latest, question) => {
+      const matchingQuestion = allMarcusQuestions.find((marcusQuestion) => marcusQuestion.id === question.id);
+      const timestamp = matchingQuestion?.created_at ?? null;
+
+      if (!timestamp || !latest) {
+        return timestamp ?? latest;
+      }
+
+      return new Date(timestamp).getTime() > new Date(latest).getTime() ? timestamp : latest;
+    }, null);
+  }, [allMarcusQuestions, currentUnansweredQuestions]);
+  const latestUnansweredQuestions = useMemo(() => {
+    if (!latestUnansweredQuestionTimestamp) {
+      return currentUnansweredQuestions;
+    }
+
+    const unansweredQuestionIds = new Set(currentUnansweredQuestions.map((question) => question.id));
+    return allMarcusQuestions
+      .filter(
+        (question) =>
+          unansweredQuestionIds.has(question.id) && question.created_at === latestUnansweredQuestionTimestamp
+      )
+      .map((question) => ({
+        id: question.id,
+        question_text: question.question_text,
+      }));
+  }, [allMarcusQuestions, currentUnansweredQuestions, latestUnansweredQuestionTimestamp]);
+  const shouldRenderLatestMessageCard = shouldRenderQuestionForm && latestUnansweredQuestions.length > 0;
+  const shouldFilterUnansweredFromTimeline = shouldRenderLatestMessageCard || answersSubmitted;
+  const timelineMarcusQuestions = useMemo(
+    () =>
+      shouldFilterUnansweredFromTimeline
+        ? allMarcusQuestions.filter((question) => question.answer_text?.trim() || question.answered_at)
+        : allMarcusQuestions,
+    [allMarcusQuestions, shouldFilterUnansweredFromTimeline]
+  );
+  const conversationMessageCount = getTimelineMessageCount(timelineMarcusQuestions, customerQuestions);
+  const latestConversationTimestamp = getLatestTimelineTimestamp(timelineMarcusQuestions, customerQuestions);
+  const conversationRelativeTime = formatRelativeMessageTime(latestConversationTimestamp);
+  const conversationSummary =
+    conversationMessageCount === 0
+      ? "No messages yet"
+      : `${conversationMessageCount} ${conversationMessageCount === 1 ? "message" : "messages"}${
+          conversationRelativeTime ? `, last ${conversationRelativeTime}` : ""
+        }`;
   const shouldShowReportCta = displayedStatusCopy.showReportLink && Boolean(reportUrl);
 
   const allAnswersFilled = useMemo(
     () =>
-      currentUnansweredQuestions.every((question) => {
+      latestUnansweredQuestions.every((question) => {
         const answer = answers[question.id];
         return typeof answer === "string" && answer.trim().length > 0;
       }),
-    [answers, currentUnansweredQuestions]
+    [answers, latestUnansweredQuestions]
   );
 
   function updateAnswer(questionId: string, value: string) {
@@ -138,7 +257,7 @@ export function CustomerQuestionsClient({
     setAnswerError(null);
 
     try {
-      const payload = currentUnansweredQuestions.map((question) => ({
+      const payload = latestUnansweredQuestions.map((question) => ({
         questionId: question.id,
         answerText: answers[question.id].trim(),
       }));
@@ -262,61 +381,99 @@ export function CustomerQuestionsClient({
             </section>
           ) : null}
 
-          {shouldRenderQuestionForm ? (
-            <section className="rounded-[20px] border border-white/10 bg-[#141414] p-6 sm:p-8">
-              <div className="flex items-center justify-between gap-4">
-                <h2 className="text-xl font-semibold text-white">Questions</h2>
-                <span className="text-sm text-white/45">{currentUnansweredQuestions.length} pending</span>
+          {shouldRenderLatestMessageCard || answersSubmitted ? (
+            <section className="rounded-[20px] border border-[#E55125]/45 bg-[#141414] p-6 shadow-[0_18px_60px_rgba(229,81,37,0.14)] sm:p-8">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h2 className="text-xl font-semibold text-white">
+                  <span aria-hidden="true" className="mr-2">
+                    📨
+                  </span>
+                  Latest Message from JDM Rush Team
+                </h2>
+                {latestUnansweredQuestionTimestamp ? (
+                  <time className="text-xs text-white/55" dateTime={latestUnansweredQuestionTimestamp}>
+                    {formatMessageTimestamp(latestUnansweredQuestionTimestamp)}
+                  </time>
+                ) : null}
               </div>
 
-              <div className="mt-6 space-y-5">
-                {answerError ? <p className="text-sm text-red-400">{answerError}</p> : null}
-                {currentUnansweredQuestions.map((question, index) => (
-                  <label className="block" key={question.id}>
-                    <div className="flex gap-2 text-sm font-medium text-white/80">
-                      <span aria-hidden="true" className="shrink-0">
-                        {index + 1}.
-                      </span>
-                      <MarkdownMessage
-                        className="min-w-0 flex-1 font-medium text-white/80"
-                        content={question.question_text}
-                      />
-                    </div>
-                    <textarea
-                      className="mt-3 min-h-20 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
-                      disabled={isSubmittingAnswers}
-                      onChange={(event) => updateAnswer(question.id, event.target.value)}
-                      placeholder="Type your answer here"
-                      value={answers[question.id] ?? ""}
-                    />
-                  </label>
-                ))}
+              {answersSubmitted ? (
+                <div className="mt-6 rounded-2xl border border-[#E55125]/25 bg-[#E55125]/10 p-4">
+                  <p className="text-sm font-semibold text-white">Thanks, we received your answers.</p>
+                  <p className="mt-2 text-sm leading-6 text-white/70">
+                    Our team is reviewing what you sent and will follow up shortly.
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-6 space-y-6">
+                  {answerError ? <p className="text-sm text-red-400">{answerError}</p> : null}
+                  <ol className="list-decimal space-y-6 pl-5 text-sm text-white/85">
+                    {latestUnansweredQuestions.map((question) => (
+                      <li key={question.id}>
+                        <MarkdownMessage className="text-white/85" content={question.question_text} />
+                        <label className="mt-3 block">
+                          <span className="sr-only">Answer this question</span>
+                          <textarea
+                            className="min-h-[84px] w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                            disabled={isSubmittingAnswers}
+                            onChange={(event) => updateAnswer(question.id, event.target.value)}
+                            placeholder="Type your answer here"
+                            rows={3}
+                            value={answers[question.id] ?? ""}
+                          />
+                        </label>
+                      </li>
+                    ))}
+                  </ol>
 
-                <button
-                  className="w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
-                  disabled={isSubmittingAnswers}
-                  onClick={submitAnswers}
-                  type="button"
-                >
-                  {isSubmittingAnswers ? "Submitting..." : "Submit Answers"}
-                </button>
-              </div>
+                  <button
+                    className="min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                    disabled={isSubmittingAnswers}
+                    onClick={submitAnswers}
+                    type="button"
+                  >
+                    {isSubmittingAnswers ? "Submitting..." : "Submit Answer"}
+                  </button>
+                </div>
+              )}
             </section>
           ) : null}
 
-          {conversationExists ? (
-            <section className="rounded-[20px] border border-white/10 bg-[#141414] p-6 sm:p-8">
-              <h2 className="text-xl font-semibold text-white">Your Conversation with JDM Rush</h2>
-              <div className="mt-5">
+          <section className="rounded-[20px] border border-white/10 bg-[#141414] transition hover:border-[#E55125]/35">
+            <button
+              aria-controls="customer-conversation-content"
+              aria-expanded={isConversationExpanded}
+              className="block w-full cursor-pointer p-5 text-left focus:outline-none focus:ring-2 focus:ring-[#E55125]/40 sm:p-6"
+              onClick={() => setIsConversationExpanded((current) => !current)}
+              type="button"
+            >
+              <span className="flex items-start justify-between gap-4">
+                <span className="min-w-0">
+                  <span className="block text-xl font-semibold text-white">Our Conversation</span>
+                  <span className="mt-2 block text-sm leading-6 text-white/55">{conversationSummary}</span>
+                </span>
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E55125]/35 bg-black/20">
+                  <ChevronIcon isExpanded={isConversationExpanded} />
+                </span>
+              </span>
+            </button>
+
+            <div
+              className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${
+                isConversationExpanded ? "max-h-[2400px] opacity-100" : "max-h-0 opacity-0"
+              }`}
+              id="customer-conversation-content"
+            >
+              <div className="border-t border-white/10 px-5 pb-5 pt-5 sm:px-6 sm:pb-6">
                 <CustomerCommunicationTimeline
                   customerQuestions={customerQuestions}
-                  marcusQuestions={allMarcusQuestions}
+                  marcusQuestions={timelineMarcusQuestions}
                   perspective="customer"
                   readOnly={true}
                 />
               </div>
-            </section>
-          ) : null}
+            </div>
+          </section>
 
           <section className="rounded-[20px] border border-white/10 bg-[#141414] p-6 sm:p-8">
             <h2 className="text-xl font-semibold text-white">Got a question? Ask anytime</h2>
