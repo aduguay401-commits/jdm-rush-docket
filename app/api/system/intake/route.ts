@@ -9,7 +9,7 @@ import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
-import { getAppBaseUrl } from '@/lib/urls'
+import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
 
 type IntakePayload = {
   customer_first_name?: string
@@ -276,7 +276,7 @@ export async function POST(request: Request) {
     const { data: docket, error: insertError } = await supabase
       .from('dockets')
       .insert(docketInsert)
-      .select('id')
+      .select('id, questions_url_token')
       .single()
 
     if (insertError || !docket) {
@@ -304,6 +304,9 @@ export async function POST(request: Request) {
     }
     const fullName = `${customerFirstName ?? ''} ${customerLastName ?? ''}`.trim()
     const customerFirstNameForEmail = customerFirstName ?? 'there'
+    const customerHomeBaseUrl = docket.questions_url_token
+      ? getCustomerHomeBaseUrl(docket.questions_url_token)
+      : null
     const makeModelForSummary = [vehicleMake, vehicleModel].filter(Boolean).join(' ')
     const vehicleForSummary =
       vehicleDescription ?? (makeModelForSummary.length > 0 ? makeModelForSummary : 'N/A')
@@ -321,6 +324,12 @@ export async function POST(request: Request) {
         ? `[DEV MODE — This email would normally go to: ${marcusOriginalEmail}]\n\n`
         : ''
 
+    if (!customerHomeBaseUrl) {
+      console.warn('[Intake] Missing questions_url_token for customer Home Base CTA', {
+        docketId: docket.id,
+      })
+    }
+
     // Email 1: Customer Welcome
     try {
       const subject = `Welcome to JDM Rush — your docket is ready, ${customerFirstNameForEmail}`
@@ -328,6 +337,45 @@ export async function POST(request: Request) {
         devMode && customerOriginalEmail
           ? `<div style='margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;'>[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
           : ''
+      const homeBaseCtaHtml = customerHomeBaseUrl
+        ? `<div style='background: #160f0c; border: 1px solid #E55125; border-radius: 10px; padding: 24px; margin: 28px 0;'>
+    <p style='font-size: 18px; color: #ffffff; font-weight: 700; margin: 0 0 12px 0;'>🏠 Your JDM Home Base</p>
+    <p style='font-size: 15px; color: #ffffff; font-weight: 700; margin: 0 0 12px 0;'>Welcome aboard, ${escapeHtml(customerFirstNameForEmail)} — we have set up your personal project hub.</p>
+    <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 14px 0;'>
+      Your JDM Home Base is where everything related to your JDM journey lives. Bookmark it and come back any time to:
+    </p>
+    <ul style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 20px 20px; padding: 0;'>
+      <li style='margin: 0 0 6px 0;'>Catch up on conversations with our team</li>
+      <li style='margin: 0 0 6px 0;'>Ask us anything that comes up</li>
+      <li style='margin: 0 0 6px 0;'>Access your custom report when it is ready</li>
+      <li style='margin: 0;'>Review everything in one place</li>
+    </ul>
+    <table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='border-collapse: collapse; margin: 0 0 14px 0;'>
+      <tr>
+        <td align='center' bgcolor='#E55125' style='border-radius: 8px;'>
+          <a href='${escapeHtml(customerHomeBaseUrl)}' style='display: block; background: #E55125; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 18px; border-radius: 8px;'>Visit Your JDM Home Base →</a>
+        </td>
+      </tr>
+    </table>
+    <p style='color: #888888; font-size: 13px; line-height: 1.6; margin: 0;'>No login required. Just save the link somewhere safe.</p>
+  </div>`
+        : ''
+      const homeBaseCtaText = customerHomeBaseUrl
+        ? `
+---
+
+Your JDM Home Base
+
+Welcome aboard, ${customerFirstNameForEmail} — we have set up your personal project hub.
+
+Your JDM Home Base is where everything related to your JDM journey lives. Bookmark it and come back any time to catch up on conversations, ask us anything that comes up, access your custom report when it is ready, and review everything in one place.
+
+Visit your JDM Home Base: ${customerHomeBaseUrl}
+
+No login required. Just save the link somewhere safe.
+
+---`
+        : ''
       const bodySnapshot = `<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;'>
   ${devModeBannerHtml}
   <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
@@ -343,6 +391,7 @@ export async function POST(request: Request) {
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Timeline:</strong> ${escapeHtml(timelineForSummary)}</p>
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Budget:</strong> ${escapeHtml(budgetForSummary)}</p>
   </div>
+  ${homeBaseCtaHtml}
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
     While you wait, feel free to explore our <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125;'>Import Calculator</a> to get a sense of total landed costs for your vehicle.
   </p>
@@ -365,6 +414,7 @@ Your request summary
 - Destination: ${destinationForSummary}
 - Timeline: ${timelineForSummary}
 - Budget: ${budgetForSummary}
+${homeBaseCtaText}
 
 Explore our Import Calculator:
 https://www.jdmrushimports.ca/import-calculator
