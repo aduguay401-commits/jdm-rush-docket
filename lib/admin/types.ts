@@ -34,6 +34,46 @@ export type CustomerQuestionItem = {
   read_at: string | null;
 };
 
+export type CustomerInfoUpdate = {
+  first_name: string;
+  last_name: string;
+  email: string;
+  phone?: string | null;
+  vehicle_year?: string | null;
+  vehicle_make?: string | null;
+  vehicle_model?: string | null;
+  vehicle_description?: string | null;
+  destination_city?: string | null;
+  destination_province?: string | null;
+  budget_bracket?: string | null;
+  timeline?: string | null;
+  additional_notes?: string | null;
+};
+
+export type DocketActivityEventMetadata = {
+  changes: Record<
+    string,
+    {
+      old: string | null;
+      new: string | null;
+    }
+  >;
+};
+
+export type DocketActivityEvent = {
+  id: string;
+  docket_id: string;
+  event_type: string;
+  event_category: string;
+  actor_type: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  title: string;
+  description: string | null;
+  metadata: DocketActivityEventMetadata | null;
+  created_at: string;
+};
+
 export type AdminDocket = {
   id: string;
   created_at: string;
