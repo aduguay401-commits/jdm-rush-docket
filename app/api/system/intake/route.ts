@@ -338,37 +338,22 @@ export async function POST(request: Request) {
           ? `<div style='margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;'>[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
           : ''
       const homeBaseCtaHtml = customerHomeBaseUrl
-        ? `<div style='background: #160f0c; border: 1px solid #E55125; border-radius: 10px; padding: 24px; margin: 28px 0;'>
-    <p style='font-size: 18px; color: #ffffff; font-weight: 700; margin: 0 0 12px 0;'>🏠 Your JDM Home Base</p>
-    <p style='font-size: 15px; color: #ffffff; font-weight: 700; margin: 0 0 12px 0;'>Welcome aboard, ${escapeHtml(customerFirstNameForEmail)} — we have set up your personal project hub.</p>
-    <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 14px 0;'>
-      Your JDM Home Base is where everything related to your JDM journey lives. Bookmark it and come back any time to:
-    </p>
-    <ul style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 20px 20px; padding: 0;'>
-      <li style='margin: 0 0 6px 0;'>Catch up on conversations with our team</li>
-      <li style='margin: 0 0 6px 0;'>Ask us anything that comes up</li>
-      <li style='margin: 0 0 6px 0;'>Access your custom report when it is ready</li>
-      <li style='margin: 0;'>Review everything in one place</li>
-    </ul>
-    <table role='presentation' cellpadding='0' cellspacing='0' border='0' width='100%' style='border-collapse: collapse; margin: 0 0 14px 0;'>
-      <tr>
-        <td align='center' bgcolor='#E55125' style='border-radius: 8px;'>
-          <a href='${escapeHtml(customerHomeBaseUrl)}' style='display: block; background: #E55125; color: #ffffff; font-size: 15px; font-weight: 700; text-decoration: none; padding: 14px 18px; border-radius: 8px;'>Visit Your JDM Home Base →</a>
-        </td>
-      </tr>
-    </table>
-    <p style='color: #888888; font-size: 13px; line-height: 1.6; margin: 0;'>No login required. Just save the link somewhere safe.</p>
-  </div>`
+        ? `<p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;'>
+    We have set up your JDM Home Base — your personal project hub where everything related to your JDM journey lives. Save the link below and come back any time to catch up on conversations, ask us anything, or access your custom report when it is ready.
+  </p>
+  <table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center' style='border-collapse: separate; margin: 24px auto;'>
+    <tr>
+      <td align='center' bgcolor='#E55125' style='background-color: #E55125; border-radius: 8px; padding: 16px 32px;'>
+        <a href='${escapeHtml(customerHomeBaseUrl)}' target='_blank' style='display: inline-block; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; text-decoration: none; line-height: 1.2;'>
+          🏠 Visit Your JDM Home Base →
+        </a>
+      </td>
+    </tr>
+  </table>
+  <p style='color: #888888; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 28px 0;'>No login required. Just save the link somewhere safe.</p>`
         : ''
       const homeBaseCtaText = customerHomeBaseUrl
-        ? `
----
-
-Your JDM Home Base
-
-Welcome aboard, ${customerFirstNameForEmail} — we have set up your personal project hub.
-
-Your JDM Home Base is where everything related to your JDM journey lives. Bookmark it and come back any time to catch up on conversations, ask us anything that comes up, access your custom report when it is ready, and review everything in one place.
+        ? `We have set up your JDM Home Base — your personal project hub where everything related to your JDM journey lives. Save the link below and come back any time to catch up on conversations, ask us anything, or access your custom report when it is ready.
 
 Visit your JDM Home Base: ${customerHomeBaseUrl}
 
@@ -379,49 +364,55 @@ No login required. Just save the link somewhere safe.
       const bodySnapshot = `<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;'>
   ${devModeBannerHtml}
   <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
-  <h1 style='font-size: 24px; font-weight: 700; margin-bottom: 8px;'>Your JDM search starts now… 🇯🇵</h1>
-  <p style='color: #aaaaaa; font-size: 15px; margin-bottom: 24px;'>Hi ${escapeHtml(customerFirstNameForEmail)},</p>
-  <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
-    Thanks for reaching out to JDM Rush Imports. We have received your request and created your personal import docket. Our team is reviewing your submission now and will be in touch shortly.
+  <h1 style='font-size: 24px; font-weight: 700; line-height: 1.3; margin: 0 0 16px 0;'>Welcome aboard, ${escapeHtml(customerFirstNameForEmail)} 🚗</h1>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 24px 0;'>
+    Thanks for trusting us with your JDM journey. We have received your request and our team in Japan is reviewing it now.
   </p>
-  <div style='background: #1a1a1a; border-radius: 10px; padding: 24px; margin: 28px 0;'>
+  <div style='background: #1a1a1a; border-radius: 10px; padding: 20px; margin: 24px 0;'>
     <p style='font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 12px 0;'>YOUR REQUEST SUMMARY</p>
-    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Vehicle:</strong> ${escapeHtml(vehicleForSummary)}</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Vehicle Request:</strong> ${escapeHtml(vehicleForSummary)}</p>
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Destination:</strong> ${escapeHtml(destinationForSummary)}</p>
-    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Timeline:</strong> ${escapeHtml(timelineForSummary)}</p>
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Budget:</strong> ${escapeHtml(budgetForSummary)}</p>
+    <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Timeline:</strong> ${escapeHtml(timelineForSummary)}</p>
   </div>
   ${homeBaseCtaHtml}
+  <hr style='border: 0; border-top: 1px solid #2a2a2a; margin: 30px 0;' />
+  <p style='font-size: 18px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;'>What happens next</p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
-    While you wait, feel free to explore our <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125;'>Import Calculator</a> to get a sense of total landed costs for your vehicle.
+    Our team will start researching options for you. If we need more details, we will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
   </p>
-  <p style='color: #666666; font-size: 13px; margin-top: 32px; line-height: 1.6;'>
-    Questions? Just reply to this email — we are here every step of the way.
+  <p style='font-size: 14px; line-height: 1.7; margin: 18px 0 28px 0;'>
+    <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125; text-decoration: none;'>Try the Import Calculator while you wait →</a>
   </p>
-  <p style='color: #888888; font-size: 14px; margin-top: 32px;'>
-    Adam & the JDM Rush Team<br/>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;'>
+    Questions? Just reply to this email or message us through your Home Base.
+  </p>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 28px 0;'>
+    — Adam & the JDM Rush Team
+  </p>
+  <p style='color: #888888; font-size: 14px; margin-top: 32px; line-height: 1.6;'>
     <a href='mailto:support@jdmrushimports.ca' style='color: #E55125;'>support@jdmrushimports.ca</a>
   </p>
 </div>`
-      const textBody = `${customerDevPrefix}Your JDM search starts now… 🇯🇵
+      const textBody = `${customerDevPrefix}Welcome aboard, ${customerFirstNameForEmail}
 
-Hi ${customerFirstNameForEmail},
+Thanks for trusting us with your JDM journey. We have received your request and our team in Japan is reviewing it now.
 
-Thanks for reaching out to JDM Rush Imports. We have received your request and created your personal import docket. Our team is reviewing your submission now and will be in touch shortly.
-
-Your request summary
+Your request:
 - Vehicle: ${vehicleForSummary}
 - Destination: ${destinationForSummary}
-- Timeline: ${timelineForSummary}
 - Budget: ${budgetForSummary}
+- Timeline: ${timelineForSummary}
 ${homeBaseCtaText}
 
-Explore our Import Calculator:
-https://www.jdmrushimports.ca/import-calculator
+What happens next:
+Our team will start researching options for you. If we need more details, we will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
 
-Questions? Reply to this email.
+Try the Import Calculator while you wait: https://www.jdmrushimports.ca/import-calculator
 
-Adam & the JDM Rush Team
+Questions? Just reply to this email or message us through your Home Base.
+
+— Adam & the JDM Rush Team
 support@jdmrushimports.ca`
       const sendResult = await sendEmail({
         from: fromEmail,
