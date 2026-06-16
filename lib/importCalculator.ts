@@ -89,11 +89,20 @@ export const SUV_MODELS = new Set([
 ]);
 
 /**
- * Return "suv" if the model is in the SUV set, "regular" otherwise.
+ * Return "suv" if the model matches any SUV entry by contains/startsWith,
+ * "regular" otherwise.  Trim/variant matching ensures "RAV4 Hybrid" and
+ * "Land Cruiser Prado/70" classify correctly.
  */
 export function classifyVehicleType(model: string | null): VehicleType {
   if (!model) return "regular";
-  return SUV_MODELS.has(model.trim().toLowerCase()) ? "suv" : "regular";
+  const m = model.trim().toLowerCase();
+  for (const suv of SUV_MODELS) {
+    // Must start at beginning or be a variant ("... Prado/70" matches "land cruiser prado")
+    if (m === suv || m.startsWith(suv + " ") || m.includes(" " + suv)) {
+      return "suv";
+    }
+  }
+  return "regular";
 }
 
 const FEES = {
