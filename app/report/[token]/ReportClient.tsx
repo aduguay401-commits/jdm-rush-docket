@@ -549,9 +549,6 @@ function FeeBreakdownTable({
     typeof exchangeRateAtReport === "number"
       ? exchangeRateAtReport
       : breakdown?.input?.exchangeRate;
-  const hasPstValue = typeof breakdown?.pstCAD === "number";
-  const shouldShowPstLine = !hasPstValue || (breakdown?.pstCAD ?? 0) > 0;
-
   return (
     <div className="mt-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-5">
       <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
@@ -580,24 +577,6 @@ function FeeBreakdownTable({
           );
         })}
       </div>
-
-      {shouldShowPstLine ? (
-        <div className="mt-4 rounded-xl border border-[#f59e0b]/35 bg-[#f59e0b]/10 px-4 py-3">
-          <p className="text-sm font-medium leading-6 text-[#ffd89a]">
-            <span aria-hidden="true">⚠ </span>
-            PST is paid separately at registration in your province and is not included in the total.
-            {hasPstValue
-              ? ` Estimated PST${breakdown?.pstProvince ? ` (${breakdown.pstProvince})` : ""}: ${formatCad(
-                  breakdown.pstCAD
-                )}${
-                  typeof breakdown?.pstRate === "number"
-                    ? ` (${(breakdown.pstRate * 100).toFixed(2)}%)`
-                    : ""
-                }.`
-              : ""}
-          </p>
-        </div>
-      ) : null}
       <p className="mt-2 text-xs leading-5 text-white/55">
         Exchange-rate disclaimer: CAD values are based on JPY/CAD rate
         {typeof computedExchangeRate === "number" ? ` ${computedExchangeRate.toFixed(4)}` : " used in report"}

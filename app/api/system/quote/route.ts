@@ -4,9 +4,6 @@
 // "Get my exact quote" for a specific inventory car.  Computes the exact
 // landed CAD cost to their city and emails the result.
 //
-// The total EXCLUDES PST (collected at registration, not by us) — this
-// is consistent with all Docket pricing.  The email makes this clear.
-//
 // REUSES (does not duplicate):
 //   - calculateImportCost + normalizeDestinationCity (lib/importCalculator)
 //   - classifyVehicleType + SUV_MODELS               (lib/importCalculator)
@@ -95,6 +92,18 @@ function splitName(raw: string | null): {
   };
 }
 
+/** Fold un-itemized fees into one clean line for the email breakdown. */
+function importFeesTotal(b: ReturnType<typeof calculateImportCost>): number {
+  return (
+    b.jdmRushFeeCAD +
+    b.exportAgentFeeCAD +
+    b.exciseTaxCAD +
+    b.brokerageFeeCAD +
+    b.networkFeeCAD +
+    b.financeAdminFeeCAD
+  );
+}
+
 // ── POST handler ────────────────────────────────────────────────────────
 
 export async function POST(request: Request) {
@@ -159,7 +168,7 @@ export async function POST(request: Request) {
     // 4. Live exchange rate
     const exchange = await fetchJPYtoCAD();
 
-    // 5. EXACT landed cost (excludes PST — consistent with all Docket pricing)
+    // 5. EXACT landed cost
     const breakdown = calculateImportCost({
       vehiclePriceJPY,
       destinationCity,
@@ -182,33 +191,48 @@ export async function POST(request: Request) {
       );
     }
 
-    // ── 7. Build email ───────────────────────────────────────────────
+    if (devMode && !adminEmail) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "DEV_MODE is on but ADMIN_EMAIL is not set — cannot send test email",
+        },
+        { status: 500 },
+      );
+    }
+
+    // ── 7. Dedupe: check for existing docket (idempotent retries) ──
+    const supabase = createServerClient();
+
+    if (ref && email) {
+      // Reuse a docket created in the last 10 minutes for same email+ref
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const { data: existing } = await supabase
+        .from("dockets")
+        .select("id, questions_url_token")
+        .eq("customer_email", email)
+        .eq("vehicle_description", ref)
+        .gte("created_at", tenMinAgo)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existing?.questions_url_token) {
+        return NextResponse.json({
+          ok: true,
+          totalDeliveredCAD: breakdown.totalDeliveredCAD,
+          reportToken: existing.questions_url_token,
+        });
+      }
+    }
+
+    // ── 8. Build email body ──────────────────────────────────────────
     const { firstName } = splitName(toOptionalString(body.name));
     const greeting = firstName ?? "there";
     const vehicleLabel = [body.year, make, model].filter(Boolean).join(" ");
     const cadFormatted = breakdown.totalDeliveredCAD.toLocaleString("en-CA");
 
-    // PST is excluded from the total — show it separately with a clear note
-    const pstFormatted = breakdown.pstCAD.toLocaleString("en-CA");
-    const pstPct = (breakdown.pstRate * 100).toFixed(0);
-    const pstBlockHtml =
-      breakdown.pstCAD > 0
-        ? `<div style="background: #1a1a1a; border-radius: 10px; padding: 20px; margin: 20px 0;">
-    <p style="font-size: 13px; color: #f0a060; font-weight: 700; margin: 0 0 8px 0;">⚡ Payable at registration (not included above)</p>
-    <table style="width: 100%; border-collapse: collapse;">
-      <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">PST (${pstPct}%) — collected by ICBC / registry</td><td style="padding: 6px 0; font-size: 14px; color: #f0a060; text-align: right;">≈ $${escapeHtml(pstFormatted)}</td></tr>
-    </table>
-    <p style="color: #888888; font-size: 12px; line-height: 1.5; margin: 10px 0 0 0;">PST is calculated on the vehicle value and paid when you register the car in ${breakdown.province}. We do not collect it — the quoted total above excludes it.</p>
-  </div>`
-        : "";
-
-    const pstBlockText =
-      breakdown.pstCAD > 0
-        ? `\nPayable at registration (NOT included in the total above):\n- PST (${pstPct}%) — collected by ICBC / registry: ≈ $${pstFormatted}\n  PST is calculated on the vehicle value and paid when you register the car in ${breakdown.province}. We do not collect it.\n`
-        : "";
-
-    // We'll build the report URL after creating the docket (just for the CTA).
-    // Build the email body NOW, then insert the CTA after docket creation.
     const devModeBannerHtml =
       devMode && customerOriginalEmail
         ? `<div style="margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;">[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
@@ -219,9 +243,7 @@ export async function POST(request: Request) {
         ? `[DEV MODE — This email would normally go to: ${customerOriginalEmail}]\n\n`
         : "";
 
-    // ── 8. Send email FIRST (before creating the lead — no orphans) ──
-
-    // Assemble the email (CTA placeholder filled in next step)
+    // Helper: build email HTML/text bodies (needs report URL for CTA)
     const makeEmailHtml = (reportUrl: string | null) => {
       const reportCtaHtml = reportUrl
         ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="border-collapse: separate; margin: 24px auto;">
@@ -247,10 +269,10 @@ export async function POST(request: Request) {
   <div style="background: #1a1a1a; border-radius: 10px; padding: 24px; margin: 24px 0; text-align: center;">
     <p style="font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 8px 0;">TOTAL LANDED COST</p>
     <p style="font-size: 42px; font-weight: 800; color: #E55125; margin: 0; line-height: 1.1;">$${escapeHtml(cadFormatted)}</p>
-    <p style="font-size: 14px; color: #aaaaaa; margin: 8px 0 0 0;">CAD · to ${escapeHtml(breakdown.destinationLabel)} · PST not included</p>
+    <p style="font-size: 14px; color: #aaaaaa; margin: 8px 0 0 0;">CAD · delivered to ${escapeHtml(breakdown.destinationLabel)}</p>
   </div>
 
-  <!-- What's included breakdown (line items sum to the total — PST is OUT) -->
+  <!-- Breakdown — all rows sum to the total -->
   <div style="background: #1a1a1a; border-radius: 10px; padding: 20px; margin: 20px 0;">
     <p style="font-size: 13px; color: #ffffff; font-weight: 700; margin: 0 0 12px 0;">What's included</p>
     <table style="width: 100%; border-collapse: collapse;">
@@ -258,14 +280,12 @@ export async function POST(request: Request) {
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Shipping &amp; insurance</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.shippingInsuranceCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Customs duty${dutyType === "duty-free" ? " (0% — Japanese make)" : " (6.1%)"}</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.dutyCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">GST (5%)</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.gstCAD.toLocaleString("en-CA")}</td></tr>
+      <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Import fees &amp; services</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${importFeesTotal(breakdown).toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Port &amp; handling</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.wwsTerminalFeeCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Inland transport</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.transportCostCAD.toLocaleString("en-CA")}</td></tr>
-      <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">JDM Rush service fee</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.jdmRushFeeCAD.toLocaleString("en-CA")}</td></tr>
-      <tr style="border-top: 1px solid #333;"><td style="padding: 10px 0 6px 0; font-size: 16px; color: #ffffff; font-weight: 700;">Total landed (before PST)</td><td style="padding: 10px 0 6px 0; font-size: 16px; color: #E55125; font-weight: 700; text-align: right;">$${cadFormatted}</td></tr>
+      <tr style="border-top: 1px solid #333;"><td style="padding: 10px 0 6px 0; font-size: 16px; color: #ffffff; font-weight: 700;">Total landed</td><td style="padding: 10px 0 6px 0; font-size: 16px; color: #E55125; font-weight: 700; text-align: right;">$${cadFormatted}</td></tr>
     </table>
   </div>
-
-  ${pstBlockHtml}
 
   ${reportCtaHtml}
 
@@ -292,18 +312,13 @@ export async function POST(request: Request) {
 
     const subject = `Your exact JDM import quote — ${vehicleLabel}`;
 
-    // Send email with placeholder CTA (null report URL — filled after docket)
-    // We send a first-cut email now; the report link is included since we
-    // generate the docket before building the final email body.
-    // Actually: create docket FIRST to get the token for the CTA, then
-    // send email.  If email fails, mark the docket so it's not an orphan.
-
-    const supabase = createServerClient();
-
-    // Create the docket first so we have the report token for the email CTA
+    // ── 9. Create docket (before email so we have the report token for CTA) ──
     const { firstName: crmFirstName, lastName: crmLastName } = splitName(
       toOptionalString(body.name),
     );
+
+    const cadFormattedForInsert = breakdown.totalDeliveredCAD
+      .toLocaleString("en-CA");
 
     const docketInsert = {
       status: "new" as const,
@@ -322,7 +337,7 @@ export async function POST(request: Request) {
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
       selected_path: "quote-endpoint",
-      additional_notes: `Exact quote computed: $${cadFormatted} CAD landed to ${breakdown.destinationLabel} (PST excl.)`,
+      additional_notes: `Exact quote computed: $${cadFormattedForInsert} CAD landed to ${breakdown.destinationLabel}`,
     };
 
     const { data: docket, error: insertError } = await supabase
@@ -343,7 +358,7 @@ export async function POST(request: Request) {
       ? getCustomerHomeBaseUrl(docket.questions_url_token)
       : null;
 
-    // Build final email WITH the report URL CTA
+    // ── 10. Send email ───────────────────────────────────────────────
     const htmlBody = makeEmailHtml(reportUrl);
 
     const reportCtaText = reportUrl
@@ -354,17 +369,17 @@ export async function POST(request: Request) {
 
 Here is the landed cost for the ${vehicleLabel} delivered to ${breakdown.destinationLabel}.
 
-TOTAL LANDED COST (before PST): $${cadFormatted} CAD
+TOTAL LANDED COST: $${cadFormatted} CAD
 
 What's included:
 - Vehicle (FOB Japan): $${breakdown.vehicleValueCAD.toLocaleString("en-CA")}
 - Shipping & insurance: $${breakdown.shippingInsuranceCAD.toLocaleString("en-CA")}
 - Customs duty: $${breakdown.dutyCAD.toLocaleString("en-CA")}${dutyType === "duty-free" ? " (0% — Japanese make)" : " (6.1%)"}
 - GST (5%): $${breakdown.gstCAD.toLocaleString("en-CA")}
+- Import fees & services: $${importFeesTotal(breakdown).toLocaleString("en-CA")}
 - Port & handling: $${breakdown.wwsTerminalFeeCAD.toLocaleString("en-CA")}
 - Inland transport: $${breakdown.transportCostCAD.toLocaleString("en-CA")}
-- JDM Rush service fee: $${breakdown.jdmRushFeeCAD.toLocaleString("en-CA")}
-${pstBlockText}
+
 ⚠️ This estimate is calculated at today's exchange rate of ${exchange.rate.toFixed(4)} JPY/CAD (Bank of Canada, ${exchange.date}). Final amounts may vary slightly based on the exchange rate at time of purchase and any changes in import fees. Duty classification for Japanese makes (0%) is based on Canada's tariff schedule and is our best assessment — not a legal guarantee.
 ${reportCtaText}
 Ready to move forward? Reply to this email and we'll get the ball rolling.
@@ -384,7 +399,6 @@ support@jdmrushimports.ca`;
     } catch (err) {
       console.error("[Quote] Email send failed");
 
-      // Mark the docket so it's not a silent orphan — shows in CRM as email-failed
       await supabase
         .from("dockets")
         .update({
