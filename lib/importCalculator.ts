@@ -322,3 +322,32 @@ export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
     totalDeliveredCAD: round2(totalDeliveredCAD),
   };
 }
+
+// ── Loop 3.2a-i: Card estimate (for Browse Japan Stock cards) ───────
+
+export type CardEstimateInput = {
+  vehiclePriceJPY: number;
+  dutyType: DutyType;
+  exchangeRate: number;
+};
+
+/**
+ * Card estimate = full landed cost minus inland transport.
+ *
+ * PST is already excluded from the `calculateImportCost` total, so we
+ * only strip `transportCostCAD`.  A placeholder destination + vehicle
+ * type is used because neither affects the result after stripping.
+ *
+ * All fee constants live in this file — this is the single source.
+ */
+export function calculateCardEstimate(input: CardEstimateInput): number {
+  const breakdown = calculateImportCost({
+    vehiclePriceJPY: input.vehiclePriceJPY,
+    destinationCity: "richmond-bc",
+    vehicleType: "regular",
+    dutyType: input.dutyType,
+    exchangeRate: input.exchangeRate,
+  });
+
+  return round2(breakdown.totalDeliveredCAD - breakdown.transportCostCAD);
+}
