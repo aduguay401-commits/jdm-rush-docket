@@ -53,6 +53,58 @@ export type FeeBreakdown = {
   totalDeliveredCAD: number;
 };
 
+// ── Loop 2.1-i: SUV model lookup (for quote endpoint vehicleType) ───────
+
+/**
+ * Curated set of model names that should be treated as SUVs for transport
+ * pricing.  Lowercased, matched case-insensitively.  Easy to edit: just
+ * add/remove entries.  Defaults to "regular" for anything not listed.
+ */
+export const SUV_MODELS = new Set([
+  "4runner",
+  "armada",
+  "cx-5",
+  "cx-7",
+  "cx-9",
+  "cr-v",
+  "forester",
+  "harrier",
+  "highlander",
+  "kluger",
+  "land cruiser",
+  "land cruiser prado",
+  "murano",
+  "outlander",
+  "pajero",
+  "pathfinder",
+  "pilot",
+  "rav4",
+  "rx",
+  "sequoia",
+  "tribeca",
+  "vanguard",
+  "x-trail",
+  "x3",
+  "x5",
+]);
+
+/**
+ * Return "suv" if the model matches any SUV entry by contains/startsWith,
+ * "regular" otherwise.  Trim/variant matching ensures "RAV4 Hybrid" and
+ * "Land Cruiser Prado/70" classify correctly.
+ */
+export function classifyVehicleType(model: string | null): VehicleType {
+  if (!model) return "regular";
+  const m = model.trim().toLowerCase();
+  for (const suv of SUV_MODELS) {
+    // Must start at beginning or be a variant ("... Prado/70" matches "land cruiser prado")
+    if (m === suv || m.startsWith(suv + " ") || m.includes(" " + suv)) {
+      return "suv";
+    }
+  }
+  return "regular";
+}
+
 const FEES = {
   shippingInsuranceJPY: 250000,
   exciseTaxCAD: 100,
