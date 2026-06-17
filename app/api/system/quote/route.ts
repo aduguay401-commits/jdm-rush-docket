@@ -92,16 +92,12 @@ function splitName(raw: string | null): {
   };
 }
 
-/** Fold un-itemized fees into one clean line for the email breakdown. */
-function importFeesTotal(b: ReturnType<typeof calculateImportCost>): number {
-  return (
-    b.jdmRushFeeCAD +
-    b.exportAgentFeeCAD +
-    b.exciseTaxCAD +
-    b.brokerageFeeCAD +
-    b.networkFeeCAD +
-    b.financeAdminFeeCAD
-  );
+/** Penny-plug: displayed rows must sum exactly to totalDeliveredCAD.
+ *  Compute "Import fees & services" as total minus the other visible rows
+ *  so the email never shows a 1¢ round-vs-sum discrepancy. */
+function importFeesLine(b: ReturnType<typeof calculateImportCost>): number {
+  const visible = b.vehicleValueCAD + b.shippingInsuranceCAD + b.dutyCAD + b.gstCAD + b.wwsTerminalFeeCAD + b.transportCostCAD;
+  return Math.round((b.totalDeliveredCAD - visible) * 100) / 100;
 }
 
 // ── POST handler ────────────────────────────────────────────────────────
@@ -280,7 +276,7 @@ export async function POST(request: Request) {
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Shipping &amp; insurance</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.shippingInsuranceCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Customs duty${dutyType === "duty-free" ? " (0% — Japanese make)" : " (6.1%)"}</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.dutyCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">GST (5%)</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.gstCAD.toLocaleString("en-CA")}</td></tr>
-      <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Import fees &amp; services</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${importFeesTotal(breakdown).toLocaleString("en-CA")}</td></tr>
+      <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Import fees &amp; services</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${importFeesLine(breakdown).toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Port &amp; handling</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.wwsTerminalFeeCAD.toLocaleString("en-CA")}</td></tr>
       <tr><td style="padding: 6px 0; font-size: 14px; color: #cccccc;">Inland transport</td><td style="padding: 6px 0; font-size: 14px; color: #ffffff; text-align: right;">$${breakdown.transportCostCAD.toLocaleString("en-CA")}</td></tr>
       <tr style="border-top: 1px solid #333;"><td style="padding: 10px 0 6px 0; font-size: 16px; color: #ffffff; font-weight: 700;">Total landed</td><td style="padding: 10px 0 6px 0; font-size: 16px; color: #E55125; font-weight: 700; text-align: right;">$${cadFormatted}</td></tr>
@@ -376,7 +372,7 @@ What's included:
 - Shipping & insurance: $${breakdown.shippingInsuranceCAD.toLocaleString("en-CA")}
 - Customs duty: $${breakdown.dutyCAD.toLocaleString("en-CA")}${dutyType === "duty-free" ? " (0% — Japanese make)" : " (6.1%)"}
 - GST (5%): $${breakdown.gstCAD.toLocaleString("en-CA")}
-- Import fees & services: $${importFeesTotal(breakdown).toLocaleString("en-CA")}
+- Import fees & services: $${importFeesLine(breakdown).toLocaleString("en-CA")}
 - Port & handling: $${breakdown.wwsTerminalFeeCAD.toLocaleString("en-CA")}
 - Inland transport: $${breakdown.transportCostCAD.toLocaleString("en-CA")}
 
