@@ -318,7 +318,6 @@ export function normalizeDestinationCity(raw: string): DestinationCity | null {
 export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
   const transportData = TRANSPORT_COSTS[input.vehicleType][input.destinationCity];
   const dutyRate = DUTY_RATES[input.dutyType];
-  const pstRate = PST_RATES[transportData.province];
 
   const vehicleValueCAD = input.vehiclePriceJPY * input.exchangeRate;
   const shippingInsuranceCAD = FEES.shippingInsuranceJPY * input.exchangeRate;
@@ -330,7 +329,9 @@ export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
   const dutyCAD = valueForDutyCAD * dutyRate;
   const valueForGSTCAD = vehicleValueCAD + dutyCAD + FEES.exciseTaxCAD;
   const gstCAD = valueForGSTCAD * FEES.gstRate;
-  const pstCAD = vehicleValueCAD * pstRate;
+  // Provincial tax (PST/QST/HST) is a registration cost, not an import cost — excluded from landed total
+  const pstCAD = 0;
+  const pstRate = 0;
 
   const totalDeliveredCAD =
     vehicleValueCAD +
@@ -345,7 +346,6 @@ export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
     FEES.networkFeeCAD +
     FEES.financeAdminFeeCAD +
     transportData.cost;
-
   return {
     input,
     destinationLabel: transportData.label,
