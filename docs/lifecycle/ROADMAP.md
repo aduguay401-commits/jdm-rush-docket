@@ -41,9 +41,11 @@ Phase 4: SITE CHANGE (jdm-rush-next)
 
 **Blocks everything that follows.** No purchase, delivery, or customer-facing code can ship until customers exist, auth works, and RLS isolates their data.
 
-### Stage 0.1 — Migration Baseline (`vehicle_description`)
+### Stage 0.1 — Migration Baseline (`vehicle_description` + `profiles`)
 
-**What it builds:** A new tracked migration file that adds `vehicle_description` to the `dockets` table, closing the gap where this column exists only via an ad-hoc ALTER recorded as a comment at `app/api/system/intake/route.ts` lines 1-4.
+**What it builds:** A new tracked migration file that adds:
+- `vehicle_description` to the `dockets` table (closing the gap where this column exists only via an ad-hoc ALTER recorded as a comment at `app/api/system/intake/route.ts` lines 1-4)
+- `profiles` table (used by `lib/admin/auth.ts` for admin/agent role lookups; exists in the live DB but is NOT in any tracked migration — same gap as `vehicle_description`)
 
 **Dependencies:** None.
 
@@ -57,9 +59,20 @@ Phase 4: SITE CHANGE (jdm-rush-next)
 -- Idempotent: safe to run even if column already exists.
 ALTER TABLE public.dockets
   ADD COLUMN IF NOT EXISTS vehicle_description text;
+
+-- Migration: profiles table (used by lib/admin/auth.ts for role lookups)
+-- Idempotent: safe to run even if table already exists.
+CREATE TABLE IF NOT EXISTS public.profiles (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  role text,
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ```
 
-**Verification:** `grep -l "vehicle_description" supabase/migrations/*.sql` returns a result (the new file). Fresh `npm run build` passes.
+**Verification:** `grep -l "vehicle_description\|profiles" supabase/migrations/*.sql` returns results. Fresh `npm run build` passes.
 
 ---
 
@@ -107,6 +120,7 @@ ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ### Stage 0.3 — RLS on Dockets + Email Claiming Flow
 
 **What it builds:**
+- **⚠️ PRE-FLIGHT (before writing policies):** Confirm which column in the `profiles` table holds the auth user ID. The live code at `lib/admin/auth.ts` queries by `profiles.id` first and falls back to `profiles.user_id` — so the auth-link column is unconfirmed. Until confirmed, all admin/agent RLS policy predicates in this stage (and all subsequent stages) use the defensive form: `profiles.id = auth.uid() OR profiles.user_id = auth.uid()`. Once confirmed, simplify to the correct single column.
 - RLS policies on `dockets` table: customers can SELECT/UPDATE only rows where `customer_id` matches their authenticated customer ID
 - Email-based claiming flow: when a customer creates an account with an email matching unclaimed dockets, those dockets are auto-linked
 - Dual-access: token URLs (`report_url_token` / `questions_url_token`) continue to work for unclaimed dockets; claimed dockets accessible via both token and session
@@ -133,13 +147,13 @@ CREATE POLICY "customers_update_own_dockets" ON dockets
   USING (customer_id = (SELECT id FROM customers WHERE auth_user_id = auth.uid()))
   WITH CHECK (customer_id = (SELECT id FROM customers WHERE auth_user_id = auth.uid()));
 
--- Admin/agent can still read all dockets (service-role or explicit policy)
+-- Admin/agent can still read all dockets (defensive predicate — profiles auth-link column unconfirmed per pre-flight)
 CREATE POLICY "admin_agent_read_all_dockets" ON dockets
   FOR SELECT TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE id = auth.uid()
+      WHERE (id = auth.uid() OR user_id = auth.uid())
       AND role IN ('admin', 'agent')
     )
   );
@@ -393,13 +407,13 @@ CREATE POLICY "customers_read_own_shipments" ON shipments
     )
   );
 
--- RLS: admin/agent read all shipments
+-- RLS: admin/agent read all shipments (defensive predicate per Stage 0.3 pre-flight)
 CREATE POLICY "admin_agent_read_all_shipments" ON shipments
   FOR SELECT TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE id = auth.uid()
+      WHERE (id = auth.uid() OR user_id = auth.uid())
       AND role IN ('admin', 'agent')
     )
   );
@@ -489,13 +503,13 @@ CREATE POLICY "customers_read_visible_docs" ON shipment_documents
     )
   );
 
--- RLS: admin/agent see all documents
+-- RLS: admin/agent see all documents (defensive predicate per Stage 0.3 pre-flight)
 CREATE POLICY "admin_agent_all_docs" ON shipment_documents
   FOR ALL TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM profiles
-      WHERE id = auth.uid()
+      WHERE (id = auth.uid() OR user_id = auth.uid())
       AND role IN ('admin', 'agent')
     )
   );
@@ -524,6 +538,30 @@ CREATE POLICY "admin_agent_all_docs" ON shipment_documents
 **No SQL this stage.**
 
 **Verification:** Customer logs in → sees docket status "In Delivery" → clicks → sees stage progress, documents, MarineTraffic link. No internal data exposed. Admin view shows all fields including internal notes.
+
+---
+
+### Stage 3.5 — Account Deletion & Legal-Record Retention
+
+**What it builds:**
+- **Customer account soft-delete:** cron job (or admin-triggered) checks `customers.last_login_at` — accounts inactive for ~1 year are soft-deleted (`customers.deleted_at` set, `auth.users` session revoked, PII fields (first_name, last_name, phone) anonymized)
+- **Legal-record retention split (per D7):** The legal purchase packet (signed agreement PDF, driver's license, deposit record) is retained on its own clock, independently of the customer account deletion. The `agreement_signatures` and related records are NOT deleted when the customer account is soft-deleted — they persist for the legal retention period. The exact retention duration is a configurable value set by Adam's lawyer.
+- **Docket data preservation:** Dockets linked to a soft-deleted customer retain `customer_id = NULL` (unlinked) but remain in the system for business records. PII fields on dockets (`customer_first_name`, `customer_last_name`, `customer_email`, `customer_phone`) are anonymized.
+- **Admin retention dashboard:** shows approaching-deletion accounts, recently-deleted accounts, and legal-packet retention status — so Adam has visibility into both clocks.
+
+**Dependencies:** 3.4 (customer portal complete — deletion is the final lifecycle stage), Phase 2 (agreement signatures + license must exist for legal packet retention).
+
+**D-Decisions implemented:** **D7** (separate lifetimes: ~1yr account soft-delete + independent legal-packet retention with lawyer-set clock).
+
+**Reuse vs build:**
+- Reuse: existing `customers.deleted_at` column, existing admin dashboard patterns
+- Build: soft-delete cron job (or API endpoint), PII anonymization logic, legal-packet retention logic (query `agreement_signatures` where `docket_id` belongs to soft-deleted customer — skip deletion), admin retention dashboard
+
+**No SQL this stage** (deletion works on existing columns). The legal retention number is a **config value** (`LEGAL_RECORD_RETENTION_DAYS` env var), not a schema change.
+
+> 🔶 **Human follow-up (D7):** The exact legal-record retention number must come from Adam's lawyer. The build proceeds with a configurable default (e.g., 7 years = 2555 days, standard Canadian business record retention). Adam sets the real number via env var before production launch.
+
+**Verification:** Customer account with `last_login_at` > 1 year ago → soft-deleted → PII anonymized, auth session revoked. Legal packet (agreement + license) for that customer's docket → still exists. Admin dashboard shows deletion status. Configurable retention value honored.
 
 ---
 
@@ -558,9 +596,11 @@ CREATE POLICY "admin_agent_all_docs" ON shipment_documents
 ```
 0.1 ──→ 0.2 ──→ 0.3 ──→ 0.4 ──→ 2.1 ──→ 2.2 ──→ 2.3 ──→ 2.4 ──→ 2.5
                                          │                                     │
-                                         └──→ 3.1 ──→ 3.2 ──→ 3.3 ──→ 3.4 ←──┘
-                    │
-                    └──→ 4.1 (parallel after 0.4)
+                                         └──→ 3.1 ──→ 3.2 ──→ 3.3 ──→ 3.4 ──→ 3.5 ←──┘
+                    │                                     │
+                    └──→ 4.1 (parallel after 0.4)         │
+                                                          │
+                    Phase 2 (2.5) ────────────────────────┘ (3.5 needs agreements licenses for retention)
 ```
 
 ---
@@ -569,7 +609,7 @@ CREATE POLICY "admin_agent_all_docs" ON shipment_documents
 
 | Item | Owner | When needed | Stage unblocked by |
 |------|-------|-------------|-------------------|
-| **D7 — Legal-record retention number** | Adam's lawyer | Before Phase 2 ships (affects retention policy for agreements + licenses) | All stages proceed with configurable retention value; lawyer sets the number |
+| **D7 — Legal-record retention number** | Adam's lawyer | Before Stage 3.5 ships (legal-packet retention) | Stage 3.5 proceeds with configurable default (7 years); lawyer sets the real number |
 | **D6 — FreshBooks API credentials** | Adam + Patrick (accountant) | Before FreshBooks provider is wired (Stage 2.4b, post-launch) | Stage 2.4 ships with stub; FreshBooks wiring is a follow-up PR behind the provider interface |
 | **QuickBooks → FreshBooks migration** | Adam + Patrick | Before FreshBooks provider goes live | Independent of build — stub handles deposits manually |
 | **Site→docket intake auth** | Adam (security review) | When customer accounts exist (after 0.3) | The `/find-my-jdm` → `/api/system/intake` POST currently carries no auth token. With customer accounts, intake could optionally link submissions to logged-in customers. Not blocking — intake works without auth today and continues to work |
@@ -583,7 +623,7 @@ Each block is idempotent. Run at the start of its stage. Paste into the Supabase
 
 | Stage | Block | What it creates |
 |-------|-------|----------------|
-| 0.1 | Migration: vehicle_description | `ALTER TABLE dockets ADD COLUMN IF NOT EXISTS vehicle_description text` |
+| 0.1 | Migration baseline: vehicle_description + profiles | `vehicle_description` column on dockets, `profiles` table (both untracked gaps) |
 | 0.2 | Customers + docket link | `customers` table, `customer_id` on dockets, RLS enable |
 | 0.3 | RLS policies on dockets | 3 policies: customer read own, customer update own, admin/agent read all |
 | 2.2 | Agreement signatures | `agreement_signatures` table, RLS enable |
