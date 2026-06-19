@@ -133,7 +133,9 @@ dockets
 | docket_status_history | YES | YES (authenticated SELECT using true) |
 | docket_activity_events | YES | YES (service_role ALL + authenticated SELECT) |
 
-**Implication:** The seven core tables have RLS enabled but ZERO policies. This means NO queries succeed unless they use the service-role key. This is the current architectural reality: customer-facing pages authenticate via opaque URL tokens validated at the application layer, and all database access uses the service-role client. RLS is a **no-op** — it blocks everything, and the service-role key is the only way through.
+**Implication:** The eight core tables (dockets through email_log) have RLS enabled but ZERO policies. This means NO queries succeed unless they use the service-role key. This is the current architectural reality: customer-facing pages authenticate via opaque URL tokens validated at the application layer, and all database access uses the service-role client. RLS is a **no-op** — it blocks everything, and the service-role key is the only way through.
+
+> **⚠️ Migration gap: `vehicle_description` column.** The `vehicle_description` column exists in the live database and is actively read/written by intake, questions, and report routes, but it is NOT present in any tracked migration file under `supabase/migrations/`. It was introduced by an ad-hoc `ALTER TABLE dockets ADD COLUMN IF NOT EXISTS vehicle_description TEXT` recorded only as a SQL comment at `app/api/system/intake/route.ts` lines 1-4. A from-scratch migration using ONLY the tracked migration files would MISS this column, breaking the docket create flow (intake and quote both insert it). This column must be added to a tracked migration before any fresh-environment deploy.
 
 ### 1.5 How a Docket is Created and What It Links To
 
@@ -258,8 +260,8 @@ The PRD calls for an authenticated customer portal with true per-customer isolat
 Both use `{{placeholder}}` variables: `{{customer_first_name}}`, `{{customer_last_name}}`, `{{customer_email}}`, `{{customer_phone}}`, `{{customer_address}}`, `{{vehicle_year}}`, `{{vehicle_make}}`, `{{vehicle_model}}`.
 
 **Current fulfillment:** The approve route (`app/api/customer/approve/[token]/route.ts`, lines 247-250) links to Wix forms:
-- Auction: `https://forms.wix.com/r/7191838185536618530`
-- Dealer: `https://forms.wix.com/r/7211765470112776777`
+- Dealer (`private_dealer`): `https://forms.wix.com/r/7191838185536618530`
+- Auction: `https://forms.wix.com/r/7211765470112776777`
 
 **PRD requirement: Native template selection based on path (auction vs dealer), respecting the dealer CAD $50,000 Section 5c payment-routing branch.**
 
@@ -561,7 +563,7 @@ CREATE POLICY "customers_read_own_questions" ON marcus_questions
 ### 6.3 What Doesn't Exist and Would Be Bloat (Skip)
 
 - **QuickBooks integration** — FreshBooks is the named provider. Build the FreshBooks plug-in, keep the interface swappable. Don't pre-build a QuickBooks provider.
-- **Automated shipment scraping** — Gemmy/JEMI portal scraping exists as a reference document (`docs/references/gemmy-portal-recon.md`) but is not built. Phase 3 calls for manual admin/agent updates. Automated scraping can be a Phase 4 add-on.
+- **Automated shipment scraping** — Gemmy/JEMI portal scraping is described but no committed reference document exists. The Docket skill's linked references list `gemmy-portal-recon.md` and `gemmy-portal-integration.md` but neither file is present in the repo. Phase 3 calls for manual admin/agent updates. Automated scraping can be a Phase 4 add-on.
 - **Stripe/payment processing** — No payment processing exists in the Docket. The PRD does not call for it. The deposit-invoice layer sends invoices; payments are handled outside the system.
 - **Sentry/error tracking** — Not configured anywhere. Low priority vs core lifecycle features.
 
