@@ -1,7 +1,11 @@
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { NextRequest, NextResponse } from "next/server";
 
-import { normalizeCustomerNextPath, provisionCustomerAccount } from "@/lib/customer/auth";
+import {
+  normalizeCustomerNextPath,
+  provisionCustomerAccount,
+  SoftDeletedCustomerError,
+} from "@/lib/customer/auth";
 import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
 function buildRedirect(request: NextRequest, path: string) {
@@ -52,6 +56,12 @@ export async function GET(request: NextRequest) {
     await provisionCustomerAccount(data.user);
   } catch (provisionError) {
     console.error("[Customer Auth] Customer provisioning failed", provisionError);
+    await supabase.auth.signOut();
+
+    if (provisionError instanceof SoftDeletedCustomerError) {
+      return buildErrorRedirect(request, "This customer account is disabled.");
+    }
+
     return buildErrorRedirect(request, "Unable to prepare your customer account.");
   }
 

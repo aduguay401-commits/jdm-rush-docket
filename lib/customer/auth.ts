@@ -14,11 +14,21 @@ type CustomerMetadata = {
 
 type ProfileRoleRow = {
   id: string;
-  user_id: string | null;
   role: string | null;
 };
 
+type CustomerStatusRow = {
+  deleted_at: string | null;
+};
+
 const DEFAULT_CUSTOMER_NEXT_PATH = "/account";
+
+export class SoftDeletedCustomerError extends Error {
+  constructor() {
+    super("Customer account is disabled");
+    this.name = "SoftDeletedCustomerError";
+  }
+}
 
 function metadataString(value: unknown) {
   return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
@@ -85,31 +95,34 @@ export function getCustomerAuthCallbackUrl(nextPath = DEFAULT_CUSTOMER_NEXT_PATH
 async function getExistingProfile(userId: string) {
   const supabase = createServerClient();
 
-  const byId = await supabase
+  const { data, error } = await supabase
     .from("profiles")
-    .select("id, user_id, role")
+    .select("id, role")
     .eq("id", userId)
     .maybeSingle<ProfileRoleRow>();
 
-  if (byId.error) {
-    throw new Error(byId.error.message);
+  if (error) {
+    throw new Error(error.message);
   }
 
-  if (byId.data) {
-    return byId.data;
+  return data ?? null;
+}
+
+async function assertCustomerIsActive(userId: string) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("deleted_at")
+    .eq("auth_user_id", userId)
+    .maybeSingle<CustomerStatusRow>();
+
+  if (error) {
+    throw new Error(error.message);
   }
 
-  const byUserId = await supabase
-    .from("profiles")
-    .select("id, user_id, role")
-    .eq("user_id", userId)
-    .maybeSingle<ProfileRoleRow>();
-
-  if (byUserId.error) {
-    throw new Error(byUserId.error.message);
+  if (data?.deleted_at) {
+    throw new SoftDeletedCustomerError();
   }
-
-  return byUserId.data ?? null;
 }
 
 export async function provisionCustomerAccount(user: User) {
@@ -124,6 +137,8 @@ export async function provisionCustomerAccount(user: User) {
   const { firstName, lastName } = getCustomerNames(metadata);
   const phone = metadataString(metadata.phone);
   const supabase = createServerClient();
+
+  await assertCustomerIsActive(user.id);
 
   const { error: customerError } = await supabase.from("customers").upsert(
     {
@@ -149,8 +164,7 @@ export async function provisionCustomerAccount(user: User) {
 
   const { error: profileError } = await supabase.from("profiles").upsert(
     {
-      id: existingProfile?.id ?? user.id,
-      user_id: user.id,
+      id: user.id,
       role: "customer",
     },
     { onConflict: "id" }

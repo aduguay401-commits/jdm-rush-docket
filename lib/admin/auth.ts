@@ -25,31 +25,17 @@ export async function getCurrentUserRole(): Promise<CurrentUserRole> {
     return { user: null, role: null };
   }
 
-  const byId = await supabase
+  const { data, error } = await supabase
     .from("profiles")
     .select("role")
     .eq("id", user.id)
     .maybeSingle<ProfileRoleRow>();
 
-  if (byId.error) {
+  if (error) {
     return { user, role: null };
   }
 
-  if (isProfileRole(byId.data?.role)) {
-    return { user, role: byId.data.role };
-  }
-
-  const byUserId = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle<ProfileRoleRow>();
-
-  if (byUserId.error) {
-    return { user, role: null };
-  }
-
-  const role = isProfileRole(byUserId.data?.role) ? byUserId.data.role : null;
+  const role = isProfileRole(data?.role) ? data.role : null;
 
   return { user, role };
 }
