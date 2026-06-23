@@ -58,12 +58,22 @@ export function normalizeCustomerNextPath(value: unknown) {
   }
 
   const trimmed = value.trim();
-
-  if (!trimmed.startsWith("/") || trimmed.startsWith("//") || trimmed.includes("://")) {
+  if (!trimmed) {
     return DEFAULT_CUSTOMER_NEXT_PATH;
   }
 
-  return trimmed || DEFAULT_CUSTOMER_NEXT_PATH;
+  try {
+    const baseUrl = new URL(getAppBaseUrl());
+    const resolvedUrl = new URL(trimmed, baseUrl);
+
+    if (resolvedUrl.origin !== baseUrl.origin) {
+      return DEFAULT_CUSTOMER_NEXT_PATH;
+    }
+
+    return `${resolvedUrl.pathname}${resolvedUrl.search}`;
+  } catch {
+    return DEFAULT_CUSTOMER_NEXT_PATH;
+  }
 }
 
 export function getCustomerAuthCallbackUrl(nextPath = DEFAULT_CUSTOMER_NEXT_PATH) {
@@ -123,7 +133,6 @@ export async function provisionCustomerAccount(user: User) {
       last_name: lastName,
       phone,
       last_login_at: now,
-      deleted_at: null,
     },
     { onConflict: "auth_user_id" }
   );

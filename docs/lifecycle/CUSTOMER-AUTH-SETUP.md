@@ -47,6 +47,7 @@ https://*.vercel.app/auth/customer/callback
 
 - Customer-facing auth/session calls use `createServerAuthClient()` so Supabase cookies are set and RLS is honored.
 - The callback provisions `public.customers` and the `profiles` customer role after Supabase confirms the user. That provisioning uses the service-role client as a server-only system operation because the Stage 0.2 migration enables RLS on `customers` before customer self-insert policies exist.
+- Returning customers have `last_login_at` updated on each callback, but `deleted_at` is never cleared automatically. Soft-deleted customers must be restored deliberately by an admin flow.
 - Stage 0.3 is where customer RLS policies on `dockets` are added.
 
 ## QA Split
