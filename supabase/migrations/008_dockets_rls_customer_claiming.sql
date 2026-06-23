@@ -5,6 +5,14 @@
 
 ALTER TABLE public.dockets ENABLE ROW LEVEL SECURITY;
 
+-- Remove pre-existing broad policies that OR-combine with scoped policies and defeat isolation.
+DROP POLICY IF EXISTS "Authenticated users can read dockets" ON public.dockets;
+DROP POLICY IF EXISTS "Authenticated users can update dockets" ON public.dockets;
+
+-- Token access is handled by server-side service-role routes, not browser-anon Supabase reads/writes.
+DROP POLICY IF EXISTS "Public can read docket by report token" ON public.dockets;
+DROP POLICY IF EXISTS "Public can update docket decision fields" ON public.dockets;
+
 DROP POLICY IF EXISTS customers_read_own_dockets ON public.dockets;
 CREATE POLICY customers_read_own_dockets ON public.dockets
   FOR SELECT
