@@ -1,96 +1,204 @@
 "use client";
 
-
 import { getCustomerReportUrl } from "@/lib/urls";
+
+// ── Journey spine ─────────────────────────────────────────────────────────────
+
+const JOURNEY_STEPS = [
+  { id: 1, label: "Request received",        short: "Requested" },
+  { id: 2, label: "Sourcing & research",      short: "Research"  },
+  { id: 3, label: "Reserved",                 short: "Reserved"  },
+  { id: 4, label: "Purchased",                short: "Purchased" },
+  { id: 5, label: "At port, awaiting vessel", short: "At Port"   },
+  { id: 6, label: "On the vessel",            short: "On Vessel" },
+  { id: 7, label: "Customs & landing",        short: "Customs"   },
+  { id: 8, label: "Delivered",                short: "Delivered" },
+] as const;
 
 // ── Mock data (Coder replaces with real Supabase + RLS query after design-lock) ─
 
-type MockDocket = {
+type MockCar = {
   id: string;
   vehicle: string;
-  status: "report_sent" | "research_in_progress" | "new";
-  report_token: string;
-  submitted_at: string;
+  currentStep: number;
+  reportToken?: string;
+  submittedAt: string;
+  callout: {
+    title: string;
+    body: string;
+    needsAction?: boolean;
+    reassure?: boolean;
+  };
 };
 
-const MOCK_DOCKETS: MockDocket[] = [
+const MOCK_CARS: MockCar[] = [
   {
-    id: "mock-1",
+    id: "car-1",
     vehicle: "2002 Subaru Impreza WRX STI",
-    status: "report_sent",
-    report_token: "mock-token-abc123",
-    submitted_at: "June 10, 2026",
+    currentStep: 2,
+    reportToken: "mock-token-wrx",
+    submittedAt: "June 10, 2026",
+    callout: {
+      title: "Your import report is ready",
+      body: "We've completed research on your WRX STI — full landed-cost breakdown and two auction listings worth watching. Review the report and let us know if you'd like to move forward.",
+      needsAction: true,
+    },
   },
   {
-    id: "mock-2",
+    id: "car-2",
     vehicle: "1999 Nissan Skyline GT-R R34",
-    status: "research_in_progress",
-    report_token: "mock-token-def456",
-    submitted_at: "June 18, 2026",
+    currentStep: 5,
+    reportToken: "mock-token-r34",
+    submittedAt: "May 2, 2026",
+    callout: {
+      title: "Your R34 is at the port — this is the longest wait",
+      body: "Your car is in Japan at the port waiting to be loaded onto the next available vessel. This typically takes 4–8 weeks and is completely normal. No action needed — we'll notify you the moment it sets sail.",
+      reassure: true,
+    },
+  },
+  {
+    id: "car-3",
+    vehicle: "1997 Toyota Supra RZ",
+    currentStep: 1,
+    submittedAt: "June 18, 2026",
+    callout: {
+      title: "Request received — we're on it",
+      body: "We've received your request. Our team is reviewing your requirements and will be in touch within 2 business days with sourcing options.",
+    },
   },
 ];
 
 const MOCK_CUSTOMER_NAME = "Sarah";
 
-// ── Status badge ────────────────────────────────────────────────────────────
+// ── Stepper ───────────────────────────────────────────────────────────────────
 
-type DocketStatus = MockDocket["status"];
+function JourneyStepper({ currentStep }: { currentStep: number }) {
+  return (
+    <div
+      className="w-full py-4"
+      aria-label={`Step ${currentStep} of ${JOURNEY_STEPS.length}`}
+    >
+      <div className="grid grid-cols-8">
+        {JOURNEY_STEPS.map((step, index) => {
+          const isCompleted = step.id < currentStep;
+          const isCurrent = step.id === currentStep;
+          const isFirst = index === 0;
+          const isLast = index === JOURNEY_STEPS.length - 1;
 
-const STATUS_CONFIG: Record<
-  DocketStatus,
-  { label: string; className: string }
-> = {
-  report_sent: {
-    label: "REPORT READY",
-    className:
-      "bg-[#E55125] text-white text-[10px] font-bold tracking-[0.12em] px-2.5 py-1 uppercase",
-  },
-  research_in_progress: {
-    label: "IN PROGRESS",
-    className:
-      "border border-amber-400/30 bg-amber-400/10 text-amber-400 text-[10px] font-bold tracking-[0.12em] px-2.5 py-1 uppercase",
-  },
-  new: {
-    label: "NEW",
-    className:
-      "border border-white/20 bg-white/5 text-white/50 text-[10px] font-bold tracking-[0.12em] px-2.5 py-1 uppercase",
-  },
-};
-
-function StatusBadge({ status }: { status: DocketStatus }) {
-  const cfg = STATUS_CONFIG[status];
-  return <span className={cfg.className}>{cfg.label}</span>;
+          return (
+            <div key={step.id} className="flex flex-col items-center min-w-0">
+              {/* Connector + dot row */}
+              <div className="flex w-full items-center">
+                <div
+                  className={`h-[2px] flex-1 ${
+                    isFirst
+                      ? "bg-transparent"
+                      : isCompleted || isCurrent
+                      ? "bg-[#E55125]"
+                      : "bg-white/[0.10]"
+                  }`}
+                />
+                <div
+                  aria-current={isCurrent ? "step" : undefined}
+                  title={step.label}
+                  className={[
+                    "shrink-0 rounded-full transition-all duration-300",
+                    isCurrent
+                      ? "h-3.5 w-3.5 bg-[#E55125] ring-2 ring-[#E55125]/20 ring-offset-1 ring-offset-black"
+                      : isCompleted
+                      ? "h-2.5 w-2.5 bg-[#E55125]"
+                      : "h-2.5 w-2.5 border border-white/20 bg-transparent",
+                  ].join(" ")}
+                />
+                <div
+                  className={`h-[2px] flex-1 ${
+                    isLast
+                      ? "bg-transparent"
+                      : isCompleted
+                      ? "bg-[#E55125]"
+                      : "bg-white/[0.10]"
+                  }`}
+                />
+              </div>
+              {/* Label */}
+              <p
+                title={step.label}
+                className={[
+                  "mt-2 text-center leading-none truncate w-full px-[2px]",
+                  "text-[8px] sm:text-[10px] font-medium",
+                  isCurrent
+                    ? "text-white"
+                    : isCompleted
+                    ? "text-[#E55125]/60"
+                    : "text-white/20",
+                ].join(" ")}
+              >
+                {step.short}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
-// ── Docket card ─────────────────────────────────────────────────────────────
+// ── What's next callout ───────────────────────────────────────────────────────
 
-function DocketCard({ docket }: { docket: MockDocket }) {
-  const reportUrl = getCustomerReportUrl(docket.report_token);
-  const canViewReport = docket.status === "report_sent";
+function JourneyCallout({
+  callout,
+  reportToken,
+}: {
+  callout: MockCar["callout"];
+  reportToken?: string;
+}) {
+  const wrapClass = callout.needsAction
+    ? "border-[#E55125]/30 bg-[#E55125]/[0.06]"
+    : callout.reassure
+    ? "border-amber-400/20 bg-amber-400/[0.04]"
+    : "border-white/[0.08] bg-white/[0.025]";
+
+  const titleClass = callout.needsAction
+    ? "text-[#E55125]"
+    : callout.reassure
+    ? "text-amber-400"
+    : "text-white/70";
+
+  const reportUrl = reportToken ? getCustomerReportUrl(reportToken) : null;
 
   return (
-    <article className="bg-black border border-white/[0.08]">
-      <div className="p-5 sm:p-6">
-        <div className="flex items-start justify-between gap-4 mb-3">
-          <StatusBadge status={docket.status} />
-          <span className="text-white/30 text-[11px] tracking-wide shrink-0">
-            {docket.submitted_at}
+    <div className={`border px-4 py-4 ${wrapClass}`}>
+      {callout.reassure && (
+        <div className="flex items-center gap-2 mb-2">
+          {/* Anchor icon = waiting / port */}
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-amber-400/70 shrink-0"
+          >
+            <circle cx="12" cy="5" r="3" />
+            <line x1="12" y1="22" x2="12" y2="8" />
+            <path d="M5 12H2a10 10 0 0 0 20 0h-3" />
+          </svg>
+          <span className="text-amber-400/60 text-[10px] font-bold uppercase tracking-[0.1em]">
+            Normal — longest stage
           </span>
         </div>
-
-        <h2 className="text-white text-lg font-bold tracking-tight leading-snug mb-1">
-          {docket.vehicle}
-        </h2>
-
-        <p className="text-white/40 text-[13px] mb-5">
-          {docket.status === "report_sent"
-            ? "Your import report is ready to review."
-            : docket.status === "research_in_progress"
-            ? "Our team is researching your vehicle."
-            : "We've received your request and will be in touch."}
-        </p>
-
-        {canViewReport ? (
+      )}
+      <p className={`text-[11px] font-bold uppercase tracking-[0.08em] mb-1.5 ${titleClass}`}>
+        {callout.title}
+      </p>
+      <p className="text-white/45 text-[12px] sm:text-[13px] leading-relaxed">
+        {callout.body}
+      </p>
+      {reportUrl && callout.needsAction && (
+        <div className="mt-4">
           <a
             href={reportUrl}
             className="inline-flex items-center gap-2 bg-[#E55125] text-white text-[13px] font-bold tracking-wide px-5 py-2.5 transition-all duration-200 hover:brightness-110 hover:shadow-[0_0_20px_rgba(229,81,37,0.3)]"
@@ -109,30 +217,67 @@ function DocketCard({ docket }: { docket: MockDocket }) {
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </a>
-        ) : (
-          <span className="inline-flex items-center gap-2 border border-white/10 text-white/30 text-[13px] font-bold tracking-wide px-5 py-2.5 cursor-not-allowed">
-            Report Pending
-          </span>
-        )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Car journey card ──────────────────────────────────────────────────────────
+
+function CarJourneyCard({ car }: { car: MockCar }) {
+  const currentStepObj = JOURNEY_STEPS[car.currentStep - 1];
+  const currentStepLabel = currentStepObj?.label ?? "";
+
+  const accentColor = car.callout.needsAction
+    ? "#E55125"
+    : car.callout.reassure
+    ? "rgba(251,191,36,0.4)"
+    : car.currentStep === JOURNEY_STEPS.length
+    ? "#22c55e"
+    : "rgba(255,255,255,0.07)";
+
+  return (
+    <article className="bg-black border border-white/[0.08]">
+      {/* Card header */}
+      <div className="px-5 pt-5 pb-4 flex items-start justify-between gap-3 border-b border-white/[0.06]">
+        <div>
+          <h2 className="text-white text-[17px] font-bold tracking-tight leading-snug">
+            {car.vehicle}
+          </h2>
+          <p className="text-white/25 text-[11px] mt-0.5">
+            Submitted {car.submittedAt}
+          </p>
+        </div>
+        <span className="shrink-0 border border-white/[0.10] px-2.5 py-1 text-[10px] font-bold tracking-[0.1em] uppercase text-white/35 whitespace-nowrap mt-0.5">
+          Step {car.currentStep}/8
+        </span>
+      </div>
+
+      {/* Stepper */}
+      <div className="px-4 sm:px-5">
+        <JourneyStepper currentStep={car.currentStep} />
+      </div>
+
+      {/* Current stage label */}
+      <div className="px-5 pb-3">
+        <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.1em]">
+          Now: {currentStepLabel}
+        </p>
+      </div>
+
+      {/* Callout */}
+      <div className="px-5 pb-5">
+        <JourneyCallout callout={car.callout} reportToken={car.reportToken} />
       </div>
 
       {/* Bottom accent line */}
-      <div
-        className="h-[2px]"
-        style={{
-          background:
-            docket.status === "report_sent"
-              ? "#E55125"
-              : docket.status === "research_in_progress"
-              ? "rgba(251,191,36,0.5)"
-              : "rgba(255,255,255,0.08)",
-        }}
-      />
+      <div className="h-[2px]" style={{ background: accentColor }} />
     </article>
   );
 }
 
-// ── Empty state ─────────────────────────────────────────────────────────────
+// ── Empty state ───────────────────────────────────────────────────────────────
 
 function EmptyState() {
   return (
@@ -149,16 +294,16 @@ function EmptyState() {
           strokeLinejoin="round"
           className="text-white/20"
         >
-          <rect x="3" y="3" width="18" height="18" rx="0" />
-          <path d="M9 9h6M9 13h4" />
+          <rect x="3" y="3" width="18" height="18" />
+          <path d="M3 9h18M9 21V9" />
         </svg>
       </div>
       <p className="text-white/60 text-[15px] font-medium mb-1">
-        No dockets yet
+        Your garage is empty
       </p>
       <p className="text-white/30 text-[13px] mb-6 max-w-xs mx-auto">
-        Submit a Find My JDM request to get started. Your import dockets will
-        appear here.
+        Start your JDM journey. Tell us what you&apos;re looking for and we&apos;ll
+        source it from Japan.
       </p>
       <a
         href="https://jdmrushimports.ca/find-my-jdm"
@@ -170,7 +315,7 @@ function EmptyState() {
   );
 }
 
-// ── Section eyebrow ──────────────────────────────────────────────────────────
+// ── Section eyebrow ───────────────────────────────────────────────────────────
 
 function SectionEyebrow({ label }: { label: string }) {
   return (
@@ -186,14 +331,13 @@ function SectionEyebrow({ label }: { label: string }) {
   );
 }
 
-// ── Account header ───────────────────────────────────────────────────────────
+// ── Account header ────────────────────────────────────────────────────────────
 
 function AccountHeader({ customerName }: { customerName: string }) {
   return (
     <header className="sticky top-0 z-50 bg-black border-b border-white/[0.08]">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-16">
-          {/* Logo */}
           <a href="https://jdmrushimports.ca" aria-label="JDM Rush Imports home">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -203,10 +347,7 @@ function AccountHeader({ customerName }: { customerName: string }) {
               style={{ height: "32px", width: "auto", display: "block" }}
             />
           </a>
-
-          {/* Right: logged-in state */}
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Avatar + name */}
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 bg-[#E55125]/20 border border-[#E55125]/40 flex items-center justify-center shrink-0">
                 <span className="text-[#E55125] text-[13px] font-bold uppercase">
@@ -217,16 +358,12 @@ function AccountHeader({ customerName }: { customerName: string }) {
                 {customerName}
               </span>
             </div>
-
-            {/* Divider */}
             <div className="hidden sm:block w-px h-4 bg-white/[0.12]" />
-
-            {/* Sign Out */}
             <button
               type="button"
               className="text-white/50 hover:text-white text-[13px] font-medium transition-colors duration-200"
               onClick={() => {
-                /* Coder wires Supabase signOut + redirect to /agent/login */
+                /* Coder wires Supabase signOut + redirect */
               }}
             >
               Sign Out
@@ -238,60 +375,44 @@ function AccountHeader({ customerName }: { customerName: string }) {
   );
 }
 
-// ── Page ────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function CustomerAccountPage() {
-  const hasDockets = MOCK_DOCKETS.length > 0;
+  const hasCars = MOCK_CARS.length > 0;
 
   return (
     <div className="min-h-screen bg-[#111111]">
       <AccountHeader customerName={MOCK_CUSTOMER_NAME} />
 
       <main id="main-content">
-        {/* Page title section */}
+        {/* Hero */}
         <section className="bg-black border-b border-white/[0.08] py-12 sm:py-16 px-4 sm:px-6 lg:px-8">
           <div className="max-w-[1200px] mx-auto text-center">
-            <SectionEyebrow label="My Account" />
-            <h1
-              className="text-white text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-3"
-            >
-              Your Dockets
+            <SectionEyebrow label="My Garage" />
+            <h1 className="text-white text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight mb-3">
+              Your JDM Journey
             </h1>
             <p className="text-white/50 text-[15px] max-w-md mx-auto leading-relaxed">
-              Track the status of your vehicle searches and access your import
-              reports when they&apos;re ready.
+              Track every step of your import from Japan to your driveway.
             </p>
           </div>
         </section>
 
-        {/* Docket list */}
+        {/* Car list */}
         <section className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-          {hasDockets ? (
+          {hasCars ? (
             <>
-              <div className="flex items-center justify-between mb-6">
-                <p className="text-white/40 text-[13px] tracking-wide uppercase font-medium" style={{ letterSpacing: "0.08em" }}>
-                  {MOCK_DOCKETS.length} active{" "}
-                  {MOCK_DOCKETS.length === 1 ? "docket" : "dockets"}
-                </p>
-              </div>
-              <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-                {MOCK_DOCKETS.map((docket) => (
-                  <DocketCard key={docket.id} docket={docket} />
+              <p
+                className="text-white/30 text-[11px] uppercase font-medium mb-6"
+                style={{ letterSpacing: "0.09em" }}
+              >
+                {MOCK_CARS.length} {MOCK_CARS.length === 1 ? "car" : "cars"} in
+                your garage
+              </p>
+              <div className="flex flex-col gap-4">
+                {MOCK_CARS.map((car) => (
+                  <CarJourneyCard key={car.id} car={car} />
                 ))}
-              </div>
-
-              {/* Bridge note for Adam / design review — visible in skeleton, removed after design-lock */}
-              <div className="mt-8 border border-[#E55125]/20 bg-[#E55125]/5 px-5 py-4">
-                <p className="text-[#E55125]/80 text-[12px] font-bold uppercase tracking-wide mb-1">
-                  Design Bridge Note (remove before code-ready)
-                </p>
-                <p className="text-white/50 text-[12px] leading-relaxed">
-                  &ldquo;View Report&rdquo; links open existing ReportClient pages (Outfit font,
-                  #0d0d0d bg, rounded-xl cards). This dashboard is Manrope + #111 +
-                  rounded-none. The transition is dark-to-dark and the #E55125 accent
-                  carries through — acceptable. Recommend updating ReportClient font to
-                  Manrope in a later phase; no blocking clash at this stage.
-                </p>
               </div>
             </>
           ) : (
