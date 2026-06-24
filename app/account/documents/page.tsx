@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
+import { PageHeader } from "@/app/account/_components/page-header";
 
 // ── Mock vault data ───────────────────────────────────────────────────────────
-// Concept state: car reserved, purchase agreement signed, deposit paid,
-// vehicle en route — Bill of Lading + certs will arrive later.
 
 type DocStatus = "paid" | "signed" | "pending_payment" | "pending_signature" | "pending";
 
@@ -79,7 +78,6 @@ function DocRow({ doc }: { doc: VaultDoc }) {
 
   return (
     <div className="flex items-center gap-3 py-3.5 border-b border-white/[0.05] last:border-0">
-      {/* File icon */}
       <div className="shrink-0 w-8 h-8 bg-white/[0.04] border border-white/[0.06] flex items-center justify-center">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-white/30">
           <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -87,7 +85,6 @@ function DocRow({ doc }: { doc: VaultDoc }) {
         </svg>
       </div>
 
-      {/* Name + date */}
       <div className="flex-1 min-w-0">
         <p className={`text-[13px] font-medium leading-snug truncate ${canDownload ? "text-white" : "text-white/40"}`}>
           {doc.name}
@@ -97,10 +94,8 @@ function DocRow({ doc }: { doc: VaultDoc }) {
         )}
       </div>
 
-      {/* Status */}
       <StatusChip status={doc.status} />
 
-      {/* Download */}
       <button
         type="button"
         disabled={!canDownload}
@@ -131,7 +126,6 @@ function VaultCategory({ category }: { category: VaultCategory }) {
 
   return (
     <section className="bg-black border border-white/[0.08]">
-      {/* Category header */}
       <div className="px-5 py-4 border-b border-white/[0.06] flex items-start justify-between gap-3">
         <div>
           <h2 className="text-white text-[14px] font-bold tracking-tight mb-0.5">
@@ -144,26 +138,12 @@ function VaultCategory({ category }: { category: VaultCategory }) {
         </span>
       </div>
 
-      {/* Doc rows */}
       <div className="px-5">
         {category.docs.map((doc, i) => (
           <DocRow key={i} doc={doc} />
         ))}
       </div>
     </section>
-  );
-}
-
-// ── SectionEyebrow ────────────────────────────────────────────────────────────
-
-function SectionEyebrow({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center mb-5">
-      <p className="text-[#E55125]/70 text-[12px] font-bold uppercase mb-2" style={{ letterSpacing: "0.12em" }}>
-        {label}
-      </p>
-      <div className="w-8 h-[2px] bg-[#E55125]" />
-    </div>
   );
 }
 
@@ -174,31 +154,13 @@ export default function DocumentsPage() {
     <div className="min-h-screen bg-[#111111]">
       <AccountHeader />
 
-      <main id="main-content">
-        {/* Page title */}
-        <section className="bg-black border-b border-white/[0.08] py-10 sm:py-12 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-[1200px] mx-auto">
-            <Link
-              href="/account"
-              className="inline-flex items-center gap-1.5 text-white/35 hover:text-white text-[12px] font-medium transition-colors mb-6"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              My Garage
-            </Link>
-            <SectionEyebrow label="My Garage · Section 02" />
-            <h1 className="text-center text-white text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight mb-2">
-              Purchase &amp; Documents
-            </h1>
-            <p className="text-center text-white/40 text-[14px] max-w-sm mx-auto leading-relaxed">
-              Your agreements, invoices, and import documents — all in one place.
-              Everything here is persistent and downloadable any time.
-            </p>
-          </div>
-        </section>
+      <PageHeader
+        micro="Purchase & Documents · Your agreements, invoices, and import files are in your vault below."
+        backHref="/account/car"
+        backLabel="1999 Nissan Skyline GT-R R34"
+      />
 
-        {/* Vault */}
+      <main id="main-content">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           <p className="text-white/25 text-[10px] font-bold uppercase mb-5" style={{ letterSpacing: "0.12em" }}>
             1999 Nissan Skyline GT-R R34
@@ -223,7 +185,6 @@ export default function DocumentsPage() {
             ))}
           </div>
 
-          {/* Persistent access note */}
           <p className="mt-6 text-white/20 text-[11px] text-center leading-relaxed">
             All documents in your vault are permanently accessible — grab your export certificate any time, even years from now.
           </p>

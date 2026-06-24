@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
+import { PageHeader } from "@/app/account/_components/page-header";
 
 // ── Car photo placeholder ─────────────────────────────────────────────────────
 
@@ -126,22 +127,10 @@ export default function MyGarageHome() {
     <div className="min-h-screen bg-[#111111]">
       <AccountHeader />
 
-      <main id="main-content">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-          {/* Page heading */}
-          <div className="mb-8 sm:mb-10">
-            <p
-              className="text-[#E55125]/70 text-[11px] font-bold uppercase mb-2"
-              style={{ letterSpacing: "0.14em" }}
-            >
-              My Garage
-            </p>
-            <div className="w-8 h-[2px] bg-[#E55125] mb-5" />
-            <h1 className="text-white text-2xl sm:text-3xl font-extrabold tracking-tight">
-              Your imports
-            </h1>
-          </div>
+      <PageHeader micro="Welcome back, Sarah — your active imports are below. Tap any car to see where things stand." />
 
+      <main id="main-content">
+        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           {/* Car cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px]">
             <CarCard

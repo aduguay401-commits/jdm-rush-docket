@@ -8,12 +8,12 @@ const UNREAD_COUNT = 2;
 function MessageIcon() {
   return (
     <svg
-      width="20"
-      height="20"
+      width="15"
+      height="15"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.75"
+      strokeWidth="2"
       strokeLinecap="round"
       strokeLinejoin="round"
     >
@@ -37,15 +37,23 @@ export function AccountHeader() {
           </a>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Messages bubble */}
+            {/* Messages — bold and obvious, customer lifeline to the team */}
             <Link
               href="/account/messages"
-              className="relative text-white/40 hover:text-white/80 transition-colors"
+              className="flex items-center gap-2 bg-[#E55125]/10 border border-[#E55125]/40 hover:bg-[#E55125]/16 hover:border-[#E55125]/70 px-3 py-1.5 transition-all duration-150"
               aria-label={`Messages — ${UNREAD_COUNT} unread`}
             >
-              <MessageIcon />
+              <span className="text-[#E55125]">
+                <MessageIcon />
+              </span>
+              <span
+                className="hidden sm:block text-[#E55125] text-[12px] font-bold"
+                style={{ letterSpacing: "0.02em" }}
+              >
+                Messages
+              </span>
               {UNREAD_COUNT > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-[17px] h-[17px] bg-[#E55125] flex items-center justify-center text-[9px] font-bold text-white leading-none rounded-full">
+                <span className="bg-[#E55125] text-white text-[9px] font-bold leading-none w-[18px] h-[18px] flex items-center justify-center rounded-full shrink-0">
                   {UNREAD_COUNT}
                 </span>
               )}

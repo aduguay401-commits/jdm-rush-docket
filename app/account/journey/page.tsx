@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
+import { PageHeader } from "@/app/account/_components/page-header";
 
-// ── Journey stages (shipping phase only — Section 3 unlocks post-purchase) ────
+// ── Journey stages ────────────────────────────────────────────────────────────
 
 const JOURNEY_STEPS = [
   { id: 1, label: "Purchased",                short: "Purchased" },
@@ -13,7 +14,6 @@ const JOURNEY_STEPS = [
   { id: 5, label: "Delivered",                short: "Delivered" },
 ] as const;
 
-// Mock: R34 at step 2 (at port — the longest wait)
 const CURRENT_STEP = 2;
 const MOCK_VEHICLE = "1999 Nissan Skyline GT-R R34";
 const LAST_UPDATE = "June 20, 2026";
@@ -138,7 +138,6 @@ function StageCallout({ step }: { step: number }) {
 }
 
 // ── Timeline detail ────────────────────────────────────────────────────────────
-// Shows each stage in a vertical timeline below the stepper for context.
 
 function StageTimeline() {
   return (
@@ -154,7 +153,6 @@ function StageTimeline() {
 
           return (
             <div key={step.id} className="flex gap-4">
-              {/* Left: dot + vertical line */}
               <div className="flex flex-col items-center shrink-0 w-5">
                 <div className={[
                   "rounded-full shrink-0",
@@ -167,7 +165,6 @@ function StageTimeline() {
                 )}
               </div>
 
-              {/* Right: content */}
               <div className={`pb-5 ${isLast ? "" : ""}`}>
                 <p className={`text-[13px] font-semibold leading-snug ${isCurrent ? "text-white" : isCompleted ? "text-[#E55125]/60" : "text-white/25"}`}>
                   {step.label}
@@ -189,19 +186,6 @@ function StageTimeline() {
   );
 }
 
-// ── SectionEyebrow ─────────────────────────────────────────────────────────────
-
-function SectionEyebrow({ label }: { label: string }) {
-  return (
-    <div className="flex flex-col items-center mb-5">
-      <p className="text-[#E55125]/70 text-[12px] font-bold uppercase mb-2" style={{ letterSpacing: "0.12em" }}>
-        {label}
-      </p>
-      <div className="w-8 h-[2px] bg-[#E55125]" />
-    </div>
-  );
-}
-
 // ── Page ───────────────────────────────────────────────────────────────────────
 
 export default function JourneyPage() {
@@ -211,30 +195,13 @@ export default function JourneyPage() {
     <div className="min-h-screen bg-[#111111]">
       <AccountHeader />
 
-      <main id="main-content">
-        {/* Page title */}
-        <section className="bg-black border-b border-white/[0.08] py-10 sm:py-12 px-4 sm:px-6 lg:px-8">
-          <div className="max-w-[1200px] mx-auto">
-            <Link
-              href="/account"
-              className="inline-flex items-center gap-1.5 text-white/35 hover:text-white text-[12px] font-medium transition-colors mb-6"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              My Garage
-            </Link>
-            <SectionEyebrow label="My Garage · Section 03" />
-            <h1 className="text-center text-white text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight mb-2">
-              Your JDM Journey
-            </h1>
-            <p className="text-center text-white/40 text-[14px] max-w-xs mx-auto leading-relaxed">
-              {MOCK_VEHICLE} · Step {CURRENT_STEP} of {JOURNEY_STEPS.length}
-            </p>
-          </div>
-        </section>
+      <PageHeader
+        micro="Your JDM Journey · Your R34 is at port in Japan. Track each stage from Japan to your driveway."
+        backHref="/account/car"
+        backLabel="1999 Nissan Skyline GT-R R34"
+      />
 
-        {/* Main content */}
+      <main id="main-content">
         <div className="max-w-[720px] mx-auto px-4 sm:px-6 py-8 sm:py-10">
 
           {/* Stepper card */}
