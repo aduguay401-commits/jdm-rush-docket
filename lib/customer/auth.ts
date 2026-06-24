@@ -21,6 +21,15 @@ type CustomerStatusRow = {
   deleted_at: string | null;
 };
 
+type CustomerAccountRow = {
+  id: string;
+};
+
+type ClaimableDocketRow = {
+  id: string;
+  customer_email: string | null;
+};
+
 const DEFAULT_CUSTOMER_NEXT_PATH = "/account";
 
 export class SoftDeletedCustomerError extends Error {
@@ -125,6 +134,43 @@ async function assertCustomerIsActive(userId: string) {
   }
 }
 
+async function claimDocketsForCustomer(customerId: string, email: string) {
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return 0;
+  }
+
+  const supabase = createServerClient();
+  const { data: claimableDockets, error: selectError } = await supabase
+    .from("dockets")
+    .select("id, customer_email")
+    .is("customer_id", null)
+    .returns<ClaimableDocketRow[]>();
+
+  if (selectError) {
+    throw new Error(selectError.message);
+  }
+
+  const docketIds = (claimableDockets ?? [])
+    .filter((docket) => docket.customer_email?.trim().toLowerCase() === normalizedEmail)
+    .map((docket) => docket.id);
+
+  if (docketIds.length === 0) {
+    return 0;
+  }
+
+  const { error: updateError } = await supabase
+    .from("dockets")
+    .update({ customer_id: customerId })
+    .in("id", docketIds);
+
+  if (updateError) {
+    throw new Error(updateError.message);
+  }
+
+  return docketIds.length;
+}
+
 export async function provisionCustomerAccount(user: User) {
   const email = user.email?.trim().toLowerCase();
 
@@ -140,21 +186,27 @@ export async function provisionCustomerAccount(user: User) {
 
   await assertCustomerIsActive(user.id);
 
-  const { error: customerError } = await supabase.from("customers").upsert(
-    {
-      auth_user_id: user.id,
-      email,
-      first_name: firstName,
-      last_name: lastName,
-      phone,
-      last_login_at: now,
-    },
-    { onConflict: "auth_user_id" }
-  );
+  const { data: customer, error: customerError } = await supabase
+    .from("customers")
+    .upsert(
+      {
+        auth_user_id: user.id,
+        email,
+        first_name: firstName,
+        last_name: lastName,
+        phone,
+        last_login_at: now,
+      },
+      { onConflict: "auth_user_id" }
+    )
+    .select("id")
+    .single<CustomerAccountRow>();
 
   if (customerError) {
     throw new Error(customerError.message);
   }
+
+  await claimDocketsForCustomer(customer.id, email);
 
   const existingProfile = await getExistingProfile(user.id);
 
