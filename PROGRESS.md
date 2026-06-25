@@ -28,3 +28,19 @@ Decisions/deviations:
 - Docket `.agents/state/` was not touched.
 
 Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
+
+
+## 2026-06-25 — Stage 0.4 RLS self-select fix
+
+Summary: fixed Reviewer blocker by making migration 009 self-contained for customer-owned joins.
+
+Files changed:
+- `supabase/migrations/009_customer_dashboard_child_rls.sql` — adds `customers_select_self` at the top so authenticated customers can resolve their own `customers` row inside docket/child-table RLS subqueries.
+- `docs/lifecycle/STAGE-0.4-NOTES.md` — documents the self-select dependency and Adam's separate production statement after the first 009 application.
+- `PROGRESS.md` and `ISSUES.md` — record the blocker and fix.
+
+Decisions/deviations:
+- No production SQL was applied by Codex. Adam already applied the first 009 and will run the added idempotent self-select statement separately.
+- Non-blocking copy notes from Reviewer are deferred to Designer and are not included in this code fix.
+
+Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.

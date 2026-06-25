@@ -3,6 +3,15 @@
 -- Supabase Auth while preserving per-customer isolation from dockets.customer_id.
 -- Adam applies this SQL to production manually; agents must not run it against prod.
 
+-- Customers table: allow authenticated customers to resolve their own customer row.
+-- The child-table policies below join through public.customers, so this policy must
+-- exist or those subqueries fail closed for customer sessions.
+DROP POLICY IF EXISTS customers_select_self ON public.customers;
+CREATE POLICY customers_select_self ON public.customers
+  FOR SELECT
+  TO authenticated
+  USING (auth_user_id = auth.uid());
+
 -- Agent/customer research questions: customers can read the thread for owned dockets.
 DROP POLICY IF EXISTS customer_select_own_marcus_questions ON public.marcus_questions;
 CREATE POLICY customer_select_own_marcus_questions ON public.marcus_questions

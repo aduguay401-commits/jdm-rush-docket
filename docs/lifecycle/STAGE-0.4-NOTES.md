@@ -12,6 +12,7 @@ customers.auth_user_id = auth.uid()
 ```
 
 Policy coverage:
+- `customers`: customer self-`SELECT` via `auth_user_id = auth.uid()` so owned-docket joins resolve under RLS.
 - `marcus_questions`: customer `SELECT` for owned dockets.
 - `customer_questions`: customer `SELECT` and `INSERT` for owned dockets.
 - `auction_research`: customer `SELECT` for owned dockets.
@@ -36,3 +37,8 @@ Unauthenticated account routes redirect to `/account/login`, which sends magic l
 ## Visual Constraint
 
 The signed-off v6 visual system was preserved. Changes hydrate data and handlers while keeping the approved dark shell, header, cards, journey spine, documents vault, and Messages slide-over styling.
+
+
+## Changes Needed Follow-up
+
+Reviewer found that `public.customers` had RLS enabled but no customer self-select policy. Because the Stage 0.3 docket policies and Stage 0.4 child policies join through `public.customers`, customer sessions would otherwise see no owned rows and message inserts would be denied. Migration 009 now starts with the idempotent `customers_select_self` policy. Adam already applied the first version of 009 to production; he can run the added `DROP POLICY IF EXISTS customers_select_self` / `CREATE POLICY customers_select_self` statement separately.
