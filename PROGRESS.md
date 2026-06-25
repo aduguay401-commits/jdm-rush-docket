@@ -44,3 +44,18 @@ Decisions/deviations:
 - Non-blocking copy notes from Reviewer are deferred to Designer and are not included in this code fix.
 
 Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
+
+
+## 2026-06-25 — Stage 0.4.1 login confirmation UX
+
+Summary: refined the My JDM Garage login magic-link form so successful sends become an obvious confirmation state instead of leaving the submitted email in a pending-looking form.
+
+Files changed:
+- `app/account/login/LoginClient.tsx` — replaces the form with a prominent on-brand confirmation card after success, clears the email field state, adds a Use a different email / Resend affordance, and makes error/sending states more explicit with `aria-live=polite`.
+- `PROGRESS.md` — records the code-only UX refinement and verification status.
+
+Decisions/deviations:
+- Kept the locked v6 visual language: dark surface, #E55125 accents, sharp card edges, compact Manrope-era account styling.
+- Did not change other `/account` pages or production SQL.
+
+Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.

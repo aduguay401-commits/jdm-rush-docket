@@ -2,36 +2,135 @@
 
 import { FormEvent, useState } from "react";
 
+function MailCheckIcon({ tone }: { tone: "success" | "error" }) {
+  const strokeClass = tone === "success" ? "text-[#E55125]" : "text-amber-400";
+
+  return (
+    <div className="w-12 h-12 bg-[#E55125]/10 border border-[#E55125]/25 flex items-center justify-center shrink-0">
+      <svg
+        width="24"
+        height="24"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={strokeClass}
+        aria-hidden
+      >
+        <rect x="3" y="5" width="18" height="14" rx="2" />
+        <path d="m3 7 9 6 9-6" />
+        {tone === "success" ? <path d="m14.5 17 2 2 4-4" /> : <path d="M17 14v3M17 20h.01" />}
+      </svg>
+    </div>
+  );
+}
+
 export function LoginClient({ nextPath, errorMessage }: { nextPath: string; errorMessage?: string | null }) {
   const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [sentToEmail, setSentToEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "sending" | "sent" | "error">(errorMessage ? "error" : "idle");
   const [message, setMessage] = useState(errorMessage ?? "");
+
+  function resetForm() {
+    setEmail("");
+    setSentToEmail("");
+    setStatus("idle");
+    setMessage("");
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const submittedEmail = email.trim();
+
+    if (!submittedEmail) {
+      setStatus("error");
+      setMessage("Enter the email address for your JDM Rush account.");
+      return;
+    }
+
     setStatus("sending");
-    setMessage("");
+    setMessage("Sending your secure login link...");
 
     const response = await fetch("/api/customer/auth/magic-link", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, next: nextPath }),
+      body: JSON.stringify({ email: submittedEmail, next: nextPath }),
     });
 
     const payload = (await response.json().catch(() => null)) as { error?: string; message?: string } | null;
 
     if (!response.ok) {
       setStatus("error");
-      setMessage(payload?.error ?? "Unable to send login link.");
+      setMessage(payload?.error ?? "Unable to send login link. Check the address and try again.");
       return;
     }
 
+    setSentToEmail(submittedEmail);
+    setEmail("");
     setStatus("sent");
-    setMessage(payload?.message ?? "Check your email for a secure login link.");
+    setMessage(`We sent a secure login link to ${submittedEmail}.`);
+  }
+
+  if (status === "sent") {
+    return (
+      <div
+        aria-live="polite"
+        className="bg-black border border-[#E55125]/25 px-5 sm:px-6 py-6 flex flex-col gap-5"
+      >
+        <div className="flex items-start gap-4">
+          <MailCheckIcon tone="success" />
+          <div className="min-w-0">
+            <p
+              className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-2"
+            >
+              Link sent
+            </p>
+            <h2 className="text-white text-[20px] font-extrabold tracking-tight leading-snug">
+              Check your inbox
+            </h2>
+            <p className="text-white/60 text-[13px] leading-relaxed mt-2">
+              We sent a secure login link to <span className="text-white font-semibold">{sentToEmail}</span> - click it to open your garage.
+            </p>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-white/[0.06] flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
+          <p className="text-white/25 text-[11px] leading-relaxed">
+            The link may take a minute to arrive. Check spam if it does not show up.
+          </p>
+          <button
+            type="button"
+            onClick={resetForm}
+            className="shrink-0 text-[#E55125] hover:brightness-110 text-[12px] font-medium transition-all text-left sm:text-right"
+          >
+            Use a different email / Resend
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="bg-black border border-white/[0.08] px-5 sm:px-6 py-6 flex flex-col gap-4">
+      <div aria-live="polite">
+        {status === "error" && message && (
+          <div className="mb-4 border border-amber-400/25 bg-amber-400/[0.04] px-4 py-3 flex items-start gap-3">
+            <MailCheckIcon tone="error" />
+            <div className="min-w-0">
+              <p className="text-amber-400 text-[10px] font-bold uppercase tracking-[0.12em] mb-1">
+                Link not sent
+              </p>
+              <p className="text-white/65 text-[13px] leading-relaxed">{message}</p>
+            </div>
+          </div>
+        )}
+        {status === "sending" && message && (
+          <p className="mb-4 text-white/40 text-[12px] leading-relaxed">{message}</p>
+        )}
+      </div>
+
       <div>
         <label htmlFor="customer-email" className="text-white/50 text-[12px] font-medium">
           Email address
@@ -54,12 +153,6 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
       >
         {status === "sending" ? "Sending..." : "Send secure login link"}
       </button>
-
-      {message && (
-        <p className={status === "error" ? "text-amber-400/80 text-[12px] leading-relaxed" : "text-white/40 text-[12px] leading-relaxed"}>
-          {message}
-        </p>
-      )}
     </form>
   );
 }
