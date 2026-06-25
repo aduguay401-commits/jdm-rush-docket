@@ -139,11 +139,6 @@ function LockedCard({
 }
 
 // ── Journey progress spine ────────────────────────────────────────────────────
-//
-// Absolute guide line runs in the gap-3 spaces between rows (seamlessly bridging
-// them). Each lane div has bg-[#111111] that masks the abs line within each row,
-// leaving only the explicit per-row connecting-line divs visible. Net effect: a
-// continuous spine from node 1 through to the last node, no pixel math required.
 
 type NodeStatus = "active" | "upcoming";
 
@@ -161,12 +156,37 @@ function SpineNode({ status }: { status: NodeStatus }) {
   );
 }
 
+// Thin directional chevrons along the connecting line — 3 evenly spaced,
+// hinting at downward flow without overwhelming the spine's elegance.
+function SpineConnector() {
+  return (
+    <div className="mt-3 flex-1 relative flex justify-center min-h-[48px]">
+      {/* Base line */}
+      <div className="absolute inset-y-0 w-px bg-white/[0.08]" />
+      {/* Chevrons distributed along the line */}
+      <div className="absolute inset-0 flex flex-col items-center justify-around py-3">
+        {[0, 1, 2].map((i) => (
+          <svg key={i} width="7" height="4" viewBox="0 0 7 4" fill="none" aria-hidden>
+            <path
+              d="M0.5 0.5L3.5 3.5L6.5 0.5"
+              stroke="rgba(255,255,255,0.18)"
+              strokeWidth="1"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type SpineStep = { status: NodeStatus; card: ReactNode };
 
 function JourneySpine({ steps }: { steps: SpineStep[] }) {
   return (
     <div className="relative flex flex-col gap-3">
-      {/* Guide line — bridges the gap-3 spaces between rows */}
+      {/* Absolute guide line bridges the gap-3 spaces between rows */}
       <div
         className="pointer-events-none absolute left-5 sm:left-6 top-0 bottom-0 w-px bg-white/[0.08]"
         aria-hidden
@@ -176,13 +196,11 @@ function JourneySpine({ steps }: { steps: SpineStep[] }) {
         const isLast = i === steps.length - 1;
         return (
           <div key={i} className="relative flex items-stretch gap-4">
-            {/* Spine lane — opaque bg masks guide line; connecting-line div reveals it selectively */}
+            {/* Lane — opaque bg masks the guide line; SpineConnector reveals it selectively */}
             <div className="w-10 sm:w-12 shrink-0 bg-[#111111] flex flex-col items-center relative z-10">
               <div className="h-5 shrink-0" />
               <SpineNode status={step.status} />
-              {!isLast && (
-                <div className="mt-3 flex-1 w-px bg-white/[0.08]" />
-              )}
+              {!isLast && <SpineConnector />}
             </div>
             {/* Card */}
             <div className="flex-1 min-w-0">{step.card}</div>
@@ -208,7 +226,6 @@ export default function CarDashboard() {
 
       <main id="main-content">
         <div className="max-w-[800px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-          {/* Section eyebrow — flags added scope: gives the spine a heading */}
           <p
             className="text-white/25 text-[10px] font-bold uppercase mb-5"
             style={{ letterSpacing: "0.12em" }}

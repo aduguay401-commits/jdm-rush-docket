@@ -38,7 +38,7 @@ export function PageHeader({ micro, backHref, backLabel }: PageHeaderProps) {
         >
           My JDM Garage
         </h1>
-        <p className="text-white/40 text-[13px] sm:text-[14px] font-medium mt-2 leading-snug text-center">
+        <p className="text-white/80 text-[14px] sm:text-[15px] font-semibold mt-2.5 leading-snug text-center">
           {micro}
         </p>
       </div>

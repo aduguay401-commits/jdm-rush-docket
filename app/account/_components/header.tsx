@@ -37,20 +37,14 @@ export function AccountHeader() {
           </a>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Messages — bold and obvious, customer lifeline to the team */}
+            {/* Messages — icon + unread badge only, no box */}
             <Link
               href="/account/messages"
-              className="flex items-center gap-2 bg-[#E55125]/10 border border-[#E55125]/40 hover:bg-[#E55125]/16 hover:border-[#E55125]/70 px-3 py-1.5 transition-all duration-150"
+              className="flex items-center gap-1.5 px-1.5 py-1 hover:opacity-75 transition-opacity duration-150"
               aria-label={`Messages — ${UNREAD_COUNT} unread`}
             >
               <span className="text-[#E55125]">
                 <MessageIcon />
-              </span>
-              <span
-                className="hidden sm:block text-[#E55125] text-[12px] font-bold"
-                style={{ letterSpacing: "0.02em" }}
-              >
-                Messages
               </span>
               {UNREAD_COUNT > 0 && (
                 <span className="bg-[#E55125] text-white text-[9px] font-bold leading-none w-[18px] h-[18px] flex items-center justify-center rounded-full shrink-0">
