@@ -29,16 +29,16 @@ export function PageHeader({ micro, backHref, backLabel }: PageHeaderProps) {
             >
               <path d="M19 12H5M12 19l-7-7 7-7" />
             </svg>
-            {backLabel ?? "My Garage"}
+            {backLabel ?? "My JDM Garage"}
           </Link>
         )}
         <h1
-          className="text-[#E55125] font-extrabold tracking-tight leading-none"
+          className="text-[#E55125] font-extrabold tracking-tight leading-none text-center"
           style={{ fontSize: "clamp(26px, 5vw, 36px)" }}
         >
-          My Garage
+          My JDM Garage
         </h1>
-        <p className="text-white/40 text-[13px] sm:text-[14px] font-medium mt-2 leading-snug">
+        <p className="text-white/40 text-[13px] sm:text-[14px] font-medium mt-2 leading-snug text-center">
           {micro}
         </p>
       </div>
