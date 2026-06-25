@@ -1,29 +1,69 @@
-"use client";
-
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
 import { PageHeader } from "@/app/account/_components/page-header";
+import {
+  getCustomerPortalContext,
+  getDocketHref,
+  getDocketIdParam,
+  getResearchData,
+  getVehicleLabel,
+  type AuctionEstimate,
+  type AuctionResearch,
+  type PrivateDealerOption,
+} from "@/lib/customer/dashboard";
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
+// ── Candidate data ────────────────────────────────────────────────────────────
 
-const MOCK_CANDIDATES = [
-  {
-    id: "opt-a",
-    vehicle: "1999 Nissan Skyline GT-R R34 — Option A",
-    grade: "4",
-    mileage: "72,000 km",
-    colour: "Midnight Purple",
-    notes: "Clean carfax, matching numbers, full service history.",
-  },
-  {
-    id: "opt-b",
-    vehicle: "1999 Nissan Skyline GT-R R34 — Option B",
-    grade: "3.5",
-    mileage: "88,000 km",
-    colour: "Bayside Blue",
-    notes: "Minor rear panel repair noted in grade sheet. Priced lower.",
-  },
-];
+type Candidate = {
+  id: string;
+  vehicle: string;
+  grade: string;
+  mileage: string;
+  colour: string;
+  notes: string;
+};
+
+function formatCad(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: "CAD",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function buildDealerCandidate(option: PrivateDealerOption): Candidate {
+  const vehicle = [option.year, option.make, option.model]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(" ");
+  const delivered = formatCad(option.total_delivered_cad ?? option.dealer_price_cad);
+
+  return {
+    id: option.id,
+    vehicle: `${vehicle || "Dealer option"}${option.option_number ? ` — Option ${option.option_number}` : ""}`,
+    grade: option.grade?.trim() || "TBD",
+    mileage: option.mileage?.trim() || "Mileage TBD",
+    colour: option.colour?.trim() || "Colour TBD",
+    notes: option.marcus_notes?.trim() || (delivered ? `Estimated delivered price: ${delivered}.` : "Full details are available in the report."),
+  };
+}
+
+function buildAuctionCandidate(research: AuctionResearch, estimate: AuctionEstimate | null, fallbackVehicle: string): Candidate {
+  const delivered = formatCad(estimate?.total_delivered_estimate_cad);
+  const bid = typeof research.recommended_max_bid_jpy === "number"
+    ? new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 }).format(research.recommended_max_bid_jpy)
+    : null;
+
+  return {
+    id: research.id,
+    vehicle: `${fallbackVehicle} — Auction research`,
+    grade: "Auction",
+    mileage: bid ? `Max bid ${bid}` : "Auction estimate",
+    colour: delivered ? `Est. ${delivered}` : "Live auction market",
+    notes: research.sales_history_notes?.trim() || "Auction market research is ready in your full report.",
+  };
+}
 
 // ── Candidate photo placeholder ────────────────────────────────────────────────
 
@@ -90,7 +130,9 @@ function ArrowRight() {
 
 // ── Candidate card ─────────────────────────────────────────────────────────────
 
-function CandidateCard({ car }: { car: (typeof MOCK_CANDIDATES)[0] }) {
+function CandidateCard({ car, reportHref }: { car: Candidate; reportHref: string | null }) {
+  const ctaClass = "w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-[#E55125] hover:brightness-110 text-white text-[14px] font-bold tracking-wide px-7 py-3.5 transition-all duration-150";
+
   return (
     <div className="bg-black border border-white/[0.08]">
       {/* Photo */}
@@ -112,30 +154,65 @@ function CandidateCard({ car }: { car: (typeof MOCK_CANDIDATES)[0] }) {
         </div>
         <p className="text-white/30 text-[12px] leading-relaxed mb-5">{car.notes}</p>
 
-        {/* Big chunky orange CTA */}
-        <button
-          type="button"
-          className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 bg-[#E55125] hover:brightness-110 text-white text-[14px] font-bold tracking-wide px-7 py-3.5 transition-all duration-150"
-        >
-          View Full Report
-          <ArrowRight />
-        </button>
+        {reportHref ? (
+          <Link href={reportHref} className={ctaClass}>
+            View Full Report
+            <ArrowRight />
+          </Link>
+        ) : (
+          <button type="button" disabled className={`${ctaClass} opacity-50 hover:brightness-100 cursor-not-allowed`}>
+            Report Pending
+            <ArrowRight />
+          </button>
+        )}
       </div>
+    </div>
+  );
+}
+
+function EmptyResearch() {
+  return (
+    <div className="bg-black border border-white/[0.08] px-5 py-6">
+      <p className="text-white text-[15px] font-bold leading-snug">Research is in progress</p>
+      <p className="text-white/30 text-[12px] leading-relaxed mt-2">
+        Your sourcing team is still preparing candidate options. They will appear here as soon as they are ready.
+      </p>
     </div>
   );
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ResearchPage() {
+export default async function ResearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const selectedDocketId = getDocketIdParam(params);
+  const context = await getCustomerPortalContext({
+    nextPath: selectedDocketId ? `/account/research?docket=${encodeURIComponent(selectedDocketId)}` : "/account/research",
+    selectedDocketId,
+    requireDocket: true,
+  });
+  const docket = context.selectedDocket!;
+  const vehicle = getVehicleLabel(docket);
+  const research = await getResearchData(docket.id);
+  const candidates = [
+    ...research.dealerOptions.map(buildDealerCandidate),
+    ...(research.auctionResearch ? [buildAuctionCandidate(research.auctionResearch, research.auctionEstimate, vehicle)] : []),
+  ];
+  const reportHref = docket.report_url_token ? `/report/${encodeURIComponent(docket.report_url_token)}` : null;
+  const messagesHref = getDocketHref("/account/messages", docket.id);
+
   return (
     <div className="min-h-screen bg-[#111111]">
-      <AccountHeader />
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
 
       <PageHeader
-        micro="Research & Decision · Your sourcing team has found 2 candidates. Review the full reports below."
-        backHref="/account/car"
-        backLabel="1999 Nissan Skyline GT-R R34"
+        micro={`Research & Decision · Your sourcing team has found ${candidates.length} ${candidates.length === 1 ? "candidate" : "candidates"}. Review the full reports below.`}
+        backHref={getDocketHref("/account/car", docket.id)}
+        backLabel={vehicle}
       />
 
       <main id="main-content">
@@ -148,9 +225,11 @@ export default function ResearchPage() {
               Sourced Candidates
             </p>
             <div className="flex flex-col gap-4">
-              {MOCK_CANDIDATES.map((car) => (
-                <CandidateCard key={car.id} car={car} />
-              ))}
+              {candidates.length > 0 ? (
+                candidates.map((car) => <CandidateCard key={car.id} car={car} reportHref={reportHref} />)
+              ) : (
+                <EmptyResearch />
+              )}
             </div>
           </div>
 
@@ -165,7 +244,7 @@ export default function ResearchPage() {
               </p>
             </div>
             <Link
-              href="/account/messages"
+              href={messagesHref}
               className="shrink-0 inline-flex items-center gap-1.5 text-[#E55125] hover:brightness-110 text-[12px] font-medium transition-all"
             >
               <svg

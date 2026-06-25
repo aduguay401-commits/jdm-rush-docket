@@ -1,9 +1,16 @@
-"use client";
-
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
 import { PageHeader } from "@/app/account/_components/page-header";
+import {
+  getCustomerPortalContext,
+  getDocketHref,
+  getDocketIdParam,
+  getResearchData,
+  getVehicleLabel,
+  isPurchaseUnlocked,
+  isShippingUnlocked,
+} from "@/lib/customer/dashboard";
 
 // ── Icons ──────────────────────────────────────────────────────────────────────
 
@@ -156,14 +163,10 @@ function SpineNode({ status }: { status: NodeStatus }) {
   );
 }
 
-// Thin directional chevrons along the connecting line — 3 evenly spaced,
-// hinting at downward flow without overwhelming the spine's elegance.
 function SpineConnector() {
   return (
     <div className="mt-3 flex-1 relative flex justify-center min-h-[48px]">
-      {/* Base line */}
       <div className="absolute inset-y-0 w-px bg-white/[0.08]" />
-      {/* Chevrons distributed along the line */}
       <div className="absolute inset-0 flex flex-col items-center justify-around py-3">
         {[0, 1, 2].map((i) => (
           <svg key={i} width="7" height="4" viewBox="0 0 7 4" fill="none" aria-hidden>
@@ -186,7 +189,6 @@ type SpineStep = { status: NodeStatus; card: ReactNode };
 function JourneySpine({ steps }: { steps: SpineStep[] }) {
   return (
     <div className="relative flex flex-col gap-3">
-      {/* Absolute guide line bridges the gap-3 spaces between rows */}
       <div
         className="pointer-events-none absolute left-5 sm:left-6 top-0 bottom-0 w-px bg-white/[0.08]"
         aria-hidden
@@ -196,13 +198,11 @@ function JourneySpine({ steps }: { steps: SpineStep[] }) {
         const isLast = i === steps.length - 1;
         return (
           <div key={i} className="relative flex items-stretch gap-4">
-            {/* Lane — opaque bg masks the guide line; SpineConnector reveals it selectively */}
             <div className="w-10 sm:w-12 shrink-0 bg-[#111111] flex flex-col items-center relative z-10">
               <div className="h-5 shrink-0" />
               <SpineNode status={step.status} />
               {!isLast && <SpineConnector />}
             </div>
-            {/* Card */}
             <div className="flex-1 min-w-0">{step.card}</div>
           </div>
         );
@@ -211,15 +211,39 @@ function JourneySpine({ steps }: { steps: SpineStep[] }) {
   );
 }
 
+function buildResearchFooter(candidateCount: number, hasReport: boolean) {
+  const candidateText = `${candidateCount} candidate ${candidateCount === 1 ? "car" : "cars"} sourced`;
+  return hasReport ? `${candidateText} · report ready` : candidateText;
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function CarDashboard() {
+export default async function CarDashboard({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const selectedDocketId = getDocketIdParam(params);
+  const context = await getCustomerPortalContext({
+    nextPath: selectedDocketId ? `/account/car?docket=${encodeURIComponent(selectedDocketId)}` : "/account/car",
+    selectedDocketId,
+    requireDocket: true,
+  });
+  const docket = context.selectedDocket!;
+  const vehicle = getVehicleLabel(docket);
+  const research = await getResearchData(docket.id);
+  const candidateCount = research.dealerOptions.length + (research.auctionResearch ? 1 : 0);
+  const purchaseUnlocked = isPurchaseUnlocked(docket);
+  const shippingUnlocked = isShippingUnlocked(docket);
+  const messagesHref = getDocketHref("/account/messages", docket.id);
+
   return (
     <div className="min-h-screen bg-[#111111]">
-      <AccountHeader />
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
 
       <PageHeader
-        micro="1999 Nissan Skyline GT-R R34 · Your import is at the Research stage. Review your candidate reports."
+        micro={`${vehicle} · Your import is at the Research stage. Review your candidate reports.`}
         backHref="/account"
         backLabel="My JDM Garage"
       />
@@ -242,15 +266,24 @@ export default function CarDashboard() {
                     num="01"
                     label="Research & Decision"
                     sublabel="Q&A with your sourcing team · Candidate reports · Choose your car"
-                    statusBadge="Report ready · Action needed"
-                    footer="2 candidate cars sourced · 1 report ready"
-                    href="/account/research"
+                    statusBadge={docket.status === "report_sent" ? "Report ready · Action needed" : "Research active"}
+                    footer={buildResearchFooter(candidateCount, Boolean(docket.report_url_token))}
+                    href={getDocketHref("/account/research", docket.id)}
                   />
                 ),
               },
               {
-                status: "upcoming",
-                card: (
+                status: purchaseUnlocked ? "active" : "upcoming",
+                card: purchaseUnlocked ? (
+                  <UnlockedCard
+                    num="02"
+                    label="Purchase & Documents"
+                    sublabel="Sign agreement · Pay deposit · Document vault"
+                    statusBadge={docket.agreement_signed ? "Agreement signed" : "Action pending"}
+                    footer={docket.deposit_paid ? "Deposit recorded" : "Deposit not yet recorded"}
+                    href={getDocketHref("/account/documents", docket.id)}
+                  />
+                ) : (
                   <LockedCard
                     num="02"
                     label="Purchase & Documents"
@@ -260,8 +293,17 @@ export default function CarDashboard() {
                 ),
               },
               {
-                status: "upcoming",
-                card: (
+                status: shippingUnlocked ? "active" : "upcoming",
+                card: shippingUnlocked ? (
+                  <UnlockedCard
+                    num="03"
+                    label="Your JDM Journey"
+                    sublabel="Port to your driveway · 5-stage shipping tracker"
+                    statusBadge="Pending shipment setup"
+                    footer="Detailed shipment tracking unlocks in Phase 3"
+                    href={getDocketHref("/account/journey", docket.id)}
+                  />
+                ) : (
                   <LockedCard
                     num="03"
                     label="Your JDM Journey"

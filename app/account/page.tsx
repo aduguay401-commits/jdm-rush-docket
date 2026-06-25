@@ -1,8 +1,13 @@
-"use client";
-
 import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
 import { PageHeader } from "@/app/account/_components/page-header";
+import {
+  getCardStatus,
+  getCustomerPortalContext,
+  getDocketHref,
+  getVehicleLabel,
+  type CustomerDocket,
+} from "@/lib/customer/dashboard";
 
 // ── Car photo placeholder ─────────────────────────────────────────────────────
 
@@ -69,22 +74,13 @@ function ProgressHint({ label, active }: { label: string; active: number }) {
 // ── Car card ──────────────────────────────────────────────────────────────────
 
 type CarCardProps = {
-  vehicle: string;
-  statusLabel: string;
-  statusColor: "orange" | "amber";
-  activeSection: number;
-  progressLabel: string;
-  href: string;
+  docket: CustomerDocket;
 };
 
-function CarCard({
-  vehicle,
-  statusLabel,
-  statusColor,
-  activeSection,
-  progressLabel,
-  href,
-}: CarCardProps) {
+function CarCard({ docket }: CarCardProps) {
+  const vehicle = getVehicleLabel(docket);
+  const { statusLabel, statusColor, activeSection, progressLabel } = getCardStatus(docket);
+  const href = getDocketHref("/account/car", docket.id);
   const dotColor =
     statusColor === "orange" ? "bg-[#E55125]" : "bg-amber-400";
   const textColor =
@@ -120,36 +116,43 @@ function CarCard({
   );
 }
 
+function EmptyGarage() {
+  return (
+    <div className="bg-black border border-white/[0.08] px-5 py-8 max-w-[640px]">
+      <p className="text-white text-[15px] font-extrabold tracking-tight leading-snug">
+        No claimed vehicles yet
+      </p>
+      <p className="text-white/40 text-[12px] leading-relaxed mt-2">
+        Use the same email address from your JDM Rush inquiry. Matching dockets are claimed automatically after login.
+      </p>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function MyGarageHome() {
+export default async function MyGarageHome() {
+  const context = await getCustomerPortalContext({ nextPath: "/account" });
+  const messagesHref = getDocketHref("/account/messages", context.latestDocket?.id);
+
   return (
     <div className="min-h-screen bg-[#111111]">
-      <AccountHeader />
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
 
-      <PageHeader micro="Welcome back, Sarah — your active imports are below. Tap any car to see where things stand." />
+      <PageHeader micro={`Welcome back, ${context.customerName} — your active imports are below. Tap any car to see where things stand.`} />
 
       <main id="main-content">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           {/* Car cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px]">
-            <CarCard
-              vehicle="1999 Nissan Skyline GT-R R34"
-              statusLabel="Report ready — action needed"
-              statusColor="orange"
-              activeSection={1}
-              progressLabel="Research stage"
-              href="/account/car"
-            />
-            <CarCard
-              vehicle="2002 Subaru Impreza WRX STI"
-              statusLabel="At port, awaiting vessel"
-              statusColor="amber"
-              activeSection={3}
-              progressLabel="Shipping tracker"
-              href="/account/car"
-            />
-          </div>
+          {context.dockets.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px]">
+              {context.dockets.map((docket) => (
+                <CarCard key={docket.id} docket={docket} />
+              ))}
+            </div>
+          ) : (
+            <EmptyGarage />
+          )}
         </div>
       </main>
     </div>

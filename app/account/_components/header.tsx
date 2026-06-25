@@ -1,9 +1,7 @@
-"use client";
-
 import Link from "next/link";
 
 export const MOCK_CUSTOMER_NAME = "Sarah";
-const UNREAD_COUNT = 2;
+const DEFAULT_UNREAD_COUNT = 0;
 
 function MessageIcon() {
   return (
@@ -22,7 +20,17 @@ function MessageIcon() {
   );
 }
 
-export function AccountHeader() {
+export function AccountHeader({
+  customerName = MOCK_CUSTOMER_NAME,
+  messagesHref = "/account/messages",
+  unreadCount = DEFAULT_UNREAD_COUNT,
+}: {
+  customerName?: string;
+  messagesHref?: string;
+  unreadCount?: number;
+}) {
+  const safeName = customerName.trim() || MOCK_CUSTOMER_NAME;
+
   return (
     <header className="sticky top-0 z-50 bg-black border-b border-white/[0.08]">
       <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
@@ -37,44 +45,44 @@ export function AccountHeader() {
           </a>
 
           <div className="flex items-center gap-3 sm:gap-4">
-            {/* Messages — icon + unread badge only, no box */}
             <Link
-              href="/account/messages"
+              href={messagesHref}
               className="flex items-center gap-1.5 px-1.5 py-1 hover:opacity-75 transition-opacity duration-150"
-              aria-label={`Messages — ${UNREAD_COUNT} unread`}
+              aria-label={`Messages — ${unreadCount} unread`}
             >
               <span className="text-[#E55125]">
                 <MessageIcon />
               </span>
-              {UNREAD_COUNT > 0 && (
+              {unreadCount > 0 && (
                 <span className="bg-[#E55125] text-white text-[9px] font-bold leading-none w-[18px] h-[18px] flex items-center justify-center rounded-full shrink-0">
-                  {UNREAD_COUNT}
+                  {unreadCount}
                 </span>
               )}
             </Link>
 
             <div className="w-px h-4 bg-white/[0.08]" />
 
-            {/* Avatar + name */}
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 bg-[#E55125]/20 border border-[#E55125]/40 flex items-center justify-center shrink-0">
                 <span className="text-[#E55125] text-[13px] font-bold uppercase">
-                  {MOCK_CUSTOMER_NAME.charAt(0)}
+                  {safeName.charAt(0)}
                 </span>
               </div>
               <span className="hidden sm:block text-white/70 text-[13px] font-medium">
-                {MOCK_CUSTOMER_NAME}
+                {safeName}
               </span>
             </div>
 
             <div className="hidden sm:block w-px h-4 bg-white/[0.12]" />
 
-            <button
-              type="button"
-              className="text-white/50 hover:text-white text-[13px] font-medium transition-colors duration-200"
-            >
-              Sign Out
-            </button>
+            <form action="/api/customer/auth/logout" method="post">
+              <button
+                type="submit"
+                className="text-white/50 hover:text-white text-[13px] font-medium transition-colors duration-200"
+              >
+                Sign Out
+              </button>
+            </form>
           </div>
         </div>
       </div>

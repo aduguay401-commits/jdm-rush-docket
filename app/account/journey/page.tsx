@@ -1,8 +1,11 @@
-"use client";
-
-import Link from "next/link";
 import { AccountHeader } from "@/app/account/_components/header";
 import { PageHeader } from "@/app/account/_components/page-header";
+import {
+  getCustomerPortalContext,
+  getDocketHref,
+  getDocketIdParam,
+  getVehicleLabel
+} from "@/lib/customer/dashboard";
 
 // ── Journey stages ────────────────────────────────────────────────────────────
 
@@ -13,10 +16,6 @@ const JOURNEY_STEPS = [
   { id: 4, label: "Customs & landing",        short: "Customs"   },
   { id: 5, label: "Delivered",                short: "Delivered" },
 ] as const;
-
-const CURRENT_STEP = 2;
-const MOCK_VEHICLE = "1999 Nissan Skyline GT-R R34";
-const LAST_UPDATE = "June 20, 2026";
 
 // ── Stepper ───────────────────────────────────────────────────────────────────
 
@@ -69,18 +68,18 @@ function JourneyStepper({ currentStep }: { currentStep: number }) {
 
 const STAGE_CALLOUTS: Record<number, { title: string; body: string; type: "action" | "reassure" | "neutral" | "done" }> = {
   1: {
-    title: "Purchase confirmed",
-    body: "Your car has been purchased. Your sourcing team is now coordinating export from Japan. You'll be notified when it's at the port.",
+    title: "Journey setup pending",
+    body: "Your purchase details are connected to this garage. The full shipping tracker unlocks when your sourcing team creates the delivery record in the next lifecycle phase.",
     type: "neutral",
   },
   2: {
-    title: "Your R34 is at the port — this is the longest wait",
+    title: "Your car is at the port — this is the longest wait",
     body: "Your car is in Japan at the port waiting to be loaded onto the next available vessel. This typically takes 4–8 weeks and is completely normal. No action needed — we'll notify you the moment it sets sail.",
     type: "reassure",
   },
   3: {
     title: "Your car is on the water",
-    body: "Your R34 has been loaded and is currently crossing the Pacific. Transit to Canada typically takes 3–5 weeks. Sit tight — we'll update you when it arrives at the Canadian port.",
+    body: "Your car has been loaded and is currently crossing the Pacific. Transit to Canada typically takes 3–5 weeks. Sit tight — we'll update you when it arrives at the Canadian port.",
     type: "neutral",
   },
   4: {
@@ -90,7 +89,7 @@ const STAGE_CALLOUTS: Record<number, { title: string; body: string; type: "actio
   },
   5: {
     title: "Delivered",
-    body: "Your R34 has been delivered. Welcome to JDM ownership. All your documents remain accessible in the vault.",
+    body: "Your car has been delivered. Welcome to JDM ownership. All your documents remain accessible in the vault.",
     type: "done",
   },
 };
@@ -139,7 +138,7 @@ function StageCallout({ step }: { step: number }) {
 
 // ── Timeline detail ────────────────────────────────────────────────────────────
 
-function StageTimeline() {
+function StageTimeline({ currentStep }: { currentStep: number }) {
   return (
     <div className="mt-8">
       <p className="text-white/25 text-[10px] font-bold uppercase tracking-[0.12em] mb-4">
@@ -147,8 +146,8 @@ function StageTimeline() {
       </p>
       <div className="flex flex-col">
         {JOURNEY_STEPS.map((step, index) => {
-          const isCompleted = step.id < CURRENT_STEP;
-          const isCurrent   = step.id === CURRENT_STEP;
+          const isCompleted = step.id < currentStep;
+          const isCurrent   = step.id === currentStep;
           const isLast      = index === JOURNEY_STEPS.length - 1;
 
           return (
@@ -171,11 +170,11 @@ function StageTimeline() {
                 </p>
                 {isCurrent && (
                   <p className="text-amber-400/70 text-[11px] mt-0.5">
-                    In progress · Last updated {LAST_UPDATE}
+                    In progress · Last updated when your sourcing team posts the next milestone
                   </p>
                 )}
                 {isCompleted && step.id === 1 && (
-                  <p className="text-white/25 text-[11px] mt-0.5">Jun 2, 2026</p>
+                  <p className="text-white/25 text-[11px] mt-0.5">Completed</p>
                 )}
               </div>
             </div>
@@ -188,17 +187,32 @@ function StageTimeline() {
 
 // ── Page ───────────────────────────────────────────────────────────────────────
 
-export default function JourneyPage() {
-  const currentStepObj = JOURNEY_STEPS[CURRENT_STEP - 1];
+export default async function JourneyPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const params = await searchParams;
+  const selectedDocketId = getDocketIdParam(params);
+  const context = await getCustomerPortalContext({
+    nextPath: selectedDocketId ? `/account/journey?docket=${encodeURIComponent(selectedDocketId)}` : "/account/journey",
+    selectedDocketId,
+    requireDocket: true,
+  });
+  const docket = context.selectedDocket!;
+  const vehicle = getVehicleLabel(docket);
+  const currentStep = 1;
+  const currentStepObj = JOURNEY_STEPS[currentStep - 1];
+  const messagesHref = getDocketHref("/account/messages", docket.id);
 
   return (
     <div className="min-h-screen bg-[#111111]">
-      <AccountHeader />
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
 
       <PageHeader
-        micro="Your JDM Journey · Your R34 is at port in Japan. Track each stage from Japan to your driveway."
-        backHref="/account/car"
-        backLabel="1999 Nissan Skyline GT-R R34"
+        micro={`Your JDM Journey · ${vehicle} delivery tracking will update here once the shipping record exists.`}
+        backHref={getDocketHref("/account/car", docket.id)}
+        backLabel={vehicle}
       />
 
       <main id="main-content">
@@ -211,18 +225,18 @@ export default function JourneyPage() {
                 Now: {currentStepObj?.label}
               </p>
               <span className="text-white/25 text-[10px] font-medium">
-                Step {CURRENT_STEP}/{JOURNEY_STEPS.length}
+                Step {currentStep}/{JOURNEY_STEPS.length}
               </span>
             </div>
-            <JourneyStepper currentStep={CURRENT_STEP} />
+            <JourneyStepper currentStep={currentStep} />
           </div>
 
           {/* Stage callout */}
-          <StageCallout step={CURRENT_STEP} />
+          <StageCallout step={currentStep} />
 
           {/* Full timeline */}
           <div className="mt-6 bg-black border border-white/[0.08] px-5 sm:px-6 py-5">
-            <StageTimeline />
+            <StageTimeline currentStep={currentStep} />
           </div>
         </div>
       </main>
