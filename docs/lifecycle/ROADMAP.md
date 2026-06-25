@@ -181,7 +181,7 @@ CREATE POLICY "admin_agent_read_all_dockets" ON dockets
 - Reuse: existing docket dark theme, existing `ReportClient` components (can be linked from dashboard), `getCustomerHomeBaseUrl()` / `getCustomerReportUrl()` from `lib/urls.ts`
 - Build: new `/account` route + dashboard component, Supabase Auth session check middleware
 
-**No SQL this stage.**
+**SQL this stage:** migration 009_customer_dashboard_child_rls.sql adds customer-owned child-table RLS for the real dashboard wiring. Adam applies this SQL manually to production before runtime QA.
 
 **Verification:** Customer logs in → sees dashboard with their dockets. Empty state for new customers. Logged-in header state. Logout works.
 
