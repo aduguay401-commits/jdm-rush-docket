@@ -14,7 +14,8 @@ Phase 0: FOUNDATION (blocks everything)
   ├── 0.1 Migration Baseline
   ├── 0.2 Customers Table + Auth
   ├── 0.3 RLS on Dockets + Claiming Flow
-  └── 0.4 Customer Dashboard Skeleton
+  ├── 0.4 Customer Dashboard Skeleton
+  └── 0.5 Customer Auth Password + Google
         │
 Phase 2: PURCHASE COMMITMENT
   ├── 2.1 Agreement Engine (template → filled PDF)
@@ -33,7 +34,7 @@ Phase 4: SITE CHANGE (jdm-rush-next)
   └── 4.1 Customer Login Link
 ```
 
-**Every stage is one build-review-QA-gate loop.** Stages within a phase are sequential (each depends on the prior). Phases 0, 2, and 3 are sequential. Stage 4.1 can parallelize after Phase 0 completes (it only needs the customer auth flow to exist, not the full purchase/delivery build).
+**Every stage is one build-review-QA-gate loop.** Stages within a phase are sequential (each depends on the prior). Phases 0, 2, and 3 are sequential. Stage 4.1 can parallelize after Phase 0 completes (it only needs the customer auth flow to exist, not the full purchase/delivery build). Stage 0.5 is one long-lived branch (`feature/lifecycle-0.5-auth`) accumulated across six sub-steps and must not merge until the full customer-auth stage is verified.
 
 ---
 
@@ -81,16 +82,16 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 **What it builds:**
 - `customers` table: `id`, `auth_user_id` (FK to `auth.users`), `email`, `first_name`, `last_name`, `phone`, `created_at`, `last_login_at`, `deleted_at`
 - `customer_id` column on `dockets` (nullable — existing dockets stay unclaimed)
-- Supabase Auth configured for customer magic-link login (email OTP, no password)
+- Supabase Auth customer session foundation (originally magic-link/email OTP; amended by Stage 0.5 to email+password and Google OAuth with magic-link removed)
 - `customer` role added to the `profiles` table pattern (alongside existing `admin` and `agent`)
 - A new `createServerAuthClient()` call pattern for customer routes (NOT the service-role client)
 
 **Dependencies:** 0.1 (migration baseline).
 
-**D-Decisions implemented:** **D1** (Supabase Auth customer role, magic-link/email-OTP), **D8** (auth lives in the docket app).
+**D-Decisions implemented:** **D1** (Supabase Auth customer role; amended by Stage 0.5 from magic-link/email-OTP to email+password and Google OAuth), **D8** (auth lives in the docket app).
 
 **Reuse vs build:**
-- Reuse: `profiles` table pattern from `lib/admin/auth.ts`, `createServerAuthClient()` from `lib/supabase/server-auth.ts`, email.ts for magic-link delivery
+- Reuse: `profiles` table pattern from `lib/admin/auth.ts`, `createServerAuthClient()` from `lib/supabase/server-auth.ts`, and `email.ts` for customer auth notifications such as password reset
 - Build: `customers` table, customer registration API route, login callback, session management
 
 **SQL Adam runs (copy-paste, do NOT execute from agent):**
@@ -113,7 +114,7 @@ CREATE INDEX IF NOT EXISTS idx_dockets_customer_id ON dockets(customer_id);
 ALTER TABLE customers ENABLE ROW LEVEL SECURITY;
 ```
 
-**Verification:** Customer can sign up via magic link, session persists, `customers` row created with `auth_user_id` linked.
+**Verification:** Stage 0.2 originally verified magic-link signup/session provisioning. Stage 0.5 supersedes customer login verification with password signup/login, Google OAuth, and password reset while preserving the same `customers.auth_user_id` link.
 
 ---
 
@@ -184,6 +185,54 @@ CREATE POLICY "admin_agent_read_all_dockets" ON dockets
 **SQL this stage:** migration 009_customer_dashboard_child_rls.sql adds customer-owned child-table RLS for the real dashboard wiring. Adam applies this SQL manually to production before runtime QA.
 
 **Verification:** Customer logs in → sees dashboard with their dockets. Empty state for new customers. Logged-in header state. Logout works.
+
+
+---
+
+### Stage 0.5 — Customer Auth Password + Google
+
+**What it builds:** Customer authentication becomes a conventional Supabase-native account flow: email+password login/signup, Google OAuth, and password reset. This replaces the Stage 0.2 magic-link/email-OTP login and amends D1 while keeping the Supabase Auth provider, D8 portal location, and D2 email-claiming model intact.
+
+**Branch strategy:** Use one long-lived stage branch, `feature/lifecycle-0.5-auth`, for all six sub-steps. Do not merge partial sub-steps to `main`; live customer login should only change when the full Stage 0.5 flow is reviewed, QA-verified, and explicitly merged.
+
+**Dependencies:** 0.2 (customers table + Supabase Auth foundation), 0.3 (RLS + email claiming), 0.4 (customer dashboard and account shell).
+
+**D-Decisions implemented / amended:** Amends **D1** from Supabase magic-link/email-OTP to Supabase email+password plus Google OAuth. Preserves **D2** (verified-email claiming) and **D8** (customer portal stays in Docket). RLS remains Supabase-native; no custom auth bridge is introduced.
+
+**Locked decisions for 0.5:**
+- Sessions use the default Supabase refresh-token lifetime: customers stay logged in until Supabase/session expiry or explicit logout; no custom inactivity timeout.
+- Existing magic-link customers receive no migration email. They can use password reset or Google OAuth with the same verified email to establish the new login method.
+- Supabase manual identity-linking is disabled. Identity linking is allowed only through Supabase's verified-email auto-link behavior.
+- No `auth_provider` column is added; migration `010` for provider tracking is skipped.
+- `/find-my-jdm` intake authentication is out of scope for 0.5 and remains a tracked follow-up.
+
+**Six-step build order on `feature/lifecycle-0.5-auth`:**
+1. Docs / decision amendment only: lock D1, roadmap, setup notes, and branch strategy.
+2. Supabase dashboard configuration prep: email/password, Google provider, redirect URLs, identity-linking posture, and reset-password route requirements.
+3. Auth UI routes: login, signup, Google button, logout/header state, and no magic-link entrypoint.
+4. Auth API/server flow: password signup/login, Google OAuth callback, verified-email customer provisioning, D2 claiming, and old magic-link route removal/disablement.
+5. Password reset flow: request reset, `/account/reset-password`, session exchange, password update, and friendly expired/invalid-link states.
+6. Final hardening and QA: rate-limit/error copy, accessibility pass, account/dashboard regression, RLS isolation regression, and production-ready Supabase setting confirmation.
+
+**Supabase dashboard config Adam runs:**
+- Authentication > Providers > Email: enabled.
+- Email provider: enable email+password signup/login; disable magic-link/email-OTP customer login behavior.
+- Authentication > Providers > Google: enabled with the production Google OAuth client ID/secret.
+- Authentication > URL Configuration > Site URL: `https://docket.jdmrushimports.ca`.
+- Authentication > URL Configuration > Redirect URLs: include the production, local, and preview callback/reset URLs listed in `CUSTOMER-AUTH-SETUP.md`.
+- Authentication > User Signups: allow customer signups for the Docket portal.
+- Identity linking: keep manual identity-linking disabled; rely only on Supabase verified-email auto-link behavior.
+
+**Verification:**
+- Existing token links and claimed dashboard access still work.
+- Customer signs up with email+password, receives a `customers.auth_user_id`, and sees only their own account/dashboard data.
+- Customer logs in with email+password after signup and remains signed in across reloads under default Supabase session behavior.
+- Customer starts Google OAuth and returns to `/account`; if the verified email matches an existing customer/docket, D2 claiming still links by email.
+- Password reset email returns to `/account/reset-password`; customer sets a new password and can log in with it.
+- Magic-link customer login entrypoints are removed or disabled; no user-facing copy promises magic-link login.
+- No `auth_provider` column or migration `010` exists.
+- `/find-my-jdm` intake auth is not changed in this stage.
+- RLS isolation from Stages 0.3/0.4 remains intact for cross-customer list/read/write attempts.
 
 ---
 
@@ -636,7 +685,7 @@ Each block is idempotent. Run at the start of its stage. Paste into the Supabase
 ## Reuse vs Build Summary (across all phases)
 
 **Reused from existing docket (10 items):**
-- Supabase Auth infrastructure (profiles table, server-auth client, magic-link pattern)
+- Supabase Auth infrastructure (profiles table, server-auth client, customer session pattern)
 - email.ts (Nodemailer + Gmail SMTP) — all customer notifications
 - sms.ts (Twilio) — shipment arrival notification
 - urls.ts (base URL + token URL helpers) — extended for dashboard URLs

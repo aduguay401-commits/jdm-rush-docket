@@ -8,7 +8,7 @@
 
 | # | Decision | LOCKED choice | Why |
 |---|----------|---------------|-----|
-| **D1** | Customer auth provider | **Supabase Auth** (customer role, magic-link / email-OTP) | Native RLS with no custom auth bridge; lowest security surface; magic-link fits import buyers. (Adam initially leaned NextAuth; reverted once the Supabase-RLS coupling was made explicit.) |
+| **D1** | Customer auth provider | **Supabase Auth** (customer role, email+password and Google OAuth; magic-link removed) | Native RLS with no custom auth bridge; lowest security surface; password login plus Google gives customers a familiar account model while keeping auth Supabase-native. (Adam initially leaned NextAuth; reverted once the Supabase-RLS coupling was made explicit.) |
 | **D2** | Token → account migration | **Dual-access + email claiming**, optional ~90-day token sunset | Non-breaking: existing token URLs keep working; account creation claims matching-email dockets; clear path to the secured end-state. |
 | **D3** | RLS rollout pace | **Gradual — `dockets` table first**, existing child tables in follow-up PRs | Smaller/safer changes, portal ships sooner. New sensitive tables (customers, signatures, license, shipments, documents) are RLS-native from birth regardless. |
 | **D4** | Driver's-license storage | **Supabase Storage private bucket, done right** — UUID paths, short-lived signed URLs, access logging, encrypted at rest | Matches the PRD's strict-PII standard on existing infra. App-level encryption remains a no-migration future upgrade (UUID paths carry no PII). |
@@ -17,6 +17,8 @@
 | **D7** | Retention | **Separate lifetimes** — customer account/login soft-deletes ~1yr after last activity; the legal purchase packet retained on its own longer, lawyer-set clock | The legal record (agreement, license, deposit) must NOT die with the login. Two independent retention paths. |
 | **D8** | Customer-portal location | **In the docket app** (`docket.jdmrushimports.ca`); `jdmrushimports.ca` is the front door (adds a "Customer Login / My Account" link) | Keeps all authed data access behind the docket's RLS (no service-role bypass re-introduced on a second codebase). Biggest scope simplifier — ~90% of the build is in the docket repo; jdm-rush-next change is just the login link. |
 | **D9** | Shipment tracking source | **Manual-first** (admin/agent advance stages, upload docs, paste MarineTraffic link) | Matches the PRD's out-of-scope decision on Gemmy/JEMI scraping (fragile, no API). Automation is a clean Phase-4 add-on later via the same fields/API. |
+
+**D1 amendment — 2026-06-26:** Stage 0.5 replaces the Stage 0.2 magic-link/email-OTP customer login with Supabase-native email+password login/signup, password reset, and Google OAuth. This remains Supabase Auth, so RLS and D8 are unaffected. D2 email-claiming is unchanged: verified customer email remains the account-to-docket claiming key.
 
 ---
 
