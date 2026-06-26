@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
-import { getCustomerAuthCallbackUrl } from "@/lib/customer/auth";
+import { getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
