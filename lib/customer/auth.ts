@@ -1,7 +1,5 @@
 import { type User } from "@supabase/supabase-js";
 
-import { getCurrentUserRole } from "@/lib/admin/auth";
-import { createServerClient } from "@/lib/supabase/server";
 import { getAppBaseUrl } from "@/lib/urls";
 
 type CustomerMetadata = {
@@ -113,6 +111,7 @@ export function getCustomerAuthCallbackUrl(nextPath = DEFAULT_CUSTOMER_NEXT_PATH
 }
 
 async function getExistingProfile(userId: string) {
+  const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = createServerClient();
 
   const { data, error } = await supabase
@@ -129,6 +128,7 @@ async function getExistingProfile(userId: string) {
 }
 
 async function assertCustomerIsActive(userId: string) {
+  const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("customers")
@@ -146,6 +146,7 @@ async function assertCustomerIsActive(userId: string) {
 }
 
 async function assertEmailIsAvailableForUser(email: string, userId: string) {
+  const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("customers")
@@ -168,6 +169,7 @@ async function claimDocketsForCustomer(customerId: string, email: string) {
     return 0;
   }
 
+  const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = createServerClient();
   const { data: claimableDockets, error: selectError } = await supabase
     .from("dockets")
@@ -210,6 +212,7 @@ export async function provisionCustomerAccount(user: User) {
   const metadata = (user.user_metadata ?? {}) as CustomerMetadata;
   const { firstName, lastName } = getCustomerNames(metadata);
   const phone = metadataString(metadata.phone);
+  const { createServerClient } = await import("@/lib/supabase/server");
   const supabase = createServerClient();
 
   await assertCustomerIsActive(user.id);
@@ -257,6 +260,7 @@ export async function provisionCustomerAccount(user: User) {
 }
 
 export async function getCurrentCustomerSession() {
+  const { getCurrentUserRole } = await import("@/lib/admin/auth");
   const auth = await getCurrentUserRole();
 
   if (!auth.user || auth.role !== "customer") {

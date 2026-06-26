@@ -40,6 +40,7 @@ export default async function AccountLoginPage({
             >
               My JDM Garage
             </h1>
+            <p className="text-white/60 text-[14px] mt-2">Welcome back</p>
           </div>
 
           <LoginClient nextPath={nextPath} errorMessage={errorMessage} />
