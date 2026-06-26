@@ -21,6 +21,10 @@ type CustomerStatusRow = {
   deleted_at: string | null;
 };
 
+type CustomerEmailLinkRow = {
+  auth_user_id: string | null;
+};
+
 type CustomerAccountRow = {
   id: string;
 };
@@ -36,6 +40,13 @@ export class SoftDeletedCustomerError extends Error {
   constructor() {
     super("Customer account is disabled");
     this.name = "SoftDeletedCustomerError";
+  }
+}
+
+export class EmailAlreadyLinkedError extends Error {
+  constructor() {
+    super("Customer email is already linked to another auth user");
+    this.name = "EmailAlreadyLinkedError";
   }
 }
 
@@ -134,6 +145,23 @@ async function assertCustomerIsActive(userId: string) {
   }
 }
 
+async function assertEmailIsAvailableForUser(email: string, userId: string) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("auth_user_id")
+    .eq("email", email)
+    .maybeSingle<CustomerEmailLinkRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (data && data.auth_user_id !== userId) {
+    throw new EmailAlreadyLinkedError();
+  }
+}
+
 async function claimDocketsForCustomer(customerId: string, email: string) {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail) {
@@ -185,6 +213,7 @@ export async function provisionCustomerAccount(user: User) {
   const supabase = createServerClient();
 
   await assertCustomerIsActive(user.id);
+  await assertEmailIsAvailableForUser(email, user.id);
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
