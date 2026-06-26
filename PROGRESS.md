@@ -30,6 +30,23 @@ Decisions/deviations:
 Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
 
 
+## 2026-06-26 — Stage 0.4.1 login confirmation polish
+
+Summary: folded in Adam's approved login confirmation refinements on the same Stage 0.4.1 branch.
+
+Files changed:
+- `app/account/login/LoginClient.tsx` — keeps the `aria-live=polite` region mounted before status changes, moves focus to the confirmation heading after a successful send, preserves the submitted email for resend, hides the intro copy outside the form state, and aligns the error icon treatment with the amber banner.
+- `app/account/login/page.tsx` — lets the client control the intro copy so it can be hidden in success and error states without changing the locked account-page shell.
+- `app/api/customer/auth/magic-link/route.ts` — maps Supabase `over_email_send_rate_limit` / 429 responses to a friendly 429 error message.
+- `PROGRESS.md` — records the polish pass and verification status.
+
+Decisions/deviations:
+- Kept the locked v6 visual language and limited the change to the login page and magic-link API route.
+- No production SQL was changed or applied.
+
+Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
+
+
 ## 2026-06-25 — Stage 0.4 RLS self-select fix
 
 Summary: fixed Reviewer blocker by making migration 009 self-contained for customer-owned joins.
@@ -42,5 +59,20 @@ Files changed:
 Decisions/deviations:
 - No production SQL was applied by Codex. Adam already applied the first 009 and will run the added idempotent self-select statement separately.
 - Non-blocking copy notes from Reviewer are deferred to Designer and are not included in this code fix.
+
+Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
+
+
+## 2026-06-25 — Stage 0.4.1 login confirmation UX
+
+Summary: refined the My JDM Garage login magic-link form so successful sends become an obvious confirmation state instead of leaving the submitted email in a pending-looking form.
+
+Files changed:
+- `app/account/login/LoginClient.tsx` — replaces the form with a prominent on-brand confirmation card after success, clears the email field state, adds a Use a different email / Resend affordance, and makes error/sending states more explicit with `aria-live=polite`.
+- `PROGRESS.md` — records the code-only UX refinement and verification status.
+
+Decisions/deviations:
+- Kept the locked v6 visual language: dark surface, #E55125 accents, sharp card edges, compact Manrope-era account styling.
+- Did not change other `/account` pages or production SQL.
 
 Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
