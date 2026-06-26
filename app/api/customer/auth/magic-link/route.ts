@@ -23,6 +23,14 @@ function normalizeEmail(value: unknown) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
+function isEmailRateLimitError(error: { code?: string; message?: string; status?: number }) {
+  return (
+    error.status === 429 ||
+    error.code === "over_email_send_rate_limit" ||
+    error.message?.includes("over_email_send_rate_limit")
+  );
+}
+
 export async function POST(request: Request) {
   let payload: MagicLinkRequestBody;
 
@@ -60,6 +68,14 @@ export async function POST(request: Request) {
 
   if (error) {
     console.error("[Customer Auth] Failed to send magic link", { email, error: error.message });
+
+    if (isEmailRateLimitError(error)) {
+      return Response.json(
+        { success: false, error: "Too many requests — please try again shortly." },
+        { status: 429 }
+      );
+    }
+
     return Response.json({ success: false, error: "Unable to send login link" }, { status: 500 });
   }
 

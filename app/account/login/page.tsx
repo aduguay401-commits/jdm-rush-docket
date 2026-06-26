@@ -40,9 +40,6 @@ export default async function AccountLoginPage({
             >
               My JDM Garage
             </h1>
-            <p className="text-white/80 text-[14px] sm:text-[15px] font-semibold mt-2.5 leading-snug text-center">
-              Enter your email and we will send a secure login link.
-            </p>
           </div>
 
           <LoginClient nextPath={nextPath} errorMessage={errorMessage} />
