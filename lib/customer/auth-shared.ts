@@ -26,8 +26,12 @@ export function normalizeCustomerNextPath(value: unknown) {
   }
 }
 
+export function getCustomerAuthCallbackBaseUrl() {
+  return new URL("/auth/customer/callback", getAppBaseUrl()).toString();
+}
+
 export function getCustomerAuthCallbackUrl(nextPath = DEFAULT_CUSTOMER_NEXT_PATH) {
-  const callbackUrl = new URL("/auth/customer/callback", getAppBaseUrl());
+  const callbackUrl = new URL(getCustomerAuthCallbackBaseUrl());
   callbackUrl.searchParams.set("next", normalizeCustomerNextPath(nextPath));
   return callbackUrl.toString();
 }

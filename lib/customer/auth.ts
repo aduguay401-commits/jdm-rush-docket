@@ -8,6 +8,7 @@ import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
 export {
   DEFAULT_CUSTOMER_NEXT_PATH,
+  getCustomerAuthCallbackBaseUrl,
   getCustomerAuthCallbackUrl,
   normalizeCustomerNextPath,
 } from "@/lib/customer/auth-shared";

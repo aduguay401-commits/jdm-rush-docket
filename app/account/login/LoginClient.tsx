@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
-import { getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
+import { getCustomerAuthCallbackBaseUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 function GoogleIcon() {
@@ -81,7 +81,7 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: getCustomerAuthCallbackUrl(nextPath),
+        redirectTo: getCustomerAuthCallbackBaseUrl(),
       },
     });
 

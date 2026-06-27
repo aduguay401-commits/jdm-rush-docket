@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 
 import { ErrorBanner, GoogleIcon, OrDivider, SentStateCard } from "@/app/account/_components/AuthUi";
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
-import { getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
+import { getCustomerAuthCallbackBaseUrl, getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,7 +123,7 @@ export function RegisterClient({ nextPath }: { nextPath: string }) {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: getCustomerAuthCallbackUrl(nextPath),
+        redirectTo: getCustomerAuthCallbackBaseUrl(),
       },
     });
 
