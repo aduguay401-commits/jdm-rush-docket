@@ -95,7 +95,9 @@ export async function GET(request: NextRequest) {
     return setRedirectTarget(response, request, buildErrorPath("Unable to prepare your customer account."));
   }
 
-  if (redirectType === "recovery") {
+  // redirectType is an unofficial auth-js field derived from the PKCE verifier
+  // storage suffix in @supabase/auth-js 2.101.1; revisit on auth-js upgrades.
+  if (redirectType === "PASSWORD_RECOVERY" || redirectType === "recovery") {
     return setRedirectTarget(response, request, "/account/reset-password");
   }
 
