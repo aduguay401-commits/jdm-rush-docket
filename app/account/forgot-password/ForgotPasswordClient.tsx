@@ -4,8 +4,8 @@ import Link from "next/link";
 import { FormEvent, useState } from "react";
 
 import { SentStateCard } from "@/app/account/_components/AuthUi";
+import { getCustomerAuthCallbackBaseUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
-import { getAppBaseUrl } from "@/lib/urls";
 
 export function ForgotPasswordClient() {
   const [email, setEmail] = useState("");
@@ -25,7 +25,7 @@ export function ForgotPasswordClient() {
 
     const supabase = createBrowserSupabaseClient();
     await supabase.auth.resetPasswordForEmail(normalizedEmail, {
-      redirectTo: `${getAppBaseUrl()}/account/reset-password`,
+      redirectTo: getCustomerAuthCallbackBaseUrl(),
     });
 
     setSentEmail(normalizedEmail);

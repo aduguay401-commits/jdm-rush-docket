@@ -21,7 +21,6 @@ export function ResetPasswordClient() {
     let cancelled = false;
 
     async function prepareRecoverySession() {
-      const supabase = createBrowserSupabaseClient();
       const params = new URLSearchParams(window.location.search);
       const code = params.get("code");
       const authError = params.get("error") ?? params.get("error_code");
@@ -32,15 +31,11 @@ export function ResetPasswordClient() {
       }
 
       if (code) {
-        const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-        if (exchangeError) {
-          if (!cancelled) setStatus("invalid");
-          return;
-        }
-
-        window.history.replaceState({}, "", window.location.pathname);
+        window.location.replace(`/auth/customer/callback${window.location.search}`);
+        return;
       }
 
+      const supabase = createBrowserSupabaseClient();
       const { data, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !data.session) {
         if (!cancelled) setStatus("invalid");

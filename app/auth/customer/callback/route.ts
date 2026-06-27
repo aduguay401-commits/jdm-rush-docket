@@ -59,7 +59,8 @@ export async function GET(request: NextRequest) {
     return setRedirectTarget(response, request, buildErrorPath("Login link is missing a verification code."));
   }
 
-  const { error: codeExchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  const { data: codeExchangeData, error: codeExchangeError } = await supabase.auth.exchangeCodeForSession(code);
+  const redirectType = (codeExchangeData as typeof codeExchangeData & { redirectType?: string }).redirectType;
 
   if (codeExchangeError) {
     console.error("[Customer Auth] Code exchange failed", codeExchangeError.message);
@@ -92,6 +93,10 @@ export async function GET(request: NextRequest) {
     }
 
     return setRedirectTarget(response, request, buildErrorPath("Unable to prepare your customer account."));
+  }
+
+  if (redirectType === "recovery") {
+    return setRedirectTarget(response, request, "/account/reset-password");
   }
 
   return response;
