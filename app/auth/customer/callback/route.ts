@@ -1,3 +1,4 @@
+import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import { NextRequest, NextResponse } from "next/server";
 
 import {
@@ -7,48 +8,69 @@ import {
   SoftDeletedCustomerError,
   SOFT_DELETED_CUSTOMER_MESSAGE,
 } from "@/lib/customer/auth";
-import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
-function buildRedirect(request: NextRequest, path: string) {
-  return NextResponse.redirect(new URL(path, request.url));
+function setRedirectTarget(response: NextResponse, request: NextRequest, path: string) {
+  response.headers.set("Location", new URL(path, request.url).toString());
+  return response;
 }
 
-function buildErrorRedirect(request: NextRequest, message: string) {
-  const url = new URL("/account", request.url);
-  url.searchParams.set("auth", "error");
-  url.searchParams.set("message", message);
-  return NextResponse.redirect(url);
+function buildErrorPath(message: string) {
+  const params = new URLSearchParams({ auth: "error", message });
+  return `/account?${params.toString()}`;
 }
 
-function buildLoginErrorRedirect(request: NextRequest, message: string) {
-  const url = new URL("/account/login", request.url);
-  url.searchParams.set("auth", "error");
-  url.searchParams.set("message", message);
-  return NextResponse.redirect(url);
+function buildLoginErrorPath(message: string) {
+  const params = new URLSearchParams({ auth: "error", message });
+  return `/account/login?${params.toString()}`;
+}
+
+function createResponseBoundAuthClient(request: NextRequest, response: NextResponse) {
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet, headers) {
+          cookiesToSet.forEach(({ name, value, options }) => {
+            request.cookies.set(name, value);
+            response.cookies.set(name, value, options as CookieOptions);
+          });
+
+          Object.entries(headers).forEach(([key, value]) => {
+            response.headers.set(key, value);
+          });
+        },
+      },
+    }
+  );
 }
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const nextPath = normalizeCustomerNextPath(searchParams.get("next"));
   const code = searchParams.get("code");
-  const supabase = await createServerAuthClient();
+  const response = NextResponse.redirect(new URL(nextPath, request.url));
+  const supabase = createResponseBoundAuthClient(request, response);
 
   if (!code) {
-    return buildErrorRedirect(request, "Login link is missing a verification code.");
+    return setRedirectTarget(response, request, buildErrorPath("Login link is missing a verification code."));
   }
 
   const { error: codeExchangeError } = await supabase.auth.exchangeCodeForSession(code);
 
   if (codeExchangeError) {
     console.error("[Customer Auth] Code exchange failed", codeExchangeError.message);
-    return buildErrorRedirect(request, "Unable to confirm your login link.");
+    return setRedirectTarget(response, request, buildErrorPath("Unable to confirm your login link."));
   }
 
   const { data, error: userError } = await supabase.auth.getUser();
 
   if (userError || !data.user) {
     console.error("[Customer Auth] Confirmed session missing user", userError?.message);
-    return buildErrorRedirect(request, "Unable to load your account.");
+    return setRedirectTarget(response, request, buildErrorPath("Unable to load your account."));
   }
 
   try {
@@ -58,18 +80,19 @@ export async function GET(request: NextRequest) {
     await supabase.auth.signOut();
 
     if (provisionError instanceof SoftDeletedCustomerError) {
-      return buildLoginErrorRedirect(request, SOFT_DELETED_CUSTOMER_MESSAGE);
+      return setRedirectTarget(response, request, buildLoginErrorPath(SOFT_DELETED_CUSTOMER_MESSAGE));
     }
 
     if (provisionError instanceof EmailAlreadyLinkedError) {
-      return buildLoginErrorRedirect(
+      return setRedirectTarget(
+        response,
         request,
-        "This email is already linked to another account. Please sign in with that account or contact JDM Rush."
+        buildLoginErrorPath("This email is already linked to another account. Please sign in with that account or contact JDM Rush.")
       );
     }
 
-    return buildErrorRedirect(request, "Unable to prepare your customer account.");
+    return setRedirectTarget(response, request, buildErrorPath("Unable to prepare your customer account."));
   }
 
-  return buildRedirect(request, nextPath);
+  return response;
 }
