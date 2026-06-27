@@ -5,6 +5,7 @@ import {
   EmailAlreadyLinkedError,
   provisionCustomerAccount,
   SoftDeletedCustomerError,
+  SOFT_DELETED_CUSTOMER_MESSAGE,
 } from "@/lib/customer/auth";
 import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
     await supabase.auth.signOut();
 
     if (provisionError instanceof SoftDeletedCustomerError) {
-      return buildErrorRedirect(request, "This customer account is disabled.");
+      return buildLoginErrorRedirect(request, SOFT_DELETED_CUSTOMER_MESSAGE);
     }
 
     if (provisionError instanceof EmailAlreadyLinkedError) {

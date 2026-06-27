@@ -4,6 +4,7 @@ import { type User } from "@supabase/supabase-js";
 
 import { getCurrentUserRole } from "@/lib/admin/auth";
 import { createServerClient } from "@/lib/supabase/server";
+import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
 export {
   DEFAULT_CUSTOMER_NEXT_PATH,
@@ -28,6 +29,8 @@ type CustomerStatusRow = {
   deleted_at: string | null;
 };
 
+export const SOFT_DELETED_CUSTOMER_MESSAGE = "This customer account is disabled.";
+
 type CustomerEmailLinkRow = {
   auth_user_id: string | null;
 };
@@ -43,7 +46,7 @@ type ClaimableDocketRow = {
 
 export class SoftDeletedCustomerError extends Error {
   constructor() {
-    super("Customer account is disabled");
+    super(SOFT_DELETED_CUSTOMER_MESSAGE);
     this.name = "SoftDeletedCustomerError";
   }
 }
@@ -103,7 +106,7 @@ async function getExistingProfile(userId: string) {
   return data ?? null;
 }
 
-async function assertCustomerIsActive(userId: string) {
+async function getCustomerStatusForUser(userId: string) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("customers")
@@ -115,7 +118,13 @@ async function assertCustomerIsActive(userId: string) {
     throw new Error(error.message);
   }
 
-  if (data?.deleted_at) {
+  return data ?? null;
+}
+
+async function assertCustomerIsActive(userId: string) {
+  const customer = await getCustomerStatusForUser(userId);
+
+  if (customer?.deleted_at) {
     throw new SoftDeletedCustomerError();
   }
 }
@@ -235,8 +244,17 @@ export async function getCurrentCustomerSession() {
   const auth = await getCurrentUserRole();
 
   if (!auth.user || auth.role !== "customer") {
-    return { user: null, role: auth.role, isCustomer: false } as const;
+    return { user: null, role: auth.role, isCustomer: false, disabled: false } as const;
   }
 
-  return { user: auth.user, role: auth.role, isCustomer: true } as const;
+  const customer = await getCustomerStatusForUser(auth.user.id);
+
+  if (customer?.deleted_at) {
+    const supabase = await createServerAuthClient();
+    await supabase.auth.signOut();
+
+    return { user: null, role: null, isCustomer: false, disabled: true } as const;
+  }
+
+  return { user: auth.user, role: auth.role, isCustomer: true, disabled: false } as const;
 }
