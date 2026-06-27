@@ -1,26 +1,6 @@
-import { LoginClient } from "./LoginClient";
+import { type ReactNode } from "react";
 
-function getSingleParam(value: string | string[] | undefined) {
-  if (Array.isArray(value)) return value[0] ?? null;
-  return typeof value === "string" && value.trim().length > 0 ? value : null;
-}
-
-function normalizeNextPath(value: string | string[] | undefined) {
-  const raw = getSingleParam(value);
-  if (!raw || !raw.startsWith("/")) return "/account";
-  if (raw.startsWith("//")) return "/account";
-  return raw;
-}
-
-export default async function AccountLoginPage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
-  const params = await searchParams;
-  const nextPath = normalizeNextPath(params.next);
-  const errorMessage = getSingleParam(params.message);
-
+export function AuthPageShell({ subtitle, children }: { subtitle: string; children: ReactNode }) {
   return (
     <div className="min-h-screen bg-[#111111]">
       <main id="main-content">
@@ -40,10 +20,10 @@ export default async function AccountLoginPage({
             >
               My JDM Garage
             </h1>
-            <p className="text-white/60 text-[14px] mt-2">Welcome back</p>
+            <p className="text-white/60 text-[14px] mt-2">{subtitle}</p>
           </div>
 
-          <LoginClient nextPath={nextPath} errorMessage={errorMessage} />
+          {children}
         </div>
       </main>
     </div>

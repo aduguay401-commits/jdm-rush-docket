@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { type User } from "@supabase/supabase-js";
 
-import { getCurrentCustomerSession } from "@/lib/customer/auth";
+import { getCurrentCustomerSession, SOFT_DELETED_CUSTOMER_MESSAGE } from "@/lib/customer/auth";
 import { createServerAuthClient } from "@/lib/supabase/server-auth";
 
 export type CustomerDocket = {
@@ -141,8 +141,12 @@ function getNameFromMetadata(user: User) {
   return display?.split(/\s+/).filter(Boolean)[0] ?? null;
 }
 
-function buildLoginRedirect(nextPath: string) {
-  return `/account/login?next=${encodeURIComponent(nextPath)}`;
+function buildLoginRedirect(nextPath: string, message?: string) {
+  const params = new URLSearchParams({ next: nextPath });
+  if (message) {
+    params.set("message", message);
+  }
+  return `/account/login?${params.toString()}`;
 }
 
 function hasCustomerAction(docket: CustomerDocket) {
@@ -167,7 +171,7 @@ export async function getCustomerPortalContext({
   const session = await getCurrentCustomerSession();
 
   if (!session.isCustomer || !session.user) {
-    redirect(buildLoginRedirect(nextPath));
+    redirect(buildLoginRedirect(nextPath, session.disabled ? SOFT_DELETED_CUSTOMER_MESSAGE : undefined));
   }
 
   const supabase = await createServerAuthClient();

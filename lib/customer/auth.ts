@@ -1,8 +1,17 @@
+import "server-only";
+
 import { type User } from "@supabase/supabase-js";
 
 import { getCurrentUserRole } from "@/lib/admin/auth";
 import { createServerClient } from "@/lib/supabase/server";
-import { getAppBaseUrl } from "@/lib/urls";
+import { createServerAuthClient } from "@/lib/supabase/server-auth";
+
+export {
+  DEFAULT_CUSTOMER_NEXT_PATH,
+  getCustomerAuthCallbackBaseUrl,
+  getCustomerAuthCallbackUrl,
+  normalizeCustomerNextPath,
+} from "@/lib/customer/auth-shared";
 
 type CustomerMetadata = {
   first_name?: unknown;
@@ -21,6 +30,12 @@ type CustomerStatusRow = {
   deleted_at: string | null;
 };
 
+export const SOFT_DELETED_CUSTOMER_MESSAGE = "This customer account is disabled.";
+
+type CustomerEmailLinkRow = {
+  auth_user_id: string | null;
+};
+
 type CustomerAccountRow = {
   id: string;
 };
@@ -30,12 +45,17 @@ type ClaimableDocketRow = {
   customer_email: string | null;
 };
 
-const DEFAULT_CUSTOMER_NEXT_PATH = "/account";
-
 export class SoftDeletedCustomerError extends Error {
   constructor() {
-    super("Customer account is disabled");
+    super(SOFT_DELETED_CUSTOMER_MESSAGE);
     this.name = "SoftDeletedCustomerError";
+  }
+}
+
+export class EmailAlreadyLinkedError extends Error {
+  constructor() {
+    super("Customer email is already linked to another auth user");
+    this.name = "EmailAlreadyLinkedError";
   }
 }
 
@@ -71,36 +91,6 @@ function getCustomerNames(metadata: CustomerMetadata) {
   return splitDisplayName(metadataString(metadata.full_name) ?? metadataString(metadata.name));
 }
 
-export function normalizeCustomerNextPath(value: unknown) {
-  if (typeof value !== "string") {
-    return DEFAULT_CUSTOMER_NEXT_PATH;
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return DEFAULT_CUSTOMER_NEXT_PATH;
-  }
-
-  try {
-    const baseUrl = new URL(getAppBaseUrl());
-    const resolvedUrl = new URL(trimmed, baseUrl);
-
-    if (resolvedUrl.origin !== baseUrl.origin) {
-      return DEFAULT_CUSTOMER_NEXT_PATH;
-    }
-
-    return `${resolvedUrl.pathname}${resolvedUrl.search}`;
-  } catch {
-    return DEFAULT_CUSTOMER_NEXT_PATH;
-  }
-}
-
-export function getCustomerAuthCallbackUrl(nextPath = DEFAULT_CUSTOMER_NEXT_PATH) {
-  const callbackUrl = new URL("/auth/customer/callback", getAppBaseUrl());
-  callbackUrl.searchParams.set("next", normalizeCustomerNextPath(nextPath));
-  return callbackUrl.toString();
-}
-
 async function getExistingProfile(userId: string) {
   const supabase = createServerClient();
 
@@ -117,7 +107,7 @@ async function getExistingProfile(userId: string) {
   return data ?? null;
 }
 
-async function assertCustomerIsActive(userId: string) {
+async function getCustomerStatusForUser(userId: string) {
   const supabase = createServerClient();
   const { data, error } = await supabase
     .from("customers")
@@ -129,8 +119,31 @@ async function assertCustomerIsActive(userId: string) {
     throw new Error(error.message);
   }
 
-  if (data?.deleted_at) {
+  return data ?? null;
+}
+
+async function assertCustomerIsActive(userId: string) {
+  const customer = await getCustomerStatusForUser(userId);
+
+  if (customer?.deleted_at) {
     throw new SoftDeletedCustomerError();
+  }
+}
+
+async function assertEmailIsAvailableForUser(email: string, userId: string) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("customers")
+    .select("auth_user_id")
+    .eq("email", email)
+    .maybeSingle<CustomerEmailLinkRow>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  if (data && data.auth_user_id !== userId) {
+    throw new EmailAlreadyLinkedError();
   }
 }
 
@@ -185,6 +198,7 @@ export async function provisionCustomerAccount(user: User) {
   const supabase = createServerClient();
 
   await assertCustomerIsActive(user.id);
+  await assertEmailIsAvailableForUser(email, user.id);
 
   const { data: customer, error: customerError } = await supabase
     .from("customers")
@@ -231,8 +245,17 @@ export async function getCurrentCustomerSession() {
   const auth = await getCurrentUserRole();
 
   if (!auth.user || auth.role !== "customer") {
-    return { user: null, role: auth.role, isCustomer: false } as const;
+    return { user: null, role: auth.role, isCustomer: false, disabled: false } as const;
   }
 
-  return { user: auth.user, role: auth.role, isCustomer: true } as const;
+  const customer = await getCustomerStatusForUser(auth.user.id);
+
+  if (customer?.deleted_at) {
+    const supabase = await createServerAuthClient();
+    await supabase.auth.signOut();
+
+    return { user: null, role: null, isCustomer: false, disabled: true } as const;
+  }
+
+  return { user: auth.user, role: auth.role, isCustomer: true, disabled: false } as const;
 }
