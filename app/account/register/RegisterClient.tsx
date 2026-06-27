@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 
 import { ErrorBanner, GoogleIcon, OrDivider, SentStateCard } from "@/app/account/_components/AuthUi";
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
-import { getCustomerAuthCallbackBaseUrl, getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
+import { getCustomerAuthCallbackBaseUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,7 +25,7 @@ function formatPhone(value: string) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-export function RegisterClient({ nextPath }: { nextPath: string }) {
+export function RegisterClient() {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -90,7 +90,7 @@ export function RegisterClient({ nextPath }: { nextPath: string }) {
       email: normalizedEmail,
       password,
       options: {
-        emailRedirectTo: getCustomerAuthCallbackUrl(nextPath),
+        emailRedirectTo: getCustomerAuthCallbackBaseUrl(),
         data: {
           role: "customer",
           ...(firstName ? { first_name: firstName } : {}),
