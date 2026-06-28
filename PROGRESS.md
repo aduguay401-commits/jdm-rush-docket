@@ -142,3 +142,18 @@ Decisions/deviations:
 - The final submit continues sending the existing POST fields and includes the composed `customer_address` value without changing the server contract.
 
 Status: implementation complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard final rework
+
+Summary: applied the final combined fix-list for wizard accessibility, license upload choice, and Supabase SSR auth session refresh reliability.
+
+Files changed:
+- `app/account/docket/[id]/sign/SignClient.tsx` — makes the Step 1 agreement scroll region keyboard-focusable with an accessible label, auto-unlocks the scroll gate when content is not scrollable, and removes unconditional mobile camera capture so customers can choose camera or gallery/file picker.
+- `middleware.ts` — adds Supabase SSR cookie-refresh middleware using the request/response cookie `getAll`/`setAll` pattern, calls `supabase.auth.getUser()` per request, copies Supabase no-cache headers, and excludes static/image assets from the matcher.
+
+Decisions/deviations:
+- The Step 1 scroll-plus-checkbox gate remains intact for scrollable agreements; non-scrollable agreements no longer block keyboard or small-content cases.
+- Auth callbacks and route handlers are unchanged. The middleware only refreshes/persists SSR auth cookies before requests reach the existing Stage 0.5/0.5.1 flows.
+
+Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.

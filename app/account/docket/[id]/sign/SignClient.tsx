@@ -201,6 +201,7 @@ function BackButton({ disabled, onClick }: { disabled?: boolean; onClick: () => 
 export function SignClient({ docketId, vehicle, customerName, agreementText, agreementLabel, agreementType }: SignClientProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
+  const agreementScrollRef = useRef<HTMLDivElement | null>(null);
   const licensePreviewUrlRef = useRef<string | null>(null);
   const [step, setStep] = useState<WizardStep>(1);
   const [hasReadToBottom, setHasReadToBottom] = useState(false);
@@ -232,6 +233,19 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
     const canvas = canvasRef.current;
     if (canvas && step === 2) restoreSignature(canvas, signatureDataUrl);
   }, [step, signatureDataUrl]);
+
+  useEffect(() => {
+    if (step !== 1 || hasReadToBottom) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      const scrollRegion = agreementScrollRef.current;
+      if (scrollRegion && scrollRegion.scrollHeight <= scrollRegion.clientHeight + 1) {
+        setHasReadToBottom(true);
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [agreementText, hasReadToBottom, step]);
 
   const hasAddress = [street, city, province, postalCode].every((value) => value.trim().length > 0);
   const hasName = signedByName.trim().length > 1;
@@ -424,7 +438,13 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
                 <div className="pointer-events-none absolute left-0 top-0 h-full w-[3px] bg-[#E55125]/25" />
                 <div className="pointer-events-none absolute inset-x-5 top-0 h-8 bg-gradient-to-b from-black to-transparent" />
                 <div className="pointer-events-none absolute inset-x-5 bottom-0 h-8 bg-gradient-to-t from-black to-transparent" />
-                <div onScroll={onAgreementScroll} className="max-h-[360px] overflow-y-auto p-5 pr-3 text-[12px] leading-relaxed text-white/70 sm:max-h-[520px]">
+                <div
+                  ref={agreementScrollRef}
+                  onScroll={onAgreementScroll}
+                  tabIndex={0}
+                  aria-label="Scrollable purchase agreement text"
+                  className="max-h-[360px] overflow-y-auto p-5 pr-3 text-[12px] leading-relaxed text-white/70 outline-none focus:border focus:border-[#E55125]/60 sm:max-h-[520px]"
+                >
                   {agreementText.split(/\n{2,}/).map((block, index) => (
                     <p key={index} className="mb-3 whitespace-pre-line">
                       {block}
@@ -517,7 +537,6 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
                   type="file"
                   className="sr-only"
                   accept={ACCEPTED_LICENSE_TYPES}
-                  capture="environment"
                   onChange={(event) => selectLicense(event.target.files?.[0] ?? null)}
                 />
                 <span className="flex h-[52px] w-[36px] shrink-0 items-center justify-center overflow-hidden border border-white/[0.12] bg-black text-[10px] font-bold uppercase text-white/35">
