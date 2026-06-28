@@ -11,10 +11,7 @@
   --font-sans: var(--font-outfit);
 }
 
-html,
 body {
-  max-width: 100vw;
-  overflow-x: hidden;
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-outfit), sans-serif;
@@ -48,5 +45,13 @@ body {
   100% {
     opacity: 0;
     transform: var(--toast-hidden-transform);
+  }
+}
+
+@media (max-width: 767px) {
+  html,
+  body {
+    max-width: 100vw;
+    overflow-x: hidden;
   }
 }

@@ -123,7 +123,7 @@ function StepProgress({ step }: { step: WizardStep }) {
   ];
 
   return (
-    <section className="max-w-[100vw] overflow-x-hidden bg-black border border-white/[0.08] px-4 py-4">
+    <section className="max-w-[100vw] overflow-x-clip bg-black border border-white/[0.08] px-4 py-4">
       <div className="sm:hidden">
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <p className="text-white text-[13px] font-bold uppercase">Step {step} of 4</p>
@@ -163,7 +163,7 @@ function StepProgress({ step }: { step: WizardStep }) {
 
 function Sidebar({ step, vehicle, customerName, agreementLabel }: { step: WizardStep; vehicle: string; customerName: string; agreementLabel: string }) {
   return (
-    <aside className="max-w-full overflow-x-hidden bg-black border border-white/[0.08] p-5 lg:sticky lg:top-24">
+    <aside className="max-w-full overflow-x-clip bg-black border border-white/[0.08] p-5 lg:sticky lg:top-24">
       <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-3">Signing Progress</p>
       <h2 className="break-words text-white text-[18px] font-extrabold leading-tight">{vehicle}</h2>
       <dl className="mt-5 space-y-3 text-[12px]">
@@ -441,7 +441,7 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
 
   if (submitState === "signed") {
     return (
-      <section className="max-w-[100vw] overflow-x-hidden bg-black border border-emerald-400/20 p-6 sm:p-8 text-center">
+      <section className="max-w-[100vw] overflow-x-clip bg-black border border-emerald-400/20 p-6 sm:p-8 text-center">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-emerald-400/40 bg-emerald-400/10 text-2xl text-emerald-300">
           ✓
         </div>
@@ -463,13 +463,13 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
   }
 
   return (
-    <div className="max-w-[100vw] overflow-x-hidden space-y-4">
+    <div className="max-w-[100vw] overflow-x-clip space-y-4">
       <StepProgress step={step} />
 
-      <div className="grid max-w-[100vw] gap-4 overflow-x-hidden lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
-        <div className="min-w-0 max-w-full space-y-4 overflow-x-hidden">
+      <div className="grid max-w-[100vw] gap-4 overflow-x-clip lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
+        <div className="min-w-0 max-w-full space-y-4 overflow-x-clip">
           {step === 1 && (
-            <section className="max-w-full overflow-x-hidden bg-black border border-white/[0.08] p-5 sm:p-6">
+            <section className="max-w-full overflow-x-clip bg-black border border-white/[0.08] p-5 sm:p-6">
               <div className="mb-5 flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
                   <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-2">Step 1 · Review Agreement</p>
@@ -487,9 +487,9 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
                 </div>
               )}
 
-              <div className="relative max-w-full overflow-x-hidden border border-white/[0.08] bg-white/[0.02] p-5 text-[12px] leading-relaxed text-white/70">
+              <div className="relative max-w-full overflow-x-clip border border-white/[0.08] bg-white/[0.02] p-5 text-[12px] leading-relaxed text-white/70">
                 <div className="pointer-events-none absolute left-0 top-0 h-full w-[3px] bg-[#E55125]/25" />
-                <div className="min-w-0 max-w-full overflow-x-hidden" aria-label="Purchase agreement text">
+                <div className="min-w-0 max-w-full overflow-x-clip" aria-label="Purchase agreement text">
                   {agreementText.split(/\n{2,}/).map((block, index) => (
                     <p key={index} className="mb-3 max-w-full whitespace-pre-line break-words">
                       {block}
@@ -520,7 +520,7 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
           )}
 
           {step === 2 && (
-            <section className="max-w-full overflow-x-hidden bg-black border border-white/[0.08] p-5 sm:p-6">
+            <section className="max-w-full overflow-x-clip bg-black border border-white/[0.08] p-5 sm:p-6">
               <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-2">Step 2 · Sign</p>
               <h2 className="text-white text-[24px] font-extrabold tracking-tight mb-5">Your details and signature</h2>
 
@@ -533,7 +533,7 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
                 <Field label="Postal code" name="postalCode" value={postalCode} onChange={setPostalCode} autoComplete="postal-code" />
               </div>
 
-              <div className="mt-6 max-w-full overflow-x-hidden">
+              <div className="mt-6 max-w-full overflow-x-clip">
                 <div className="mb-4 flex items-center justify-between gap-4">
                   <p className="text-white/45 text-[11px] font-bold uppercase tracking-[0.1em]">Draw signature</p>
                   <button type="button" onClick={clearSignature} className="border border-white/[0.12] px-3 py-1.5 text-[11px] font-bold uppercase text-white/55 hover:text-white">
@@ -567,7 +567,7 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
           )}
 
           {step === 3 && (
-            <section className="max-w-full overflow-x-hidden bg-black border border-white/[0.08] p-5 sm:p-6">
+            <section className="max-w-full overflow-x-clip bg-black border border-white/[0.08] p-5 sm:p-6">
               <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-2">Step 3 · Driver Licence</p>
               <h2 className="text-white text-[24px] font-extrabold tracking-tight mb-5">Upload your licence</h2>
 
@@ -605,7 +605,7 @@ export function SignClient({ docketId, vehicle, customerName, agreementText, agr
           )}
 
           {step === 4 && (
-            <section className="max-w-full overflow-x-hidden bg-black border border-white/[0.08] p-5 sm:p-6">
+            <section className="max-w-full overflow-x-clip bg-black border border-white/[0.08] p-5 sm:p-6">
               <p className="text-[#E55125] text-[10px] font-bold uppercase tracking-[0.12em] mb-2">Step 4 · Review and Submit</p>
               <h2 className="text-white text-[24px] font-extrabold tracking-tight mb-5">Confirm your signed agreement</h2>
 

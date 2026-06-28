@@ -74,6 +74,10 @@ const PDF_TEXT_REPLACEMENTS = new Map<string, string>([
   ["\u2265", ">="],
 ]);
 
+function isPdfWhitespace(codepoint: number) {
+  return codepoint === 0x09 || codepoint === 0x0a || codepoint === 0x0d;
+}
+
 export function sanitizePdfText(value: string) {
   return Array.from(value)
     .map((character) => {
@@ -81,7 +85,11 @@ export function sanitizePdfText(value: string) {
       if (replacement !== undefined) return replacement;
 
       const codepoint = character.codePointAt(0);
-      return codepoint !== undefined && codepoint > 0xff ? "?" : character;
+      if (codepoint === undefined) return character;
+      if ((codepoint <= 0x1f && !isPdfWhitespace(codepoint)) || (codepoint >= 0x80 && codepoint <= 0x9f)) {
+        return "?";
+      }
+      return codepoint > 0xff ? "?" : character;
     })
     .join("")
     .replace(/\*\*/g, "");

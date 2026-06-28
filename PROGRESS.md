@@ -189,3 +189,21 @@ Verification:
 - `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
 
 Status: rework complete pending commit and isolated gate.
+
+
+## 2026-06-28 — Wizard sticky sidebar and PDF control sanitizer rework
+
+Summary: fixed the final sticky-sidebar regression and hardened PDF text sanitization for control characters.
+
+Files changed:
+- `app/globals.css` — removes desktop `html/body` horizontal overflow clipping and scopes root `overflow-x: hidden` to mobile widths only.
+- `app/account/docket/[id]/sign/page.tsx` and `SignClient.tsx` — switches sign-page horizontal clipping wrappers from `overflow-x-hidden` to `overflow-x-clip`, preserving viewport clipping without creating sticky-breaking scroll ancestors.
+- `lib/agreements/renderPdf.ts` — keeps existing typographic mappings and also replaces unsafe C0/C1 controls with `?`, while preserving tab, LF, and CR whitespace.
+
+Verification:
+- Browser QA via temporary uncommitted Next harness importing the real `SignClient` PASS.
+- Desktop 1440x900 sticky sidebar PASS: aside top changed from initial `102` to pinned `96`, and stayed `96` after further scroll.
+- Mobile 390x844 and 375x667 PASS on steps 1, 2, 3, and 4: `scrollX` stayed `0`, `documentElement.scrollWidth === clientWidth`, `body.scrollWidth === clientWidth`, and no overflowing elements were detected.
+- Temporary QA route was removed before commit.
+
+Status: rework complete pending commit and isolated gate.

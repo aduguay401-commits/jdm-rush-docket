@@ -73,10 +73,10 @@ export default async function SignAgreementPage({
     : "";
 
   return (
-    <div className="min-h-screen max-w-[100vw] overflow-x-hidden bg-[#111111] text-white">
+    <div className="min-h-screen max-w-[100vw] overflow-x-clip bg-[#111111] text-white">
       <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
 
-      <div className="max-w-[100vw] overflow-x-hidden bg-black border-b border-white/[0.08] px-4 sm:px-6 lg:px-8 pt-7 pb-6 sm:pt-9 sm:pb-8">
+      <div className="max-w-[100vw] overflow-x-clip bg-black border-b border-white/[0.08] px-4 sm:px-6 lg:px-8 pt-7 pb-6 sm:pt-9 sm:pb-8">
         <div className="max-w-[1200px] mx-auto">
           <Link href={carHref} className="inline-flex items-center gap-1.5 text-white/30 hover:text-white/70 text-[12px] font-medium transition-colors mb-4">
             <span aria-hidden>←</span>
@@ -89,7 +89,7 @@ export default async function SignAgreementPage({
         </div>
       </div>
 
-      <main id="main-content" className="max-w-[100vw] overflow-x-hidden px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
+      <main id="main-content" className="max-w-[100vw] overflow-x-clip px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
         <div className="max-w-[1200px] mx-auto">
           {docket.agreement_signed ? (
             <AlreadySigned vehicle={vehicle} />
