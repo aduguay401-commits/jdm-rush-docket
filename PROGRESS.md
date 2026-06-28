@@ -173,3 +173,19 @@ Decisions/deviations:
 - Short agreements unlock the read-to-bottom gate when the end sentinel is already visible or the document does not require scrolling; longer agreements still require reaching the end plus the read checkbox.
 
 Status: implementation complete pending commit and isolated gate. Verification so far: `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Dealer signed PDF sanitizer rework
+
+Summary: fixed the dealer agreement PDF generation failure caused by non-WinAnsi characters in the dealer template.
+
+Files changed:
+- `lib/agreements/renderPdf.ts` — replaces the narrow dash-only cleanup with a reusable PDF text sanitizer that maps common typographic characters to safe ASCII, including `<=`, `>=`, curly quotes, ellipsis, bullets, and dashes, then falls back to `?` for any remaining codepoint above `0x00FF`.
+- `lib/agreements/sign.ts` — applies the same sanitizer to audit-stamp values so customer name, address, user agent, and other submit-time text cannot trip pdf-lib StandardFont encoding.
+
+Verification:
+- Dealer signed PDF generation PASS using the real dealer template, template filler, and `signAgreementPdf` with a PNG signature. Output: `/tmp/dealer-signed-sanitize-check.pdf`, 11,138 bytes, SHA-256 `cd7b1fc60c4d30e3d6ddf2e323a82bce8026cdd07906255d11a3463a0aabe8e3`.
+- Extracted PDF text confirms the 50K clause renders as `(<= CAD $50,000)` and guard text renders as `<= >= 'single' "double" ... - ?`.
+- `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+Status: rework complete pending commit and isolated gate.
