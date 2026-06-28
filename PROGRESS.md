@@ -157,3 +157,19 @@ Decisions/deviations:
 - Auth callbacks and route handlers are unchanged. The middleware only refreshes/persists SSR auth cookies before requests reach the existing Stage 0.5/0.5.1 flows.
 
 Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard polish
+
+Summary: implemented the approved polish pass for `/account/docket/[id]/sign` while keeping the backend signing route and submit contract unchanged.
+
+Files changed:
+- `app/account/docket/[id]/sign/SignClient.tsx` — changes Step 1 to a single page-scroll agreement with sentinel/window-bottom gating, adds compact mobile step progress, preserves instant scroll-to-top on step changes, redraws the signature canvas from its fluid container width, and updates the signed confirmation actions.
+- `app/account/docket/[id]/sign/page.tsx` — clamps the sign page shell to the viewport width to prevent horizontal overflow.
+- `app/globals.css` — applies global horizontal overflow protection on `html` and `body`.
+
+Decisions/deviations:
+- Front-end only: the existing POST payload fields, signing route, storage, email, PDF, hash, and server validation were not changed.
+- Short agreements unlock the read-to-bottom gate when the end sentinel is already visible or the document does not require scrolling; longer agreements still require reaching the end plus the read checkbox.
+
+Status: implementation complete pending commit and isolated gate. Verification so far: `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
