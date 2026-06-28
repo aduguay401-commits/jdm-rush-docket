@@ -2,6 +2,11 @@
 
 ## Open
 
+### 2026-06-28 — Phase 2 agreement schema and buckets must be applied before runtime QA
+
+The Phase 2 agreement engine code depends on Adam-run SQL for `agreement_signatures`, `document_access_log`, `dockets.agreement_sent_at`, and the private `customer-documents` / `signed-agreements` storage buckets. Codex did not run SQL or create buckets per dispatch. Runtime QA should wait until Adam applies the provided SQL.
+
+
 ### 2026-06-25 — Reviewer blocker: customers self-select policy missing
 
 Reviewer found that `public.customers` RLS had no authenticated self-select policy, causing 008/009 ownership subqueries to return zero rows. Fixed in migration 009 with an idempotent `customers_select_self` policy at the top. Adam must run the added statement separately because the first 009 was already applied to production.

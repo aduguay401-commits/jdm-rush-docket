@@ -30,7 +30,13 @@ type VaultCategory = {
 
 function buildVaultCategories(docket: CustomerDocket): VaultCategory[] {
   const reportDate = formatShortDate(docket.approved_at ?? docket.created_at);
+  const agreementDate = formatShortDate(docket.agreement_sent_at ?? docket.approved_at ?? docket.created_at);
   const reportHref = docket.report_url_token ? `/report/${encodeURIComponent(docket.report_url_token)}` : null;
+  const agreementHref = docket.agreement_signed
+    ? `/api/customer/docket/${encodeURIComponent(docket.id)}/agreement`
+    : docket.agreement_sent_at
+      ? `/account/docket/${encodeURIComponent(docket.id)}/sign`
+      : null;
 
   return [
     {
@@ -66,7 +72,12 @@ function buildVaultCategories(docket: CustomerDocket): VaultCategory[] {
       label: "Legal Agreements",
       sublabel: "Signed agreements and contracts",
       docs: [
-        { name: "Purchase Agreement", status: docket.agreement_signed ? "signed" : "pending_signature", date: docket.agreement_signed ? reportDate ?? undefined : undefined },
+        {
+          name: "Purchase Agreement",
+          status: docket.agreement_signed ? "signed" : "pending_signature",
+          date: agreementHref ? agreementDate ?? undefined : undefined,
+          href: agreementHref,
+        },
       ],
     },
   ];
@@ -94,10 +105,10 @@ function StatusChip({ status }: { status: DocStatus }) {
 // ── Document row ──────────────────────────────────────────────────────────────
 
 function DocRow({ doc }: { doc: VaultDoc }) {
-  const canDownload = Boolean(doc.href) && (doc.status === "paid" || doc.status === "signed");
+  const canOpen = Boolean(doc.href) && (doc.status === "paid" || doc.status === "signed" || doc.status === "pending_signature");
   const buttonClass = [
     "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium border transition-colors",
-    canDownload
+    canOpen
       ? "border-white/[0.12] text-white/60 hover:text-white hover:border-white/25"
       : "border-white/[0.04] text-white/15 cursor-not-allowed",
   ].join(" ");
@@ -112,7 +123,7 @@ function DocRow({ doc }: { doc: VaultDoc }) {
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className={`text-[13px] font-medium leading-snug truncate ${canDownload ? "text-white" : "text-white/40"}`}>
+        <p className={`text-[13px] font-medium leading-snug truncate ${canOpen ? "text-white" : "text-white/40"}`}>
           {doc.name}
         </p>
         {doc.date && (
@@ -122,14 +133,14 @@ function DocRow({ doc }: { doc: VaultDoc }) {
 
       <StatusChip status={doc.status} />
 
-      {canDownload && doc.href ? (
+      {canOpen && doc.href ? (
         <Link href={doc.href} className={buttonClass}>
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Open
+          {doc.status === "pending_signature" ? "Sign" : "Open"}
         </Link>
       ) : (
         <button type="button" disabled className={buttonClass}>
@@ -138,7 +149,7 @@ function DocRow({ doc }: { doc: VaultDoc }) {
             <polyline points="7 10 12 15 17 10" />
             <line x1="12" y1="15" x2="12" y2="3" />
           </svg>
-          Download
+          Open
         </button>
       )}
     </div>
@@ -219,7 +230,7 @@ export default async function DocumentsPage({
                   Action needed
                 </p>
                 <p className="text-white/60 text-[13px] leading-relaxed">
-                  Your purchase agreement will appear here when it is ready to sign. Phase 2 unlocks the signing workflow.
+                  ${docket.agreement_sent_at ? "Your purchase agreement is ready. Open the Purchase Agreement row below to review and sign." : "Your purchase agreement will appear here when it is ready to sign."}
                 </p>
               </div>
             </div>

@@ -17,6 +17,7 @@ export async function sendEmail({
   subject,
   html,
   text,
+  attachments,
 }: {
   from: string;
   to: string;
@@ -24,6 +25,7 @@ export async function sendEmail({
   subject: string;
   html?: string;
   text?: string;
+  attachments?: { filename: string; content: Buffer; contentType?: string }[];
 }) {
   const formattedFrom = from.includes('<')
     ? from
@@ -36,6 +38,7 @@ export async function sendEmail({
     subject,
     ...(html ? { html } : {}),
     ...(text ? { text } : {}),
+    ...(attachments ? { attachments } : {}),
   });
   return { data: result, error: null };
 }
