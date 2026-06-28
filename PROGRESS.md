@@ -126,3 +126,19 @@ Decisions/deviations:
 - SQL and bucket creation remain Adam-run-only.
 
 Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS. Full build will be verified by the isolated Docket gate with env symlinks after commit/push.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard front-end redesign
+
+Summary: rebuilt `/account/docket/[id]/sign` as the approved 4-step front-end wizard while leaving the verified signing POST route and backend contract unchanged.
+
+Files changed:
+- `app/account/docket/[id]/sign/page.tsx` — simplified the server page to load the filled agreement and pass wizard data into the client while preserving authenticated ownership, missing-path, and already-signed states.
+- `app/account/docket/[id]/sign/SignClient.tsx` — replaces the single-page form with the 4-step wizard: Review with scroll-to-bottom plus read checkbox gate, Sign with address/signature/legal-name/date gate, License upload with drag/drop/camera capture and validation, and Review/Submit with read-only summary and existing confirmation state.
+
+Decisions/deviations:
+- Front-end only: the existing sign POST route, PDF generation, signature embed, hash, private storage, email attachment, 409 handling, and RLS/server validation were not changed.
+- Wizard back navigation preserves address, signature image, legal name, date, and license selection in client state until final submit.
+- The final submit continues sending the existing POST fields and includes the composed `customer_address` value without changing the server contract.
+
+Status: implementation complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
