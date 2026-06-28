@@ -76,3 +76,84 @@ Decisions/deviations:
 - Did not change other `/account` pages or production SQL.
 
 Status: implementation complete. Verification: npm run type-check PASS; npm run lint PASS with baseline warnings only; isolated Docket worktree gate PASS (lint/type-check/build), with the production build run outside the live checkout.
+
+
+## 2026-06-28 — Phase 2 Agreement Engine
+
+Summary: built the authenticated customer purchase-agreement signing flow and guarded agent agreement-sending/document-access routes.
+
+Files changed:
+- `lib/agreements/templates.ts` — bundles the approved auction and dealer agreement markdown as TypeScript constants and selects dealer only for `private_dealer`.
+- `lib/agreements/fillTemplate.ts` — fills the eight agreement variables, with customer address supplied by the signing form.
+- `lib/agreements/renderPdf.ts` — renders the filled markdown into a flat pdf-lib PDF with headings, bullets, rules, wrapping, and pagination.
+- `lib/agreements/sign.ts` — appends the signature image and audit stamp, then computes the SHA-256 hash of stored PDF bytes.
+- `lib/storage/agreements.ts` and `lib/storage/licenses.ts` — upload signed PDFs and driver licenses to the private buckets, mint 300-second signed URLs, and log license access.
+- `lib/emails/signedAgreement.ts` — adds branded signed-agreement confirmation email HTML/text for the customer attachment email.
+- `lib/email.ts` — passes optional Nodemailer attachments through `sendEmail`.
+- `app/account/docket/[id]/sign/page.tsx` and `SignClient.tsx` — add the mobile-first agreement review/signing UI with address fields, signature canvas, required license upload, checklist-gated submit, and confirmation/already-signed states.
+- `app/api/customer/docket/[id]/sign/route.ts` — verifies customer ownership via the authenticated RLS client, rejects re-signs, uploads license/PDF, inserts `agreement_signatures`, marks the docket signed, and emails the signed PDF attachment.
+- `app/api/customer/docket/[id]/agreement/route.ts` — verifies customer ownership and redirects to a short-lived signed agreement URL.
+- `app/api/agent/send-agreement/route.ts` — guards with `requireAdminOrAgent()`, requires a chosen purchase path, stamps `agreement_sent_at`, and emails the signing link.
+- `app/api/agent/documents/license/[id]/route.ts` — guards with `requireAdminOrAgent()`, logs document access, and redirects to a short-lived license URL.
+- `app/agent/docket/[id]/page.tsx` — adds the Send Agreement action to approved dockets and selects agreement state fields.
+- `app/account/documents/page.tsx` — links the Purchase Agreement vault row to signing when sent/unsigned and to the signed-PDF endpoint when signed.
+- `lib/customer/dashboard.ts` — includes `agreement_sent_at` in customer docket context.
+- `package.json` and `package-lock.json` — add the approved `pdf-lib` dependency.
+
+Decisions/deviations:
+- No SQL was run and no buckets were created by Codex. The code expects Adam to apply the Phase 2 schema/bucket SQL before runtime QA.
+- The customer signed-PDF download endpoint was added because the vault row needs a guarded route for the private `signed-agreements` bucket.
+- The stored PDF hash is calculated from the final stored PDF bytes and saved in `agreement_signatures.pdf_hash`; the visible audit page notes that the hash is stored in the database.
+- The live checkout has stale `.next/types`; type-check was verified in a disposable clean worktree with this patch applied.
+
+Status: implementation complete pending isolated nm-gate after commit/push. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Phase 2 Agreement Engine rework
+
+Summary: applied consolidated Reviewer/QA fixes for deployment safety, legal correctness, idempotency, error hygiene, and signature image retention.
+
+Files changed:
+- `lib/customer/dashboard.ts` — removes `agreement_sent_at` from the shared customer portal `DOCKET_SELECT` so existing `/account` pages do not 500 before Adam applies the Phase 2 column.
+- `app/account/documents/page.tsx` — fetches `agreement_sent_at` only for the document vault, tolerates the pre-SQL missing-column state, and fixes the stray literal template marker in banner copy.
+- `app/account/docket/[id]/sign/page.tsx` — requires a chosen purchase path before rendering the dealer/auction agreement instead of defaulting to auction.
+- `app/api/customer/docket/[id]/sign/route.ts` — rejects missing purchase path with 400, returns 413 for oversize licenses, returns JSON storage errors, catches unique `agreement_signatures.docket_id` conflicts as 409, and records a stored signature PNG path.
+- `lib/storage/licenses.ts` — adds private-bucket upload support for drawn signature PNGs at UUID paths.
+
+Decisions/deviations:
+- The document vault is the only customer flow that selects `agreement_sent_at`; if the column is not applied yet it treats the agreement as unsent instead of breaking the portal.
+- Signature PNGs are stored in the private `customer-documents` bucket alongside licenses, using UUID object paths and no original filenames.
+- SQL and bucket creation remain Adam-run-only.
+
+Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS. Full build will be verified by the isolated Docket gate with env symlinks after commit/push.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard front-end redesign
+
+Summary: rebuilt `/account/docket/[id]/sign` as the approved 4-step front-end wizard while leaving the verified signing POST route and backend contract unchanged.
+
+Files changed:
+- `app/account/docket/[id]/sign/page.tsx` — simplified the server page to load the filled agreement and pass wizard data into the client while preserving authenticated ownership, missing-path, and already-signed states.
+- `app/account/docket/[id]/sign/SignClient.tsx` — replaces the single-page form with the 4-step wizard: Review with scroll-to-bottom plus read checkbox gate, Sign with address/signature/legal-name/date gate, License upload with drag/drop/camera capture and validation, and Review/Submit with read-only summary and existing confirmation state.
+
+Decisions/deviations:
+- Front-end only: the existing sign POST route, PDF generation, signature embed, hash, private storage, email attachment, 409 handling, and RLS/server validation were not changed.
+- Wizard back navigation preserves address, signature image, legal name, date, and license selection in client state until final submit.
+- The final submit continues sending the existing POST fields and includes the composed `customer_address` value without changing the server contract.
+
+Status: implementation complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard final rework
+
+Summary: applied the final combined fix-list for wizard accessibility, license upload choice, and Supabase SSR auth session refresh reliability.
+
+Files changed:
+- `app/account/docket/[id]/sign/SignClient.tsx` — makes the Step 1 agreement scroll region keyboard-focusable with an accessible label, auto-unlocks the scroll gate when content is not scrollable, and removes unconditional mobile camera capture so customers can choose camera or gallery/file picker.
+- `middleware.ts` — adds Supabase SSR cookie-refresh middleware using the request/response cookie `getAll`/`setAll` pattern, calls `supabase.auth.getUser()` per request, copies Supabase no-cache headers, and excludes static/image assets from the matcher.
+
+Decisions/deviations:
+- The Step 1 scroll-plus-checkbox gate remains intact for scrollable agreements; non-scrollable agreements no longer block keyboard or small-content cases.
+- Auth callbacks and route handlers are unchanged. The middleware only refreshes/persists SSR auth cookies before requests reach the existing Stage 0.5/0.5.1 flows.
+
+Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.

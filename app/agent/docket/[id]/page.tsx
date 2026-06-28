@@ -20,6 +20,8 @@ type Docket = {
   status: string | null;
   chosen_path: string | null;
   selected_path: string | null;
+  agreement_sent_at?: string | null;
+  agreement_signed?: boolean | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_email: string | null;
@@ -871,6 +873,8 @@ export default function AgentDocketDetailPage({
   const [sendingReminder, setSendingReminder] = useState(false);
   const [reminderSent, setReminderSent] = useState(false);
   const [reminderError, setReminderError] = useState<string | null>(null);
+  const [sendingAgreement, setSendingAgreement] = useState(false);
+  const [agreementConfirmation, setAgreementConfirmation] = useState<string | null>(null);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
   const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
@@ -906,6 +910,9 @@ export default function AgentDocketDetailPage({
     ? getCustomerReportUrl(docket.report_url_token)
     : null;
   const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
+  const agreementSentAt = docket?.agreement_sent_at ?? null;
+  const agreementSigned = Boolean(docket?.agreement_signed);
+  const canSendAgreement = Boolean(docket && chosenPath && !agreementSigned);
   const auctionHasMeaningfulData = hasAuctionMeaningfulData({
     hammerPriceLowJpy,
     hammerPriceHighJpy,
@@ -1095,7 +1102,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
+          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, agreement_sent_at, agreement_signed, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
         )
         .eq("id", id)
         .maybeSingle();
@@ -1535,6 +1542,35 @@ export default function AgentDocketDetailPage({
     setDocket((prev) => (prev ? { ...prev, status: "research_in_progress" } : prev));
     setProceedConfirmation("Confirmed. You can now complete and send the research report below.");
     setProceeding(false);
+  }
+
+  async function sendAgreement() {
+    if (!docket || !canSendAgreement || sendingAgreement) {
+      return;
+    }
+
+    setSendingAgreement(true);
+    setAgreementConfirmation(null);
+    setError(null);
+
+    const response = await fetch("/api/agent/send-agreement", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ docketId: docket.id }),
+    });
+    const result = (await response.json()) as { success?: boolean; error?: string; agreementSentAt?: string };
+
+    if (!response.ok || !result.success) {
+      setError(result.error ?? "Failed to send agreement.");
+      setSendingAgreement(false);
+      return;
+    }
+
+    setDocket((prev) => (prev ? { ...prev, agreement_sent_at: result.agreementSentAt ?? new Date().toISOString() } : prev));
+    setAgreementConfirmation("Agreement sent to customer.");
+    setSendingAgreement(false);
   }
 
   async function rollbackResearchToCommunication() {
@@ -2536,9 +2572,22 @@ export default function AgentDocketDetailPage({
 
             {currentStatus === "decision_made" ? (
               <section className="rounded-xl border border-white/12 border-l-4 border-l-[#22c55e] bg-[#22c55e]/10 p-5">
-                <p className="text-sm font-medium text-white">
-                  Customer has approved — {formatChosenPath(chosenPath)}. Awaiting deposit and purchase agreement.
-                </p>
+                <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      Customer has approved - {formatChosenPath(chosenPath)}. {agreementSigned ? "Agreement signed." : agreementSentAt ? "Agreement sent; awaiting signature." : "Send the purchase agreement when ready."}
+                    </p>
+                    {agreementConfirmation ? <p className="mt-2 text-sm text-emerald-300">{agreementConfirmation}</p> : null}
+                  </div>
+                  <button
+                    className="inline-flex rounded-lg bg-[#E55125] px-4 py-2 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={!canSendAgreement || sendingAgreement}
+                    onClick={sendAgreement}
+                    type="button"
+                  >
+                    {sendingAgreement ? "Sending..." : agreementSentAt ? "Resend Agreement" : "Send Agreement"}
+                  </button>
+                </div>
               </section>
             ) : null}
 
