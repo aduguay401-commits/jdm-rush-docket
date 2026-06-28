@@ -47,6 +47,36 @@ export async function uploadLicenseDocument({
   return path;
 }
 
+export async function uploadSignatureImage({
+  docketId,
+  signatureDataUrl,
+}: {
+  docketId: string;
+  signatureDataUrl: string;
+}) {
+  const prefix = "data:image/png;base64,";
+  if (!signatureDataUrl.startsWith(prefix)) {
+    throw new Error("Signature image must be a PNG data URL");
+  }
+
+  const bytes = Buffer.from(signatureDataUrl.slice(prefix.length), "base64");
+  if (bytes.length === 0) {
+    throw new Error("Signature image is empty");
+  }
+
+  const path = docketId + "/" + crypto.randomUUID() + ".png";
+  const supabase = createServerClient();
+  const { error } = await supabase.storage
+    .from(CUSTOMER_DOCUMENTS_BUCKET)
+    .upload(path, bytes, {
+      contentType: "image/png",
+      upsert: false,
+    });
+
+  if (error) throw new Error(error.message);
+  return path;
+}
+
 export async function createLicenseSignedUrl(path: string, expiresIn = 300) {
   const supabase = createServerClient();
   const { data, error } = await supabase.storage

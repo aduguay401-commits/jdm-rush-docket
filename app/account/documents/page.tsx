@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createServerAuthClient } from "@/lib/supabase/server-auth";
 import { AccountHeader } from "@/app/account/_components/header";
 import { PageHeader } from "@/app/account/_components/page-header";
 import {
@@ -28,13 +29,13 @@ type VaultCategory = {
   docs: VaultDoc[];
 };
 
-function buildVaultCategories(docket: CustomerDocket): VaultCategory[] {
+function buildVaultCategories(docket: CustomerDocket, agreementSentAt: string | null): VaultCategory[] {
   const reportDate = formatShortDate(docket.approved_at ?? docket.created_at);
-  const agreementDate = formatShortDate(docket.agreement_sent_at ?? docket.approved_at ?? docket.created_at);
+  const agreementDate = formatShortDate(agreementSentAt ?? docket.approved_at ?? docket.created_at);
   const reportHref = docket.report_url_token ? `/report/${encodeURIComponent(docket.report_url_token)}` : null;
   const agreementHref = docket.agreement_signed
     ? `/api/customer/docket/${encodeURIComponent(docket.id)}/agreement`
-    : docket.agreement_sent_at
+    : agreementSentAt
       ? `/account/docket/${encodeURIComponent(docket.id)}/sign`
       : null;
 
@@ -92,6 +93,25 @@ const STATUS_CONFIG: Record<DocStatus, { label: string; className: string }> = {
   pending_signature:{ label: "Awaiting signature",  className: "bg-amber-400/10 text-amber-400/80 border border-amber-400/20" },
   pending:          { label: "Not yet available",   className: "bg-white/5 text-white/30 border border-white/[0.08]" },
 };
+
+async function getAgreementSentAt(docketId: string) {
+  const supabase = await createServerAuthClient();
+  const { data, error } = await supabase
+    .from("dockets")
+    .select("agreement_sent_at")
+    .eq("id", docketId)
+    .maybeSingle<{ agreement_sent_at: string | null }>();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (error.code === "42703" || message.includes("agreement_sent_at") || message.includes("does not exist")) {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+
+  return data?.agreement_sent_at ?? null;
+}
 
 function StatusChip({ status }: { status: DocStatus }) {
   const cfg = STATUS_CONFIG[status];
@@ -202,7 +222,8 @@ export default async function DocumentsPage({
   });
   const docket = context.selectedDocket!;
   const vehicle = getVehicleLabel(docket);
-  const categories = buildVaultCategories(docket);
+  const agreementSentAt = await getAgreementSentAt(docket.id);
+  const categories = buildVaultCategories(docket, agreementSentAt);
   const messagesHref = getDocketHref("/account/messages", docket.id);
 
   return (
@@ -230,7 +251,7 @@ export default async function DocumentsPage({
                   Action needed
                 </p>
                 <p className="text-white/60 text-[13px] leading-relaxed">
-                  ${docket.agreement_sent_at ? "Your purchase agreement is ready. Open the Purchase Agreement row below to review and sign." : "Your purchase agreement will appear here when it is ready to sign."}
+                  {agreementSentAt ? "Your purchase agreement is ready. Open the Purchase Agreement row below to review and sign." : "Your purchase agreement will appear here when it is ready to sign."}
                 </p>
               </div>
             </div>

@@ -3,7 +3,7 @@ import { headers } from "next/headers";
 import { signAgreementPdf } from "@/lib/agreements/sign";
 import { fillAgreementTemplate } from "@/lib/agreements/fillTemplate";
 import { pickTemplate } from "@/lib/agreements/templates";
-import { getLicenseExtension, uploadLicenseDocument } from "@/lib/storage/licenses";
+import { MAX_LICENSE_BYTES, getLicenseExtension, uploadLicenseDocument, uploadSignatureImage } from "@/lib/storage/licenses";
 import { uploadSignedAgreementPdf } from "@/lib/storage/agreements";
 import { buildSignedAgreementEmail } from "@/lib/emails/signedAgreement";
 import { sendEmail } from "@/lib/email";
@@ -26,6 +26,10 @@ type SigningDocket = {
   chosen_path?: string | null;
   agreement_signed: boolean | null;
 };
+
+function jsonError(error: string, status: number) {
+  return Response.json({ success: false, error }, { status });
+}
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -65,7 +69,7 @@ export async function POST(
   const { data: auth } = await authSupabase.auth.getUser();
 
   if (!auth.user) {
-    return Response.json({ success: false, error: "Login required" }, { status: 401 });
+    return jsonError("Login required", 401);
   }
 
   const { data: docket, error: docketError } = await authSupabase
@@ -75,18 +79,29 @@ export async function POST(
     .maybeSingle<SigningDocket>();
 
   if (docketError) {
-    return Response.json({ success: false, error: docketError.message }, { status: 500 });
+    return jsonError(docketError.message, 500);
   }
 
   if (!docket) {
-    return Response.json({ success: false, error: "Not authorized for this docket" }, { status: 403 });
+    return jsonError("Not authorized for this docket", 403);
   }
 
   if (docket.agreement_signed) {
-    return Response.json({ success: false, error: "Agreement is already signed" }, { status: 409 });
+    return jsonError("Agreement is already signed", 409);
   }
 
-  const formData = await request.formData();
+  const chosenPath = docket.chosen_path ?? docket.selected_path;
+  if (!chosenPath) {
+    return jsonError("A purchase path must be selected before this agreement can be signed", 400);
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return jsonError("Unable to read signing form data", 400);
+  }
+
   const signedByName = formString(formData, "signedByName");
   const signedDate = formString(formData, "signedDate");
   const signatureDataUrl = formString(formData, "signatureDataUrl");
@@ -94,15 +109,27 @@ export async function POST(
   const license = formData.get("license");
 
   if (!address.street || !address.city || !address.province || !address.postalCode) {
-    return Response.json({ success: false, error: "Complete address is required" }, { status: 400 });
+    return jsonError("Complete address is required", 400);
   }
 
   if (!signedByName || !signedDate || !signatureDataUrl) {
-    return Response.json({ success: false, error: "Signature, legal name, and date are required" }, { status: 400 });
+    return jsonError("Signature, legal name, and date are required", 400);
+  }
+
+  if (!signatureDataUrl.startsWith("data:image/png;base64,")) {
+    return jsonError("Signature image must be a PNG", 400);
   }
 
   if (!(license instanceof File) || !getLicenseExtension(license.type)) {
-    return Response.json({ success: false, error: "A JPG, PNG, HEIC, WEBP, or PDF driver license is required" }, { status: 400 });
+    return jsonError("A JPG, PNG, HEIC, WEBP, or PDF driver license is required", 400);
+  }
+
+  if (license.size <= 0) {
+    return jsonError("Driver license file is empty", 400);
+  }
+
+  if (license.size > MAX_LICENSE_BYTES) {
+    return jsonError("Driver license must be 10 MB or smaller", 413);
   }
 
   const headersList = await headers();
@@ -112,23 +139,38 @@ export async function POST(
   const signedAt = new Date().toISOString();
   const ipAddress = getClientIp(headersList);
   const userAgent = headersList.get("user-agent");
-  const { pdfBytes, sha256 } = await signAgreementPdf({
-    filledAgreementMarkdown,
-    signatureDataUrl,
-    signedByName,
-    signedByEmail: customerEmail,
-    customerAddress: address.full,
-    docketId: docket.id,
-    agreementType: template.type,
-    signedAt,
-    ipAddress,
-    userAgent,
-  });
 
-  const licensePath = await uploadLicenseDocument({ docketId: docket.id, file: license });
-  const pdfPath = await uploadSignedAgreementPdf({ docketId: docket.id, pdfBytes });
+  let signedPdf: { pdfBytes: Uint8Array; sha256: string };
+  try {
+    signedPdf = await signAgreementPdf({
+      filledAgreementMarkdown,
+      signatureDataUrl,
+      signedByName,
+      signedByEmail: customerEmail,
+      customerAddress: address.full,
+      docketId: docket.id,
+      agreementType: template.type,
+      signedAt,
+      ipAddress,
+      userAgent,
+    });
+  } catch {
+    return jsonError("Unable to generate the signed agreement PDF", 500);
+  }
+
+  let licensePath: string;
+  let signatureImagePath: string;
+  let pdfPath: string;
+  try {
+    licensePath = await uploadLicenseDocument({ docketId: docket.id, file: license });
+    signatureImagePath = await uploadSignatureImage({ docketId: docket.id, signatureDataUrl });
+    pdfPath = await uploadSignedAgreementPdf({ docketId: docket.id, pdfBytes: signedPdf.pdfBytes });
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : "Unable to securely store agreement documents";
+    return jsonError(message, 500);
+  }
+
   const serviceSupabase = createServerClient();
-
   const { error: insertError } = await serviceSupabase.from("agreement_signatures").insert({
     docket_id: docket.id,
     agreement_type: template.type,
@@ -138,9 +180,9 @@ export async function POST(
     signed_at: signedAt,
     ip_address: ipAddress,
     user_agent: userAgent,
-    signature_image_path: null,
+    signature_image_path: signatureImagePath,
     pdf_path: pdfPath,
-    pdf_hash: sha256,
+    pdf_hash: signedPdf.sha256,
     license_path: licensePath,
     metadata: {
       signed_date: signedDate,
@@ -150,7 +192,10 @@ export async function POST(
   });
 
   if (insertError) {
-    return Response.json({ success: false, error: insertError.message }, { status: 500 });
+    if (insertError.code === "23505") {
+      return jsonError("Agreement is already signed", 409);
+    }
+    return jsonError(insertError.message, 500);
   }
 
   const { error: updateError } = await serviceSupabase
@@ -159,7 +204,7 @@ export async function POST(
     .eq("id", docket.id);
 
   if (updateError) {
-    return Response.json({ success: false, error: updateError.message }, { status: 500 });
+    return jsonError(updateError.message, 500);
   }
 
   const fromEmail = process.env.FROM_EMAIL;
@@ -167,7 +212,7 @@ export async function POST(
   const devMode = process.env.DEV_MODE === "true";
 
   if (!fromEmail) {
-    return Response.json({ success: false, error: "Email configuration is missing" }, { status: 500 });
+    return jsonError("Email configuration is missing", 500);
   }
 
   const recipientEmail = devMode ? adminEmail : customerEmail;
@@ -183,29 +228,29 @@ export async function POST(
   const sendResult = await sendEmail({
     from: fromEmail,
     to: recipientEmail,
-    subject: `Signed purchase agreement for ${vehicle}`,
+    subject: "Signed purchase agreement for " + vehicle,
     html: email.html,
     text: email.text,
     attachments: [
       {
-        filename: `JDM-Rush-Purchase-Agreement-${docket.id}.pdf`,
-        content: Buffer.from(pdfBytes),
+        filename: "JDM-Rush-Purchase-Agreement-" + docket.id + ".pdf",
+        content: Buffer.from(signedPdf.pdfBytes),
         contentType: "application/pdf",
       },
     ],
   });
 
   if (sendResult.error) {
-    return Response.json({ success: false, error: "Agreement signed, but email failed to send" }, { status: 500 });
+    return jsonError("Agreement signed, but email failed to send", 500);
   }
 
   await serviceSupabase.from("email_log").insert({
     docket_id: docket.id,
     email_type: "email_6_signed_agreement",
     recipient_email: recipientEmail,
-    subject: `Signed purchase agreement for ${vehicle}`,
+    subject: "Signed purchase agreement for " + vehicle,
     body_snapshot: email.html,
   });
 
-  return Response.json({ success: true, pdfHash: sha256 });
+  return Response.json({ success: true, pdfHash: signedPdf.sha256 });
 }

@@ -18,4 +18,9 @@ Stage 0.4 customer portal child-table reads and message inserts depend on `supab
 
 ## Resolved
 
+### 2026-06-28 — Phase 2 pre-SQL portal safety rework
+
+Reviewer/QA found that selecting `agreement_sent_at` in shared customer portal context made existing /account pages 500 before Adam applied the Phase 2 column. Fixed by removing it from the shared select and fetching it only in the document vault with a missing-column fallback.
+
+
 None yet.

@@ -91,6 +91,20 @@ function AgreementBody({ agreementText }: { agreementText: string }) {
   );
 }
 
+function MissingPurchasePath({ vehicle }: { vehicle: string }) {
+  return (
+    <section className="bg-black border border-amber-400/20 p-6 sm:p-8 text-center">
+      <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-amber-400/40 bg-amber-400/10 text-xl text-amber-300">
+        !
+      </div>
+      <h1 className="text-white text-[24px] font-extrabold tracking-tight">Agreement Not Ready</h1>
+      <p className="mt-3 text-white/55 text-[13px] leading-relaxed">
+        The purchase path for {vehicle} has not been selected yet. JDM Rush will send the correct agreement after your auction or dealer path is locked.
+      </p>
+    </section>
+  );
+}
+
 function AlreadySigned({ vehicle }: { vehicle: string }) {
   return (
     <section className="bg-black border border-emerald-400/20 p-6 sm:p-8 text-center">
@@ -129,10 +143,14 @@ export default async function SignAgreementPage({
   const vehicle = getVehicleLabel(docket);
   const messagesHref = getDocketHref("/account/messages", docket.id);
   const carHref = getDocketHref("/account/car", docket.id);
-  const template = pickTemplate(docket);
-  const agreementText = fillAgreementTemplate(template.body, docket, {
-    customer_address: "Address provided in the signing form below",
-  });
+  const chosenPath = docket.chosen_path ?? docket.selected_path;
+  const canRenderAgreement = Boolean(chosenPath);
+  const template = canRenderAgreement ? pickTemplate(docket) : null;
+  const agreementText = template
+    ? fillAgreementTemplate(template.body, docket, {
+        customer_address: "Address provided in the signing form below",
+      })
+    : "";
 
   return (
     <div className="min-h-screen bg-[#111111] text-white">
@@ -157,6 +175,8 @@ export default async function SignAgreementPage({
 
           {docket.agreement_signed ? (
             <AlreadySigned vehicle={vehicle} />
+          ) : !canRenderAgreement || !template ? (
+            <MissingPurchasePath vehicle={vehicle} />
           ) : (
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-start">
               <div className="space-y-4 min-w-0">

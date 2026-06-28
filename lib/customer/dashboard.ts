@@ -21,7 +21,6 @@ export type CustomerDocket = {
   chosen_path?: string | null;
   chosen_dealer_index?: number | null;
   approved_at?: string | null;
-  agreement_sent_at?: string | null;
   agreement_signed: boolean | null;
   deposit_paid: boolean | null;
   report_url_token: string | null;
@@ -123,7 +122,6 @@ const DOCKET_SELECT = [
   "chosen_path",
   "chosen_dealer_index",
   "approved_at",
-  "agreement_sent_at",
   "agreement_signed",
   "deposit_paid",
   "report_url_token",
