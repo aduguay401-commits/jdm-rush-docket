@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 
-import { renderAgreementPdf } from "@/lib/agreements/renderPdf";
+import { renderAgreementPdf, sanitizePdfText } from "@/lib/agreements/renderPdf";
 
 export type SignAgreementInput = {
   filledAgreementMarkdown: string;
@@ -92,7 +92,7 @@ export async function signAgreementPdf(input: SignAgreementInput): Promise<{ pdf
   let y = 474;
   for (const [label, value] of auditRows) {
     page.drawText(`${label}:`, { x: 54, y, size: 9.5, font: boldFont, color: rgb(0.08, 0.08, 0.08) });
-    page.drawText(String(value).slice(0, 96), { x: 142, y, size: 9.5, font, color: rgb(0.16, 0.16, 0.16) });
+    page.drawText(sanitizePdfText(String(value)).slice(0, 96), { x: 142, y, size: 9.5, font, color: rgb(0.16, 0.16, 0.16) });
     y -= 18;
   }
 

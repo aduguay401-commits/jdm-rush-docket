@@ -157,3 +157,53 @@ Decisions/deviations:
 - Auth callbacks and route handlers are unchanged. The middleware only refreshes/persists SSR auth cookies before requests reach the existing Stage 0.5/0.5.1 flows.
 
 Status: rework complete pending commit and isolated gate. Verification so far: `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Phase 2 Agreement Wizard polish
+
+Summary: implemented the approved polish pass for `/account/docket/[id]/sign` while keeping the backend signing route and submit contract unchanged.
+
+Files changed:
+- `app/account/docket/[id]/sign/SignClient.tsx` — changes Step 1 to a single page-scroll agreement with sentinel/window-bottom gating, adds compact mobile step progress, preserves instant scroll-to-top on step changes, redraws the signature canvas from its fluid container width, and updates the signed confirmation actions.
+- `app/account/docket/[id]/sign/page.tsx` — clamps the sign page shell to the viewport width to prevent horizontal overflow.
+- `app/globals.css` — applies global horizontal overflow protection on `html` and `body`.
+
+Decisions/deviations:
+- Front-end only: the existing POST payload fields, signing route, storage, email, PDF, hash, and server validation were not changed.
+- Short agreements unlock the read-to-bottom gate when the end sentinel is already visible or the document does not require scrolling; longer agreements still require reaching the end plus the read checkbox.
+
+Status: implementation complete pending commit and isolated gate. Verification so far: `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+
+## 2026-06-28 — Dealer signed PDF sanitizer rework
+
+Summary: fixed the dealer agreement PDF generation failure caused by non-WinAnsi characters in the dealer template.
+
+Files changed:
+- `lib/agreements/renderPdf.ts` — replaces the narrow dash-only cleanup with a reusable PDF text sanitizer that maps common typographic characters to safe ASCII, including `<=`, `>=`, curly quotes, ellipsis, bullets, and dashes, then falls back to `?` for any remaining codepoint above `0x00FF`.
+- `lib/agreements/sign.ts` — applies the same sanitizer to audit-stamp values so customer name, address, user agent, and other submit-time text cannot trip pdf-lib StandardFont encoding.
+
+Verification:
+- Dealer signed PDF generation PASS using the real dealer template, template filler, and `signAgreementPdf` with a PNG signature. Output: `/tmp/dealer-signed-sanitize-check.pdf`, 11,138 bytes, SHA-256 `cd7b1fc60c4d30e3d6ddf2e323a82bce8026cdd07906255d11a3463a0aabe8e3`.
+- Extracted PDF text confirms the 50K clause renders as `(<= CAD $50,000)` and guard text renders as `<= >= 'single' "double" ... - ?`.
+- `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; clean temporary worktree `npm run type-check` PASS.
+
+Status: rework complete pending commit and isolated gate.
+
+
+## 2026-06-28 — Wizard sticky sidebar and PDF control sanitizer rework
+
+Summary: fixed the final sticky-sidebar regression and hardened PDF text sanitization for control characters.
+
+Files changed:
+- `app/globals.css` — removes desktop `html/body` horizontal overflow clipping and scopes root `overflow-x: hidden` to mobile widths only.
+- `app/account/docket/[id]/sign/page.tsx` and `SignClient.tsx` — switches sign-page horizontal clipping wrappers from `overflow-x-hidden` to `overflow-x-clip`, preserving viewport clipping without creating sticky-breaking scroll ancestors.
+- `lib/agreements/renderPdf.ts` — keeps existing typographic mappings and also replaces unsafe C0/C1 controls with `?`, while preserving tab, LF, and CR whitespace.
+
+Verification:
+- Browser QA via temporary uncommitted Next harness importing the real `SignClient` PASS.
+- Desktop 1440x900 sticky sidebar PASS: aside top changed from initial `102` to pinned `96`, and stayed `96` after further scroll.
+- Mobile 390x844 and 375x667 PASS on steps 1, 2, 3, and 4: `scrollX` stayed `0`, `documentElement.scrollWidth === clientWidth`, `body.scrollWidth === clientWidth`, and no overflowing elements were detected.
+- Temporary QA route was removed before commit.
+
+Status: rework complete pending commit and isolated gate.

@@ -49,8 +49,50 @@ function ensureSpace(ctx: PdfContext, height: number) {
   }
 }
 
-function stripMarkdown(value: string) {
-  return value.replace(/\*\*/g, "").replace(/[–—]/g, "-");
+const PDF_TEXT_REPLACEMENTS = new Map<string, string>([
+  ["\u00a0", " "],
+  ["\u2010", "-"],
+  ["\u2011", "-"],
+  ["\u2012", "-"],
+  ["\u2013", "-"],
+  ["\u2014", "-"],
+  ["\u2015", "-"],
+  ["\u2018", "'"],
+  ["\u2019", "'"],
+  ["\u201a", "'"],
+  ["\u201b", "'"],
+  ["\u201c", "\""],
+  ["\u201d", "\""],
+  ["\u201e", "\""],
+  ["\u201f", "\""],
+  ["\u2022", "-"],
+  ["\u2026", "..."],
+  ["\u2032", "'"],
+  ["\u2033", "\""],
+  ["\u2212", "-"],
+  ["\u2264", "<="],
+  ["\u2265", ">="],
+]);
+
+function isPdfWhitespace(codepoint: number) {
+  return codepoint === 0x09 || codepoint === 0x0a || codepoint === 0x0d;
+}
+
+export function sanitizePdfText(value: string) {
+  return Array.from(value)
+    .map((character) => {
+      const replacement = PDF_TEXT_REPLACEMENTS.get(character);
+      if (replacement !== undefined) return replacement;
+
+      const codepoint = character.codePointAt(0);
+      if (codepoint === undefined) return character;
+      if ((codepoint <= 0x1f && !isPdfWhitespace(codepoint)) || (codepoint >= 0x80 && codepoint <= 0x9f)) {
+        return "?";
+      }
+      return codepoint > 0xff ? "?" : character;
+    })
+    .join("")
+    .replace(/\*\*/g, "");
 }
 
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
@@ -74,7 +116,7 @@ function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
 
 function drawTextBlock(ctx: PdfContext, raw: string, style: TextStyle) {
   const indent = style.indent ?? 0;
-  const text = stripMarkdown(raw);
+  const text = sanitizePdfText(raw);
   const lines = wrapText(text, style.font, style.size, CONTENT_WIDTH - indent);
 
   for (const line of lines) {
