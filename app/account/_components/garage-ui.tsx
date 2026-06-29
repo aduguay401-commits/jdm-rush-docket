@@ -83,8 +83,8 @@ export function ChevronRight() {
 
 export function PageShell({ children }: { children: ReactNode }) {
   return (
-    <main id="main-content" className="max-w-[100vw] overflow-x-clip">
-      <div className="mx-auto max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</div>
+    <main id="main-content" className="w-full min-w-0 max-w-full overflow-x-clip">
+      <div className="mx-auto w-full min-w-0 max-w-[1200px] px-4 py-6 sm:px-6 sm:py-8 lg:px-8">{children}</div>
     </main>
   );
 }

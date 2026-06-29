@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-06-29 - Garage prod cosmetic and layout fixes
+
+Summary: folded Adam live-production garage feedback into a front-end-only account polish branch: centered and unclipped hub title, numeric-first hub stats, renamed garage spokes, and a stricter first-load horizontal layout lock.
+
+Files changed:
+- `app/account/_components/header.tsx` - adds opt-in centered hub title styling, restores descender-safe line-height/padding, constrains the mobile logo width, and clips the sticky header to the viewport.
+- `app/account/_components/garage-ui.tsx` - makes the shared account page shell explicitly full-width/min-width-safe so child content cannot create viewport overflow.
+- `app/account/page.tsx` - centers the hub header, changes the stage word stat into a real numeric count with a stage descriptor, and renames the import/completed spokes.
+- `app/account/imports/page.tsx` and `app/account/completed/page.tsx` - updates page titles to My Active Imports and My Completed Purchases.
+- `app/account/imports/[id]/*` - updates back labels and breadcrumbs to My Active Imports.
+- `app/globals.css` - locks root/body width to the viewport with horizontal overflow hidden, no horizontal overscroll, and vertical touch panning.
+- `app/layout.tsx` - makes the viewport contract explicit as `width=device-width, initial-scale=1`.
+- `PROGRESS.md` - records this implementation and verification.
+
+Decisions/deviations:
+- The approved Sign your purchase agreement action-needed banner was left unchanged.
+- Root cause for the mobile overflow risk was the unconstrained mobile header logo plus shell/header elements that did not explicitly enforce `min-width:0`/`max-width:100%`; the fix constrains that width and locks root/account shells to the viewport.
+- N1 (hide the mini journey-track on completed Delivered cards) remains deferred and was not changed.
+- No API, auth, Supabase, or data contracts were changed.
+
+Status: implementation complete. Verification: `git diff --check` PASS; `npm run lint` PASS with baseline warnings only; `npm run type-check` PASS; `npm run build` PASS; Playwright 375px check confirmed `width=device-width, initial-scale=1`, `scrollWidth=375`, `clientWidth=375`, centered title, and no horizontal overflow offenders on the reachable account login surface. Authenticated hub browser login remains blocked by the known scripted Supabase login flake, so final acceptance relies on build plus isolated nm-gate.
+
 ## 2026-06-25 — Stage 0.4 My JDM Garage real wiring
 
 Summary: wired the locked v6 `/account` customer portal design to authenticated Supabase customer sessions, RLS-scoped owned dockets, real research/report data, real document availability where current tables support it, and a working Messages thread.

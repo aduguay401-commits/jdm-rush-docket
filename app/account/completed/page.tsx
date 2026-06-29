@@ -18,7 +18,7 @@ export default async function CompletedPurchasesPage() {
         customerName={context.customerName}
         messagesHref={messagesHref}
         unreadCount={context.unreadCount}
-        title="Completed Purchases"
+        title="My Completed Purchases"
         backHref="/account"
         backLabel="Back to My JDM Garage"
         breadcrumbs={[{ href: "/account", label: "Garage" }]}
