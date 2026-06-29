@@ -27,15 +27,23 @@ function isCompletedDocket(docket: CustomerDocket) {
   return status === "delivered" || status === "completed" || status === "archived";
 }
 
-function getCurrentStage(dockets: CustomerDocket[]) {
-  const latest = dockets[0];
-  if (!latest) return "None";
-  if (isCompletedDocket(latest)) return "Delivered";
-  if (isShippingUnlocked(latest)) return "Import";
-  if (isPurchaseUnlocked(latest)) return "Purchase";
-  if (latest.status === "report_sent") return "Report";
-  if (latest.status === "questions_sent") return "Questions";
+function getDocketStage(docket: CustomerDocket) {
+  if (isCompletedDocket(docket)) return "Delivered";
+  if (isShippingUnlocked(docket)) return "Import";
+  if (isPurchaseUnlocked(docket)) return "Purchase";
+  if (docket.status === "report_sent") return "Report";
+  if (docket.status === "questions_sent") return "Questions";
   return "Research";
+}
+
+function getCurrentStageStat(dockets: CustomerDocket[]) {
+  const currentStage = dockets[0] ? getDocketStage(dockets[0]) : "Research";
+  const count = dockets.filter((docket) => getDocketStage(docket) === currentStage).length;
+
+  return {
+    value: count,
+    label: currentStage === "Research" ? "cars in research" : "cars in " + currentStage.toLowerCase(),
+  };
 }
 
 async function buildHubActions(dockets: CustomerDocket[]): Promise<HubAction[]> {
@@ -85,10 +93,11 @@ export default async function MyGarageHome() {
   const completed = context.dockets.filter(isCompletedDocket);
   const active = context.dockets.filter((docket) => !isCompletedDocket(docket));
   const actions = await buildHubActions(active);
+  const currentStageStat = getCurrentStageStat(active);
 
   return (
-    <div className="min-h-screen bg-[#111111] text-white">
-      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} title="My JDM Garage" />
+    <div className="min-h-screen w-full max-w-full overflow-x-clip bg-[#111111] text-white">
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} title="My JDM Garage" centerTitle />
 
       <PageShell>
         <div className="grid gap-4">
@@ -102,10 +111,10 @@ export default async function MyGarageHome() {
             <div className="mt-5">
               <StatGrid
                 stats={[
-                  { label: "Active Imports", value: active.length, tone: "accent" },
+                  { label: "My Active Imports", value: active.length, tone: "accent" },
                   { label: "Unread Messages", value: context.unreadCount },
-                  { label: "Completed", value: completed.length },
-                  { label: "Current Stage", value: getCurrentStage(active) },
+                  { label: "My Completed Purchases", value: completed.length },
+                  currentStageStat,
                 ]}
               />
             </div>
@@ -122,14 +131,14 @@ export default async function MyGarageHome() {
             <SpokeRow
               href="/account/imports"
               icon="ship"
-              title="Active Imports"
+              title="My Active Imports"
               sub="Open each in-flight import for vehicle info, documents, agreement, and next steps."
               count={active.length}
             />
             <SpokeRow
               href="/account/completed"
               icon="check"
-              title="Completed Purchases"
+              title="My Completed Purchases"
               sub="Delivered cars and ownership archive."
               count={completed.length}
             />

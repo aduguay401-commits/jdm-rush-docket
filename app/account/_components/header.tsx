@@ -25,6 +25,7 @@ export function AccountHeader({
   messagesHref = "/account/messages",
   unreadCount = DEFAULT_UNREAD_COUNT,
   title = "My JDM Garage",
+  centerTitle = false,
   backHref,
   backLabel = "Back",
   breadcrumbs = [],
@@ -33,26 +34,31 @@ export function AccountHeader({
   messagesHref?: string;
   unreadCount?: number;
   title?: string;
+  centerTitle?: boolean;
   backHref?: string;
   backLabel?: string;
   breadcrumbs?: { href: string; label: string }[];
 }) {
   const safeName = customerName.trim() || MOCK_CUSTOMER_NAME;
+  const titleWrapperClassName = centerTitle ? "min-w-0 flex-1 text-center" : "min-w-0 flex-1";
+  const titleClassName = centerTitle
+    ? "mx-auto pb-0.5 text-[26px] font-black leading-[1.15] tracking-tight text-[#E55125] sm:text-[34px]"
+    : "truncate pb-0.5 text-[26px] font-black leading-[1.15] tracking-tight text-[#E55125] sm:text-[34px]";
 
   return (
-    <header className="sticky top-0 z-50 bg-black border-b border-white/[0.08]">
-      <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          <a href="https://jdmrushimports.ca" aria-label="JDM Rush Imports home">
+    <header className="sticky top-0 z-50 w-full max-w-full overflow-x-clip bg-black border-b border-white/[0.08]">
+      <div className="mx-auto w-full max-w-[1200px] px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 min-w-0 items-center justify-between gap-3">
+          <a href="https://jdmrushimports.ca" aria-label="JDM Rush Imports home" className="min-w-0 shrink">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png"
               alt="JDM Rush Imports"
-              style={{ height: "32px", width: "auto", display: "block" }}
+              className="block h-8 w-auto max-w-[38vw] sm:max-w-none"
             />
           </a>
 
-          <div className="flex items-center gap-3 sm:gap-4">
+          <div className="flex shrink-0 items-center gap-3 sm:gap-4">
             <Link
               href={messagesHref}
               className="flex items-center gap-1.5 px-1.5 py-1 hover:opacity-75 transition-opacity duration-150"
@@ -94,7 +100,7 @@ export function AccountHeader({
           </div>
         </div>
 
-        <div className="flex min-h-[72px] items-center gap-3 border-t border-white/[0.04] py-4">
+        <div className="flex min-h-[72px] min-w-0 items-center gap-3 border-t border-white/[0.04] py-4">
           {backHref && (
             <Link
               href={backHref}
@@ -107,7 +113,7 @@ export function AccountHeader({
             </Link>
           )}
 
-          <div className="min-w-0 flex-1">
+          <div className={titleWrapperClassName}>
             {breadcrumbs.length > 0 && (
               <nav className="mb-1 hidden items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/25 sm:flex" aria-label="Breadcrumb">
                 {breadcrumbs.map((item, index) => (
@@ -120,7 +126,7 @@ export function AccountHeader({
                 ))}
               </nav>
             )}
-            <h1 className="truncate text-[26px] font-black leading-none tracking-tight text-[#E55125] sm:text-[34px]">
+            <h1 className={titleClassName}>
               {title}
             </h1>
           </div>
