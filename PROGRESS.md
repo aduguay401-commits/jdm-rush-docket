@@ -1,5 +1,22 @@
 # Progress
 
+## 2026-06-29 - Garage mobile sticky and completed-card mini-track follow-up
+
+Summary: implemented two Adam-approved garage follow-ups: restored mobile sticky behavior by making the mobile root horizontal clip sticky-safe, and removed the misleading journey mini-track from completed purchase cards.
+
+Files changed:
+- `app/globals.css` - changes the mobile-only `html, body` media-query `overflow-x` value from `hidden` to `clip`, matching the base sticky-safe rule while preserving all width and touch guards.
+- `app/account/_components/garage-ui.tsx` - adds an optional `showJourneyTrack` prop to `ImportCard`, defaulting to true so active import cards keep the existing track.
+- `app/account/completed/page.tsx` - passes `showJourneyTrack={false}` for completed/delivered cards so the stale import-stage strip is hidden only in the archive.
+- `PROGRESS.md` - records this follow-up and verification.
+
+Decisions/deviations:
+- No API, auth, Supabase, or data contracts were changed.
+- The first-load horizontal lock guards added in the prior round were kept intact.
+- The active imports card journey track remains unchanged.
+
+Status: implementation complete. Verification: `git diff --check` PASS; `npm run type-check` PASS; `npm run build` PASS; 375px browser lock check kept `scrollWidth=375` with zero overflow offenders. Isolated nm-gate runs after push.
+
 ## 2026-06-29 - Garage prod cosmetic and layout fixes
 
 Summary: folded Adam live-production garage feedback into a front-end-only account polish branch: centered and unclipped hub title, numeric-first hub stats, renamed garage spokes, and a stricter first-load horizontal layout lock.
