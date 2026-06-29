@@ -1,160 +1,148 @@
-import Link from "next/link";
-import { AccountHeader } from "@/app/account/_components/header";
-import { PageHeader } from "@/app/account/_components/page-header";
 import {
-  getCardStatus,
+  ActionBanner,
+  EmptyState,
+  PageShell,
+  SpokeRow,
+  StatGrid,
+} from "@/app/account/_components/garage-ui";
+import { AccountHeader } from "@/app/account/_components/header";
+import {
+  getAgreementSentAt,
   getCustomerPortalContext,
   getDocketHref,
-  getVehicleLabel,
+  isPurchaseUnlocked,
+  isShippingUnlocked,
   type CustomerDocket,
 } from "@/lib/customer/dashboard";
 
-// ── Car photo placeholder ─────────────────────────────────────────────────────
-
-function CarPhoto() {
-  return (
-    <div
-      className="relative w-full overflow-hidden flex items-center justify-center bg-[#0a0a0a]"
-      style={{ aspectRatio: "16/9" }}
-    >
-      <div
-        className="absolute inset-0 opacity-[0.025]"
-        style={{
-          backgroundImage:
-            "repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(255,255,255,1) 32px), repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(255,255,255,1) 32px)",
-        }}
-      />
-      <svg
-        width="64"
-        height="40"
-        viewBox="0 0 100 60"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        className="text-white/[0.07]"
-      >
-        <rect x="5" y="28" width="90" height="22" rx="3" />
-        <path d="M20 28 L32 14 L68 14 L80 28" />
-        <circle cx="24" cy="50" r="8" />
-        <circle cx="76" cy="50" r="8" />
-        <circle cx="24" cy="50" r="3" />
-        <circle cx="76" cy="50" r="3" />
-      </svg>
-    </div>
-  );
-}
-
-// ── 3-section progress hint ───────────────────────────────────────────────────
-
-function ProgressHint({ label, active }: { label: string; active: number }) {
-  return (
-    <div className="flex items-center gap-1.5 mt-3.5">
-      {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className={`h-[3px] w-5 ${
-            i < active
-              ? "bg-[#E55125]/40"
-              : i === active
-              ? "bg-[#E55125]"
-              : "bg-white/[0.08]"
-          }`}
-        />
-      ))}
-      <span
-        className="text-white/20 text-[10px] ml-1"
-        style={{ letterSpacing: "0.06em" }}
-      >
-        {label}
-      </span>
-    </div>
-  );
-}
-
-// ── Car card ──────────────────────────────────────────────────────────────────
-
-type CarCardProps = {
-  docket: CustomerDocket;
+type HubAction = {
+  href: string;
+  title: string;
+  body: string;
+  priority: number;
 };
 
-function CarCard({ docket }: CarCardProps) {
-  const vehicle = getVehicleLabel(docket);
-  const { statusLabel, statusColor, activeSection, progressLabel } = getCardStatus(docket);
-  const href = getDocketHref("/account/car", docket.id);
-  const dotColor =
-    statusColor === "orange" ? "bg-[#E55125]" : "bg-amber-400";
-  const textColor =
-    statusColor === "orange" ? "text-[#E55125]" : "text-amber-400";
-
-  return (
-    <Link
-      href={href}
-      className="block bg-black border border-white/[0.08] hover:border-white/[0.18] transition-colors duration-200"
-    >
-      <CarPhoto />
-      <div className="px-5 py-4">
-        {/* Status badge */}
-        <div className="inline-flex items-center gap-1.5 mb-2.5">
-          <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dotColor}`} />
-          <span
-            className={`text-[10px] font-bold uppercase ${textColor}`}
-            style={{ letterSpacing: "0.1em" }}
-          >
-            {statusLabel}
-          </span>
-        </div>
-
-        {/* Vehicle name */}
-        <h2 className="text-white text-[15px] font-extrabold tracking-tight leading-snug">
-          {vehicle}
-        </h2>
-
-        {/* Section progress hint */}
-        <ProgressHint label={progressLabel} active={activeSection} />
-      </div>
-    </Link>
-  );
+function isCompletedDocket(docket: CustomerDocket) {
+  const status = docket.status?.toLowerCase() ?? "";
+  return status === "delivered" || status === "completed" || status === "archived";
 }
 
-function EmptyGarage() {
-  return (
-    <div className="bg-black border border-white/[0.08] px-5 py-8 max-w-[640px]">
-      <p className="text-white text-[15px] font-extrabold tracking-tight leading-snug">
-        No claimed vehicles yet
-      </p>
-      <p className="text-white/40 text-[12px] leading-relaxed mt-2">
-        Use the same email address from your JDM Rush inquiry. Matching dockets are claimed automatically after login.
-      </p>
-    </div>
-  );
+function getCurrentStage(dockets: CustomerDocket[]) {
+  const latest = dockets[0];
+  if (!latest) return "None";
+  if (isCompletedDocket(latest)) return "Delivered";
+  if (isShippingUnlocked(latest)) return "Import";
+  if (isPurchaseUnlocked(latest)) return "Purchase";
+  if (latest.status === "report_sent") return "Report";
+  if (latest.status === "questions_sent") return "Questions";
+  return "Research";
 }
 
-// ── Page ──────────────────────────────────────────────────────────────────────
+async function buildHubActions(dockets: CustomerDocket[]): Promise<HubAction[]> {
+  const agreementSentEntries = await Promise.all(
+    dockets.map(async (docket) => [docket.id, await getAgreementSentAt(docket.id)] as const)
+  );
+  const agreementSentAt = new Map(agreementSentEntries);
+  const actions: HubAction[] = [];
+
+  for (const docket of dockets) {
+    if (docket.status === "questions_sent") {
+      actions.push({
+        href: getDocketHref("/account/messages", docket.id),
+        title: "Answer your sourcing questions",
+        body: "Marcus needs your reply before the search can continue.",
+        priority: 1,
+      });
+      continue;
+    }
+
+    if (docket.status === "report_sent") {
+      actions.push({
+        href: docket.report_url_token ? `/report/${encodeURIComponent(docket.report_url_token)}` : getDocketHref("/account/find", docket.id),
+        title: "Review your vehicle report",
+        body: "Your JDM Rush sourcing report is ready.",
+        priority: 2,
+      });
+      continue;
+    }
+
+    if (!docket.agreement_signed && agreementSentAt.get(docket.id)) {
+      actions.push({
+        href: `/account/docket/${encodeURIComponent(docket.id)}/sign`,
+        title: "Sign your purchase agreement",
+        body: "Your legal agreement is ready for review and signature.",
+        priority: 3,
+      });
+    }
+  }
+
+  return actions.sort((a, b) => a.priority - b.priority);
+}
 
 export default async function MyGarageHome() {
   const context = await getCustomerPortalContext({ nextPath: "/account" });
   const messagesHref = getDocketHref("/account/messages", context.latestDocket?.id);
+  const completed = context.dockets.filter(isCompletedDocket);
+  const active = context.dockets.filter((docket) => !isCompletedDocket(docket));
+  const actions = await buildHubActions(active);
 
   return (
-    <div className="min-h-screen bg-[#111111]">
-      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} />
+    <div className="min-h-screen bg-[#111111] text-white">
+      <AccountHeader customerName={context.customerName} messagesHref={messagesHref} unreadCount={context.unreadCount} title="My JDM Garage" />
 
-      <PageHeader micro={`Welcome back, ${context.customerName} — your active imports are below. Tap any car to see where things stand.`} />
+      <PageShell>
+        <div className="grid gap-4">
+          {actions[0] && <ActionBanner href={actions[0].href} title={actions[0].title} body={actions[0].body} />}
 
-      <main id="main-content">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
-          {/* Car cards */}
-          {context.dockets.length > 0 ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-[900px]">
-              {context.dockets.map((docket) => (
-                <CarCard key={docket.id} docket={docket} />
-              ))}
+          <section className="border border-white/[0.08] bg-black p-5 sm:p-6">
+            <p className="text-[11px] font-black uppercase tracking-[0.12em] text-[#E55125]">Welcome back</p>
+            <h2 className="mt-2 text-[28px] font-black leading-none tracking-tight text-white sm:text-[36px]">
+              Hi {context.customerName}
+            </h2>
+            <div className="mt-5">
+              <StatGrid
+                stats={[
+                  { label: "Active Imports", value: active.length, tone: "accent" },
+                  { label: "Unread Messages", value: context.unreadCount },
+                  { label: "Completed", value: completed.length },
+                  { label: "Current Stage", value: getCurrentStage(active) },
+                ]}
+              />
             </div>
-          ) : (
-            <EmptyGarage />
+          </section>
+
+          <section className="grid gap-3">
+            <SpokeRow
+              href="/account/find"
+              icon="search"
+              title="Find My JDM"
+              sub="Your searches, sourcing updates, candidate cars, and research reports."
+              count={context.dockets.length}
+            />
+            <SpokeRow
+              href="/account/imports"
+              icon="ship"
+              title="Active Imports"
+              sub="Open each in-flight import for vehicle info, documents, agreement, and next steps."
+              count={active.length}
+            />
+            <SpokeRow
+              href="/account/completed"
+              icon="check"
+              title="Completed Purchases"
+              sub="Delivered cars and ownership archive."
+              count={completed.length}
+            />
+          </section>
+
+          {context.dockets.length === 0 && (
+            <EmptyState
+              title="No claimed vehicles yet"
+              body="Use the same email address from your JDM Rush inquiry. Matching dockets are claimed automatically after login."
+            />
           )}
         </div>
-      </main>
+      </PageShell>
     </div>
   );
 }

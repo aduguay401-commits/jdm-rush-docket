@@ -344,6 +344,25 @@ export async function getResearchData(docketId: string) {
   };
 }
 
+export async function getAgreementSentAt(docketId: string) {
+  const supabase = await createServerAuthClient();
+  const { data, error } = await supabase
+    .from("dockets")
+    .select("agreement_sent_at")
+    .eq("id", docketId)
+    .maybeSingle<{ agreement_sent_at: string | null }>();
+
+  if (error) {
+    const message = error.message.toLowerCase();
+    if (error.code === "42703" || message.includes("agreement_sent_at") || message.includes("does not exist")) {
+      return null;
+    }
+    throw new Error(error.message);
+  }
+
+  return data?.agreement_sent_at ?? null;
+}
+
 export async function getMessageThread(docketId: string) {
   const supabase = await createServerAuthClient();
   const [{ data: marcusQuestions, error: marcusError }, { data: customerQuestions, error: customerError }] =

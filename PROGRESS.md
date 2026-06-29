@@ -207,3 +207,28 @@ Verification:
 - Temporary QA route was removed before commit.
 
 Status: rework complete pending commit and isolated gate.
+
+
+## 2026-06-29 — My JDM Garage hub-and-spoke build
+
+Summary: rebuilt `app/account` into the approved hub-and-spoke information architecture without API changes.
+
+Files changed:
+- `app/account/_components/header.tsx` — adds dynamic page titles, a 44px back control, and desktop breadcrumbs while keeping the customer/message/sign-out tools.
+- `app/account/_components/garage-ui.tsx` — adds shared hub UI primitives: action banner, stat grid, chunky spoke rows, import cards, journey mini-track, status pills, and empty states.
+- `app/account/page.tsx` — new hub with top action-needed banner, overview band, 2x2 stats, and the three clean spoke rows.
+- `app/account/find/page.tsx` — real-data Find My JDM spoke using existing dockets/report tokens and message links.
+- `app/account/imports/page.tsx` and `app/account/imports/[id]/page.tsx` — Active Imports list plus per-import sub-hub with honest journey placeholder and four sub-spokes.
+- `app/account/imports/[id]/vehicle/page.tsx` — real-data Vehicle Info leaf using docket fields plus existing research option details/photos when available.
+- `app/account/imports/[id]/agreement/page.tsx` — real Legal Agreement leaf linking to the existing sign flow or signed-agreement download endpoint.
+- `app/account/imports/[id]/invoices/page.tsx` and `app/account/imports/[id]/documents/page.tsx` — clean coming-soon empty states for features without records today.
+- `app/account/car/page.tsx`, `app/account/research/page.tsx`, `app/account/documents/page.tsx`, and `app/account/journey/page.tsx` — redirects from old flat routes into the new IA.
+- `app/globals.css` — moves the horizontal lock to first-paint root CSS while preserving desktop sticky behavior by using desktop `overflow-x: clip` and mobile `overflow-x: hidden`.
+- `lib/customer/dashboard.ts` — exports the existing safe `agreement_sent_at` lookup pattern for agreement links/action banners without adding it to the shared docket select.
+
+Data honesty:
+- Real leaf pages: Find My JDM reports, Vehicle Info, Legal Agreement.
+- Empty-state leaves: Invoices & Receipts, Import Documents.
+- Journey track: present as IA with a Purchased/default placeholder because no real shipping-stage record exists yet.
+
+Status: implementation complete pending commit and isolated gate.
