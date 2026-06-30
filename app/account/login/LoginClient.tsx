@@ -1,8 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
+import { useState } from "react";
 
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
 import { getCustomerAuthCallbackBaseUrl } from "@/lib/customer/auth-shared";
@@ -45,33 +44,12 @@ function OrDivider() {
 }
 
 export function LoginClient({ nextPath, errorMessage }: { nextPath: string; errorMessage?: string | null }) {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState(errorMessage ?? "");
-  const [loadingMode, setLoadingMode] = useState<"password" | "google" | null>(null);
+  const [loadingMode, setLoadingMode] = useState<"google" | null>(null);
   const isLoading = loadingMode !== null;
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setLoadingMode("password");
-
-    const supabase = createBrowserSupabaseClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    if (signInError) {
-      setError("Invalid email or password.");
-      setLoadingMode(null);
-      return;
-    }
-
-    router.push(nextPath);
-    router.refresh();
-  }
 
   async function handleGoogleSignIn() {
     setError("");
@@ -99,13 +77,15 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
         </div>
       ) : null}
 
-      <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <form action="/api/customer/auth/login" method="post" className="flex flex-col gap-4">
+        <input type="hidden" name="next" value={nextPath} />
         <div>
           <label htmlFor="customer-email" className="text-white/50 text-[12px] font-medium">
             Email address
           </label>
           <input
             id="customer-email"
+            name="email"
             type="email"
             required
             value={email}
@@ -118,6 +98,7 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
 
         <PasswordInput
           id="customer-password"
+          name="password"
           label="Password"
           value={password}
           onChange={(event) => setPassword(event.target.value)}
@@ -138,7 +119,7 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
           disabled={isLoading}
           className="w-full inline-flex items-center justify-center bg-[#E55125] hover:brightness-110 disabled:opacity-60 disabled:hover:brightness-100 text-white text-[14px] font-bold tracking-wide px-7 py-3.5 transition-all focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#E55125]"
         >
-          {loadingMode === "password" ? "Signing in..." : "Sign In"}
+          Sign In
         </button>
       </form>
 

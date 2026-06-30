@@ -271,3 +271,39 @@ Data honesty:
 - Journey track: present as IA with a Purchased/default placeholder because no real shipping-stage record exists yet.
 
 Status: implementation complete pending commit and isolated gate.
+
+
+## 2026-06-29 — Customer login race fix
+
+Summary: moved password login off the client-side router path and into a response-bound server route so successful sign-in sets Supabase auth cookies and redirects to the target route in the same 303 response.
+
+Files changed:
+- `app/account/login/LoginClient.tsx` — keeps Google OAuth unchanged, but posts password credentials with the normalized next path to the new server route instead of calling `signInWithPassword` in the browser followed by `router.push`/`router.refresh`.
+- `app/account/login/page.tsx` — uses the shared customer next-path normalizer for the password flow target.
+- `app/api/customer/auth/login/route.ts` — signs in with the Supabase SSR server client, provisions/blocks customer accounts with the existing soft-delete and linked-email rules, and redirects with cookies on the same response.
+
+Verification:
+- `npm run type-check` PASS.
+- `npm run lint` PASS with existing warnings only.
+- `npm run build` PASS.
+- Local mobile-style browser reliability PASS: 5/5 fresh-context password logins landed on `/account` with no bounce back to `/account/login`; disposable auth/customer/profile test data was removed.
+
+Status: implementation complete pending commit and isolated gate.
+
+
+## 2026-06-29 — Customer login security rework
+
+Summary: kept the race-free server POST login flow and closed the reviewer/QA security findings before merge.
+
+Files changed:
+- `app/api/customer/auth/login/route.ts` — rejects password-login POSTs unless `Origin` or fallback `Referer` matches the trusted `getAppBaseUrl()` origin; all redirects now use `getAppBaseUrl()` instead of request host or forwarded-host headers; production auth cookies are forced `Secure` while leaving the supabase-ssr JS-readable cookie default for browser SDK compatibility.
+
+Verification:
+- Cross-origin POST with `Origin: https://evil.example` returns 403 before sign-in.
+- Missing Origin/Referer returns 403; trusted Referer fallback returns the normal 303.
+- Forged `X-Forwarded-Host: evil.com` cannot influence Location; redirects stay under `https://docket.jdmrushimports.ca`.
+- `npm run type-check` PASS.
+- `npm run lint` PASS with existing warnings only.
+- `npm run build` PASS.
+
+Status: security rework complete pending commit and isolated gate.

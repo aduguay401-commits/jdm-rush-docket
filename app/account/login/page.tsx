@@ -1,3 +1,4 @@
+import { normalizeCustomerNextPath } from "@/lib/customer/auth-shared";
 import { LoginClient } from "./LoginClient";
 
 function getSingleParam(value: string | string[] | undefined) {
@@ -5,12 +6,6 @@ function getSingleParam(value: string | string[] | undefined) {
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-function normalizeNextPath(value: string | string[] | undefined) {
-  const raw = getSingleParam(value);
-  if (!raw || !raw.startsWith("/")) return "/account";
-  if (raw.startsWith("//")) return "/account";
-  return raw;
-}
 
 export default async function AccountLoginPage({
   searchParams,
@@ -18,7 +13,7 @@ export default async function AccountLoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const nextPath = normalizeNextPath(params.next);
+  const nextPath = normalizeCustomerNextPath(getSingleParam(params.next));
   const errorMessage = getSingleParam(params.message);
 
   return (
