@@ -8,6 +8,7 @@ import {
   SoftDeletedCustomerError,
   SOFT_DELETED_CUSTOMER_MESSAGE,
 } from "@/lib/customer/auth";
+import { getAppBaseUrl } from "@/lib/urls";
 
 const INVALID_LOGIN_MESSAGE = "Invalid email or password.";
 
@@ -29,19 +30,36 @@ function buildLoginPath(message: string, nextPath: string) {
   return `/account/login?${params.toString()}`;
 }
 
-function getRequestOrigin(request: NextRequest) {
-  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? request.nextUrl.host;
-  const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol.replace(":", "") ?? "https";
-
-  return `${protocol}://${host}`;
+function getTrustedAppOrigin() {
+  return new URL(getAppBaseUrl()).origin;
 }
 
-function getRedirectUrl(request: NextRequest, path: string) {
-  return new URL(path, getRequestOrigin(request));
+function requestOriginMatchesTrustedApp(request: NextRequest) {
+  const trustedOrigin = getTrustedAppOrigin();
+  const origin = request.headers.get("origin");
+
+  if (origin) {
+    return origin === trustedOrigin;
+  }
+
+  const referer = request.headers.get("referer");
+  if (!referer) {
+    return false;
+  }
+
+  try {
+    return new URL(referer).origin === trustedOrigin;
+  } catch {
+    return false;
+  }
 }
 
-function setRedirectTarget(response: NextResponse, request: NextRequest, path: string) {
-  response.headers.set("Location", getRedirectUrl(request, path).toString());
+function getRedirectUrl(path: string) {
+  return new URL(path, getAppBaseUrl());
+}
+
+function setRedirectTarget(response: NextResponse, path: string) {
+  response.headers.set("Location", getRedirectUrl(path).toString());
   return response;
 }
 
@@ -56,8 +74,14 @@ function createResponseBoundAuthClient(request: NextRequest, response: NextRespo
         },
         setAll(cookiesToSet, headers) {
           cookiesToSet.forEach(({ name, value, options }) => {
+            const cookieOptions = options as CookieOptions;
+
             request.cookies.set(name, value);
-            response.cookies.set(name, value, options as CookieOptions);
+            response.cookies.set(name, value, {
+              ...cookieOptions,
+              // Supabase browser auth flows need JS-readable auth cookies; keep the supabase-ssr HttpOnly default.
+              secure: process.env.NODE_ENV === "production" ? true : cookieOptions.secure,
+            });
           });
 
           Object.entries(headers).forEach(([key, value]) => {
@@ -70,15 +94,19 @@ function createResponseBoundAuthClient(request: NextRequest, response: NextRespo
 }
 
 export async function POST(request: NextRequest) {
+  if (!requestOriginMatchesTrustedApp(request)) {
+    return new NextResponse("Forbidden", { status: 403 });
+  }
+
   const formData = await request.formData();
   const email = getFormString(formData.get("email")).toLowerCase();
   const password = getFormString(formData.get("password"), { trim: false });
   const nextPath = normalizeCustomerNextPath(getFormString(formData.get("next")));
-  const response = NextResponse.redirect(getRedirectUrl(request, nextPath), { status: 303 });
+  const response = NextResponse.redirect(getRedirectUrl(nextPath), { status: 303 });
   const supabase = createResponseBoundAuthClient(request, response);
 
   if (!email || !password) {
-    return setRedirectTarget(response, request, buildLoginPath(INVALID_LOGIN_MESSAGE, nextPath));
+    return setRedirectTarget(response, buildLoginPath(INVALID_LOGIN_MESSAGE, nextPath));
   }
 
   const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -87,7 +115,7 @@ export async function POST(request: NextRequest) {
   });
 
   if (signInError) {
-    return setRedirectTarget(response, request, buildLoginPath(INVALID_LOGIN_MESSAGE, nextPath));
+    return setRedirectTarget(response, buildLoginPath(INVALID_LOGIN_MESSAGE, nextPath));
   }
 
   const { data, error: userError } = await supabase.auth.getUser();
@@ -95,7 +123,7 @@ export async function POST(request: NextRequest) {
   if (userError || !data.user) {
     console.error("[Customer Auth] Password login session missing user", userError?.message);
     await supabase.auth.signOut();
-    return setRedirectTarget(response, request, buildLoginPath("Unable to load your account.", nextPath));
+    return setRedirectTarget(response, buildLoginPath("Unable to load your account.", nextPath));
   }
 
   try {
@@ -105,18 +133,17 @@ export async function POST(request: NextRequest) {
     await supabase.auth.signOut();
 
     if (provisionError instanceof SoftDeletedCustomerError) {
-      return setRedirectTarget(response, request, buildLoginPath(SOFT_DELETED_CUSTOMER_MESSAGE, nextPath));
+      return setRedirectTarget(response, buildLoginPath(SOFT_DELETED_CUSTOMER_MESSAGE, nextPath));
     }
 
     if (provisionError instanceof EmailAlreadyLinkedError) {
       return setRedirectTarget(
         response,
-        request,
         buildLoginPath("This email is already linked to another account. Please sign in with that account or contact JDM Rush.", nextPath)
       );
     }
 
-    return setRedirectTarget(response, request, buildLoginPath("Unable to prepare your customer account.", nextPath));
+    return setRedirectTarget(response, buildLoginPath("Unable to prepare your customer account.", nextPath));
   }
 
   return response;

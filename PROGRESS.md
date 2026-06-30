@@ -289,3 +289,21 @@ Verification:
 - Local mobile-style browser reliability PASS: 5/5 fresh-context password logins landed on `/account` with no bounce back to `/account/login`; disposable auth/customer/profile test data was removed.
 
 Status: implementation complete pending commit and isolated gate.
+
+
+## 2026-06-29 — Customer login security rework
+
+Summary: kept the race-free server POST login flow and closed the reviewer/QA security findings before merge.
+
+Files changed:
+- `app/api/customer/auth/login/route.ts` — rejects password-login POSTs unless `Origin` or fallback `Referer` matches the trusted `getAppBaseUrl()` origin; all redirects now use `getAppBaseUrl()` instead of request host or forwarded-host headers; production auth cookies are forced `Secure` while leaving the supabase-ssr JS-readable cookie default for browser SDK compatibility.
+
+Verification:
+- Cross-origin POST with `Origin: https://evil.example` returns 403 before sign-in.
+- Missing Origin/Referer returns 403; trusted Referer fallback returns the normal 303.
+- Forged `X-Forwarded-Host: evil.com` cannot influence Location; redirects stay under `https://docket.jdmrushimports.ca`.
+- `npm run type-check` PASS.
+- `npm run lint` PASS with existing warnings only.
+- `npm run build` PASS.
+
+Status: security rework complete pending commit and isolated gate.
