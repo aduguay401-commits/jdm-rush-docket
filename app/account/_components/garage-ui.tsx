@@ -223,11 +223,13 @@ export function ImportCard({
   vehicle,
   status,
   meta,
+  showJourneyTrack = true,
 }: {
   href: string;
   vehicle: string;
   status: string;
   meta: string;
+  showJourneyTrack?: boolean;
 }) {
   return (
     <Link href={href} className="block border border-white/[0.08] bg-black transition hover:border-white/[0.18]">
@@ -238,9 +240,11 @@ export function ImportCard({
         <p className="text-[10px] font-black uppercase tracking-[0.12em] text-[#E55125]">{status}</p>
         <h2 className="mt-2 text-[18px] font-black leading-tight text-white">{vehicle}</h2>
         <p className="mt-2 text-[12px] leading-relaxed text-white/40">{meta}</p>
-        <div className="mt-4">
-          <JourneyMiniTrack currentStep={1} />
-        </div>
+        {showJourneyTrack && (
+          <div className="mt-4">
+            <JourneyMiniTrack currentStep={1} />
+          </div>
+        )}
       </div>
     </Link>
   );

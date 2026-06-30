@@ -34,6 +34,7 @@ export default async function CompletedPurchasesPage() {
                 vehicle={getVehicleLabel(docket)}
                 status="Delivered"
                 meta="Completed purchase archive"
+                showJourneyTrack={false}
               />
             ))}
           </div>
