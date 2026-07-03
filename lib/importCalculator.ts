@@ -48,8 +48,6 @@ export type FeeBreakdown = {
   transportCostCAD: number;
   valueForDutyCAD: number;
   valueForGSTCAD: number;
-  pstRate: number;
-  pstCAD: number;
   totalDeliveredCAD: number;
 };
 
@@ -118,15 +116,6 @@ const FEES = {
 const DUTY_RATES: Record<DutyType, number> = {
   "duty-free": 0,
   "full-duty": 0.061,
-};
-
-const PST_RATES: Record<Province, number> = {
-  BC: 0.07,
-  SK: 0.06,
-  MB: 0.07,
-  ON: 0.08,
-  AB: 0,
-  QC: 0.09975,
 };
 
 const TRANSPORT_COSTS: Record<
@@ -329,10 +318,6 @@ export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
   const dutyCAD = valueForDutyCAD * dutyRate;
   const valueForGSTCAD = vehicleValueCAD + dutyCAD + FEES.exciseTaxCAD;
   const gstCAD = valueForGSTCAD * FEES.gstRate;
-  // Provincial tax (PST/QST/HST) is a registration cost, not an import cost — excluded from landed total
-  const pstCAD = 0;
-  const pstRate = 0;
-
   const totalDeliveredCAD =
     vehicleValueCAD +
     shippingInsuranceCAD +
@@ -369,8 +354,6 @@ export function calculateImportCost(input: CalculatorInput): FeeBreakdown {
     transportCostCAD: round2(transportData.cost),
     valueForDutyCAD: round2(valueForDutyCAD),
     valueForGSTCAD: round2(valueForGSTCAD),
-    pstRate: round2(pstRate),
-    pstCAD: round2(pstCAD),
     totalDeliveredCAD: round2(totalDeliveredCAD),
   };
 }
@@ -386,9 +369,8 @@ export type CardEstimateInput = {
 /**
  * Card estimate = full landed cost minus inland transport.
  *
- * PST is already excluded from the `calculateImportCost` total, so we
- * only strip `transportCostCAD`.  A placeholder destination + vehicle
- * type is used because neither affects the result after stripping.
+ * A placeholder destination + vehicle type is used because neither affects
+ * the result after stripping `transportCostCAD`.
  *
  * All fee constants live in this file — this is the single source.
  */

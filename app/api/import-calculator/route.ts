@@ -57,9 +57,6 @@ export async function POST(request: Request) {
     duty: breakdown.dutyCAD,
     brokerFee: breakdown.brokerageFeeCAD,
     gst: breakdown.gstCAD,
-    provincialTax: breakdown.pstCAD,
-    provincialTaxRate: breakdown.pstRate,
-    provincialTaxLabel: `PST (${(breakdown.pstRate * 100).toFixed(breakdown.pstRate === 0.09975 ? 3 : 0)}%)`,
     totalCAD: breakdown.totalDeliveredCAD,
     province: breakdown.province,
   });

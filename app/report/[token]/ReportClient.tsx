@@ -19,14 +19,11 @@ type FeeBreakdown = {
   jdmRushFeeCAD?: number;
   inlandTransportCAD?: number;
   totalDeliveredCAD?: number;
-  pstCAD?: number;
-  pstProvince?: string;
   input?: { exchangeRate?: number };
   dealerPriceCAD?: number;
   vehicleValueCAD?: number;
   dutyCAD?: number;
   transportCostCAD?: number;
-  pstRate?: number;
 };
 
 type AuctionListing = {

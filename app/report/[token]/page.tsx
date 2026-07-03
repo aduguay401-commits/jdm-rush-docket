@@ -83,14 +83,11 @@ function normalizeFeeBreakdown(raw: unknown): FeeBreakdown | null {
     jdmRushFeeCAD: toNumber(source.jdmRushFeeCAD),
     inlandTransportCAD: toNumber(source.inlandTransportCAD ?? source.transportCostCAD),
     totalDeliveredCAD: toNumber(source.totalDeliveredCAD),
-    pstCAD: toNumber(source.pstCAD),
-    pstProvince: typeof source.pstProvince === "string" ? source.pstProvince : undefined,
     input: inputExchangeRate !== undefined ? { exchangeRate: inputExchangeRate } : undefined,
     dealerPriceCAD: toNumber(source.dealerPriceCAD),
     vehicleValueCAD: toNumber(source.vehicleValueCAD),
     dutyCAD: toNumber(source.dutyCAD),
     transportCostCAD: toNumber(source.transportCostCAD),
-    pstRate: toNumber(source.pstRate),
   };
 }
 

@@ -307,3 +307,21 @@ Verification:
 - `npm run build` PASS.
 
 Status: security rework complete pending commit and isolated gate.
+
+## 2026-07-03 - PST/provincial-tax total erasure
+
+Summary: removed the remaining PST/QST/provincial-tax scaffolding from the Docket import calculator contract, quote report normalizer, and report prop types without changing landed-cost math.
+
+Files changed:
+- lib/importCalculator.ts - removed pstRate/pstCAD from FeeBreakdown, deleted the dead PST rate constant, removed zero-valued PST locals and return fields, and cleaned the card-estimate comment.
+- app/api/import-calculator/route.ts - stopped returning provincialTax, provincialTaxRate, and provincialTaxLabel from the calculator API.
+- app/report/[token]/page.tsx - stopped reading stored pstCAD, pstProvince, and pstRate from historical quote snapshots.
+- app/report/[token]/ReportClient.tsx - removed the type-only PST fields from the report fee breakdown prop shape.
+
+Verification:
+- npm run type-check PASS.
+- Refined tax-term scan rg -n "\b(pst|qst)\b|provincialTax" lib app -i PASS with no hits.
+- Sample calculator total unchanged before vs after: 1,250,000 JPY, Winnipeg, regular, duty-free, exchange rate 0.00935 -> totalDeliveredCAD stayed 20562.65.
+- Full isolated nm-gate will run after this branch is committed and pushed.
+
+Status: implementation complete pending commit and isolated gate.
