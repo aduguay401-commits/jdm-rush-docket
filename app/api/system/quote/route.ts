@@ -333,6 +333,12 @@ export async function POST(request: Request) {
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
       selected_path: "quote-endpoint",
+      lead_source: "exact_quote",
+      lead_source_set_at: new Date().toISOString(),
+      lead_source_detail: {
+        route: "/api/system/quote",
+        inventory_ref: ref,
+      },
       additional_notes: `Exact quote computed: $${cadFormattedForInsert} CAD landed to ${breakdown.destinationLabel}`,
     };
 

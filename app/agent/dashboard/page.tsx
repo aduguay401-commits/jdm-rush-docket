@@ -10,6 +10,13 @@ import {
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
+import {
+  countMarketableLeadViews,
+  getLeadOriginLabel,
+  isInMarketableLeadView,
+  MARKETABLE_LEAD_VIEWS,
+} from "@/lib/dockets/leadSource";
+import type { MarketableLeadView } from "@/lib/dockets/leadSource";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Docket = {
@@ -19,6 +26,8 @@ type Docket = {
   docket_status_history: DocketStatusHistoryItem[] | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
+  customer_id: string | null;
+  lead_source: string | null;
   unreadCount?: number | null;
   marcus_questions: MarcusQuestionItem[] | null;
   customer_questions: CustomerQuestionItem[] | null;
@@ -152,6 +161,14 @@ function getNewMessageBadgeLabel(unreadCount: number) {
   return `NEW MESSAGES (${unreadCount})`;
 }
 
+function LeadOriginBadge({ docket }: { docket: Pick<Docket, "customer_id" | "lead_source"> }) {
+  return (
+    <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#E55125]/35 bg-[#E55125]/10 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#f47a55]">
+      {getLeadOriginLabel(docket)}
+    </span>
+  );
+}
+
 function DocketProgressBar({ docket }: { docket: Docket }) {
   const progressState = getProgressBarStage(docket.status, docket);
   const { currentIndex, status } = progressState;
@@ -227,6 +244,7 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
+  const [activeLeadView, setActiveLeadView] = useState<MarketableLeadView>("quote");
   const [dashboardSuccessMessage, setDashboardSuccessMessage] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
@@ -259,7 +277,7 @@ export default function AgentDashboardPage() {
     const { data, error: docketError } = await supabase
       .from("dockets")
       .select(
-        "id, created_at, status, customer_first_name, customer_last_name, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
+        "id, created_at, status, customer_first_name, customer_last_name, customer_id, lead_source, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
       )
       .eq("is_archived", false)
       .order("created_at", { ascending: false });
@@ -357,6 +375,13 @@ export default function AgentDashboardPage() {
     };
   }, [loadDashboard]);
 
+  const leadViewCounts = useMemo(() => countMarketableLeadViews(dockets), [dockets]);
+
+  const filteredDockets = useMemo(
+    () => sortDocketsByUrgency(dockets.filter((docket) => isInMarketableLeadView(docket, activeLeadView))),
+    [activeLeadView, dockets],
+  );
+
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.push("/agent/login");
@@ -411,6 +436,31 @@ export default function AgentDashboardPage() {
 
         {!loading && !error && dockets.length > 0 ? (
           <>
+            <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-3">
+              {MARKETABLE_LEAD_VIEWS.map((view) => {
+                const isActiveView = activeLeadView === view.id;
+                return (
+                  <button
+                    aria-pressed={isActiveView}
+                    className={`rounded-lg px-4 py-3 text-left transition ${
+                      isActiveView ? "bg-[#E55125] text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+                    }`}
+                    key={view.id}
+                    onClick={() => setActiveLeadView(view.id)}
+                    type="button"
+                  >
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-semibold">{view.label}</span>
+                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
+                        {leadViewCounts[view.id]}
+                      </span>
+                    </span>
+                    <span className="mt-1 block text-xs opacity-75">{view.description}</span>
+                  </button>
+                );
+              })}
+            </section>
+
             <section className="pb-6">
               <h2 className="text-2xl font-semibold text-white">
                 Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention — let&apos;s
@@ -425,7 +475,7 @@ export default function AgentDashboardPage() {
               </p>
             </section>
             <div className="grid gap-4">
-              {dockets.map((docket) => {
+              {filteredDockets.map((docket) => {
                 const lastCommunication = getLatestActivity(docket);
                 const statusDisplay = getStatusDisplay(docket, lastCommunication);
                 const unreadCount = statusDisplay.unreadCount;
@@ -441,7 +491,12 @@ export default function AgentDashboardPage() {
                   >
                     <div className="p-5">
                       <div className="mb-4 flex items-start justify-between gap-4">
-                        <h2 className="text-xl font-semibold text-white">{customerName}</h2>
+                        <div className="min-w-0">
+                          <h2 className="truncate text-xl font-semibold text-white">{customerName}</h2>
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <LeadOriginBadge docket={docket} />
+                          </div>
+                        </div>
                         <Link
                           className="shrink-0 rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
                           href={`/agent/docket/${docket.id}`}
@@ -482,6 +537,11 @@ export default function AgentDashboardPage() {
                   </article>
                 );
               })}
+              {filteredDockets.length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
+                  No dockets match this lead view.
+                </div>
+              ) : null}
             </div>
           </>
         ) : null}

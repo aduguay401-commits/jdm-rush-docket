@@ -1,5 +1,35 @@
 # Progress
 
+## 2026-07-03 - Nurture Engine Phase 1 lead-source segmentation
+
+Summary: added the Phase 1 immutable lead-source stamp and three-tab lead segmentation for admin and agent dashboards without changing selected_path, pricing, lifecycle, or site proxy behavior.
+
+Pre-build gate:
+- Verified the live production `dockets` schema through Supabase OpenAPI/sample reads before authoring the migration. Live columns include post-migration fields such as `is_archived`, `admin_notes`, `chosen_path`, agreement fields, and `vehicle_description`; `lead_source`, `lead_source_set_at`, and `lead_source_detail` do not exist yet.
+
+Files changed:
+- `supabase/migrations/010_nurture_phase1_lead_source.sql` - adds nullable `lead_source`, `lead_source_set_at`, non-null default `{}` `lead_source_detail`, v1 source-value check constraint, quote-endpoint-only backfill, and an immutability trigger for non-null lead sources.
+- `app/api/system/quote/route.ts` - stamps new exact quote dockets with `lead_source='exact_quote'`, source timestamp, and Docket-owned detail metadata.
+- `app/api/system/intake/route.ts` - stamps new intake dockets with `lead_source='find_my_jdm'`, source timestamp, and Docket-owned detail metadata.
+- `lib/dockets/leadSource.ts` - centralizes the three marketable lead-view rules and labels so null/legacy rows stay out of marketable tabs.
+- `lib/admin/types.ts` and `lib/admin/dockets.ts` - include `customer_id` and lead-source fields in admin dashboard records.
+- `app/admin/dashboard/AdminDashboardClient.tsx` - adds My Garage, Quote Leads, and Find My JDM tabs with counts and lead-origin badges while preserving the existing status/search/flag filters.
+- `app/agent/dashboard/page.tsx` - mirrors the same lead tabs and origin badges for export agents.
+- `PROGRESS.md` and `ISSUES.md` - record the Phase 1 implementation and Adam-run migration prerequisite.
+
+Decisions/deviations:
+- The migration is additive only and does not mutate `selected_path` or lifecycle columns.
+- Only `selected_path='quote-endpoint'` historical rows are backfilled to `exact_quote`; all other legacy/null rows remain unclassified and are excluded from marketable tabs.
+- Docket owns both route stamps; no `jdm-rush-next` proxy changes were needed for Phase 1.
+- The trigger permits a future controlled `NULL -> value` classification but rejects changes once `lead_source` is non-null.
+
+Verification:
+- `git diff --check` PASS.
+- `npm run type-check` PASS.
+- Full isolated nm-gate will run after this branch is committed and pushed.
+
+Status: implementation complete pending commit and isolated gate.
+
 ## 2026-06-29 - Garage mobile sticky and completed-card mini-track follow-up
 
 Summary: implemented two Adam-approved garage follow-ups: restored mobile sticky behavior by making the mobile root horizontal clip sticky-safe, and removed the misleading journey mini-track from completed purchase cards.

@@ -2,6 +2,10 @@
 
 ## Open
 
+### 2026-07-03 - Migration 010 must be applied before Nurture Phase 1 runtime QA/merge
+
+Nurture Engine Phase 1 dashboard code selects `dockets.customer_id`, `lead_source`, `lead_source_set_at`, and `lead_source_detail`. `customer_id` exists in live production, but the three lead-source columns do not yet. Adam must run `supabase/migrations/010_nurture_phase1_lead_source.sql` against production before this branch is merged/deployed, matching the Adam-run migration pattern.
+
 ### 2026-06-28 — Phase 2 agreement schema and buckets must be applied before runtime QA
 
 The Phase 2 agreement engine code depends on Adam-run SQL for `agreement_signatures`, `document_access_log`, `dockets.agreement_sent_at`, and the private `customer-documents` / `signed-agreements` storage buckets. Codex did not run SQL or create buckets per dispatch. Runtime QA should wait until Adam applies the provided SQL.

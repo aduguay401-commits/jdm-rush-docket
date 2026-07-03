@@ -14,6 +14,14 @@ import {
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
+import {
+  countMarketableLeadViews,
+  getLeadOriginLabel,
+  getLeadSourceLabel,
+  isInMarketableLeadView,
+  MARKETABLE_LEAD_VIEWS,
+} from "@/lib/dockets/leadSource";
+import type { MarketableLeadView } from "@/lib/dockets/leadSource";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
@@ -179,6 +187,14 @@ function getLastReminder(docket: NormalizedAdminDocket) {
     .sort((a, b) => new Date(b.sent_at ?? 0).getTime() - new Date(a.sent_at ?? 0).getTime())[0] ?? null;
 }
 
+function LeadOriginBadge({ docket }: { docket: Pick<NormalizedAdminDocket, "customer_id" | "lead_source"> }) {
+  return (
+    <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#E55125]/35 bg-[#E55125]/10 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#f47a55]">
+      {getLeadOriginLabel(docket)}
+    </span>
+  );
+}
+
 function DocketProgressBar({ docket }: { docket: NormalizedAdminDocket }) {
   const progressState = getProgressBarStage(docket.status, docket);
   const { currentIndex, status } = progressState;
@@ -234,6 +250,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [activeLeadView, setActiveLeadView] = useState<MarketableLeadView>("quote");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -517,23 +534,32 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     await refreshDockets(nextShowArchived);
   }
 
+  const leadViewCounts = useMemo(() => countMarketableLeadViews(dockets), [dockets]);
+
+  const activeLeadViewLabel = MARKETABLE_LEAD_VIEWS.find((view) => view.id === activeLeadView)?.label ?? "Quote Leads";
+
   const metrics = useMemo(() => {
-    const active = dockets.filter(isActive).length;
-    const needsAttention = dockets.filter(isNeedsAttention).length;
-    const approvedPending = dockets.filter((docket) => docket.status === "decision_made").length;
+    const marketableDockets = dockets.filter((docket) => isInMarketableLeadView(docket, activeLeadView));
+    const active = marketableDockets.filter(isActive).length;
+    const needsAttention = marketableDockets.filter(isNeedsAttention).length;
+    const approvedPending = marketableDockets.filter((docket) => docket.status === "decision_made").length;
 
     return {
       active,
       needsAttention,
       approvedPending,
     };
-  }, [dockets]);
+  }, [activeLeadView, dockets]);
 
   const filteredDockets = useMemo(() => {
     const text = searchTerm.trim().toLowerCase();
 
     const filtered = dockets.filter((docket) => {
       if (showArchived ? docket.is_archived !== true : docket.is_archived !== false) {
+        return false;
+      }
+
+      if (!isInMarketableLeadView(docket, activeLeadView)) {
         return false;
       }
 
@@ -574,7 +600,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     });
 
     return sortDocketsByUrgency(filtered);
-  }, [dockets, flaggedOnly, searchTerm, showArchived, statusFilter]);
+  }, [activeLeadView, dockets, flaggedOnly, searchTerm, showArchived, statusFilter]);
 
   return (
     <main className="min-h-screen bg-[#0b0b0b] px-5 py-6 text-white sm:px-8">
@@ -612,6 +638,31 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           </div>
         </header>
 
+        <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-3">
+          {MARKETABLE_LEAD_VIEWS.map((view) => {
+            const isActiveView = activeLeadView === view.id;
+            return (
+              <button
+                aria-pressed={isActiveView}
+                className={`rounded-lg px-4 py-3 text-left transition ${
+                  isActiveView ? "bg-[#E55125] text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+                }`}
+                key={view.id}
+                onClick={() => setActiveLeadView(view.id)}
+                type="button"
+              >
+                <span className="flex items-center justify-between gap-3">
+                  <span className="text-sm font-semibold">{view.label}</span>
+                  <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
+                    {leadViewCounts[view.id]}
+                  </span>
+                </span>
+                <span className="mt-1 block text-xs opacity-75">{view.description}</span>
+              </button>
+            );
+          })}
+        </section>
+
         {showArchived ? (
           <div className="mb-5 flex items-center justify-between rounded-md border border-orange-400/20 border-l-4 border-l-orange-400/70 bg-orange-950/20 px-4 py-3">
             <span className="text-sm text-orange-100">Viewing archived dockets</span>
@@ -625,7 +676,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
         ) : (
           <section className="mb-5 grid gap-3 sm:grid-cols-3">
             <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
-              <p className="text-xs uppercase tracking-wider text-white/60">Total Active Dockets</p>
+              <p className="text-xs uppercase tracking-wider text-white/60">Active {activeLeadViewLabel}</p>
               <p className="mt-2 text-3xl font-semibold">{metrics.active}</p>
             </article>
             <article className="rounded-xl border border-white/10 bg-[#161616] p-4">
@@ -683,7 +734,12 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
               <article className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg" key={docket.id}>
                 <div className="p-5">
                   <div className="mb-4 flex items-start justify-between gap-4">
-                    <h2 className="text-xl font-semibold text-white">{getCustomerName(docket)}</h2>
+                    <div className="min-w-0">
+                      <h2 className="truncate text-xl font-semibold text-white">{getCustomerName(docket)}</h2>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        <LeadOriginBadge docket={docket} />
+                      </div>
+                    </div>
                     <button
                       className="shrink-0 rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
                       onClick={() => handleOpenDrawer(docket.id)}
@@ -765,6 +821,10 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
                       <p className="truncate text-sm text-white/80" title={vehicleDescription}>
                         {vehicleDescription}
                       </p>
+                      <div className="flex flex-wrap items-center gap-2 pt-1">
+                        <LeadOriginBadge docket={selectedDocket} />
+                        <span className="text-xs text-white/50">Lead source: {getLeadSourceLabel(selectedDocket.lead_source)}</span>
+                      </div>
                       <p className="text-sm text-white/70">
                         Currently: {statusDisplay.text} · {getProgressStageText(selectedDocket)}
                       </p>

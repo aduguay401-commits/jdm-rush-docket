@@ -82,6 +82,10 @@ export type AdminDocket = {
   customer_last_name: string | null;
   customer_email: string | null;
   customer_phone: string | null;
+  customer_id: string | null;
+  lead_source: string | null;
+  lead_source_set_at: string | null;
+  lead_source_detail: Record<string, unknown> | null;
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;

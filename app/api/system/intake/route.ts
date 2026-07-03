@@ -268,6 +268,11 @@ export async function POST(request: Request) {
       additional_notes: additionalNotes,
       selected_path: selectedPath,
       selected_private_dealer_option: selectedPrivateDealerOption,
+      lead_source: 'find_my_jdm',
+      lead_source_set_at: new Date().toISOString(),
+      lead_source_detail: {
+        route: '/api/system/intake',
+      },
       ...(shouldStoreAdditionalInfo && additionalInfo ? { additional_info: additionalInfo } : {}),
       exchange_rate_at_report: exchange.rate,
       exchange_rate_date: exchange.date,
