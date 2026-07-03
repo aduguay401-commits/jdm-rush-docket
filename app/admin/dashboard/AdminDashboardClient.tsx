@@ -15,13 +15,13 @@ import {
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
 import {
-  countMarketableLeadViews,
+  countLeadViews,
   getLeadOriginLabel,
   getLeadSourceLabel,
-  isInMarketableLeadView,
-  MARKETABLE_LEAD_VIEWS,
+  isInLeadView,
+  LEAD_VIEWS,
 } from "@/lib/dockets/leadSource";
-import type { MarketableLeadView } from "@/lib/dockets/leadSource";
+import type { LeadView } from "@/lib/dockets/leadSource";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
@@ -250,7 +250,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
-  const [activeLeadView, setActiveLeadView] = useState<MarketableLeadView>("quote");
+  const [activeLeadView, setActiveLeadView] = useState<LeadView>("all");
   const [flaggedOnly, setFlaggedOnly] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
 
@@ -534,15 +534,15 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
     await refreshDockets(nextShowArchived);
   }
 
-  const leadViewCounts = useMemo(() => countMarketableLeadViews(dockets), [dockets]);
+  const leadViewCounts = useMemo(() => countLeadViews(dockets), [dockets]);
 
-  const activeLeadViewLabel = MARKETABLE_LEAD_VIEWS.find((view) => view.id === activeLeadView)?.label ?? "Quote Leads";
+  const activeLeadViewLabel = LEAD_VIEWS.find((view) => view.id === activeLeadView)?.label ?? "All";
 
   const metrics = useMemo(() => {
-    const marketableDockets = dockets.filter((docket) => isInMarketableLeadView(docket, activeLeadView));
-    const active = marketableDockets.filter(isActive).length;
-    const needsAttention = marketableDockets.filter(isNeedsAttention).length;
-    const approvedPending = marketableDockets.filter((docket) => docket.status === "decision_made").length;
+    const visibleDockets = dockets.filter((docket) => isInLeadView(docket, activeLeadView));
+    const active = visibleDockets.filter(isActive).length;
+    const needsAttention = visibleDockets.filter(isNeedsAttention).length;
+    const approvedPending = visibleDockets.filter((docket) => docket.status === "decision_made").length;
 
     return {
       active,
@@ -559,7 +559,7 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
         return false;
       }
 
-      if (!isInMarketableLeadView(docket, activeLeadView)) {
+      if (!isInLeadView(docket, activeLeadView)) {
         return false;
       }
 
@@ -638,8 +638,8 @@ export default function AdminDashboardClient({ initialDockets }: Props) {
           </div>
         </header>
 
-        <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-3">
-          {MARKETABLE_LEAD_VIEWS.map((view) => {
+        <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-4">
+          {LEAD_VIEWS.map((view) => {
             const isActiveView = activeLeadView === view.id;
             return (
               <button

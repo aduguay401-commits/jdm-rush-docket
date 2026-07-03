@@ -11,12 +11,12 @@ import {
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
 import {
-  countMarketableLeadViews,
+  countLeadViews,
   getLeadOriginLabel,
-  isInMarketableLeadView,
-  MARKETABLE_LEAD_VIEWS,
+  isInLeadView,
+  LEAD_VIEWS,
 } from "@/lib/dockets/leadSource";
-import type { MarketableLeadView } from "@/lib/dockets/leadSource";
+import type { LeadView } from "@/lib/dockets/leadSource";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Docket = {
@@ -244,7 +244,7 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
-  const [activeLeadView, setActiveLeadView] = useState<MarketableLeadView>("quote");
+  const [activeLeadView, setActiveLeadView] = useState<LeadView>("all");
   const [dashboardSuccessMessage, setDashboardSuccessMessage] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
 
@@ -375,10 +375,10 @@ export default function AgentDashboardPage() {
     };
   }, [loadDashboard]);
 
-  const leadViewCounts = useMemo(() => countMarketableLeadViews(dockets), [dockets]);
+  const leadViewCounts = useMemo(() => countLeadViews(dockets), [dockets]);
 
   const filteredDockets = useMemo(
-    () => sortDocketsByUrgency(dockets.filter((docket) => isInMarketableLeadView(docket, activeLeadView))),
+    () => sortDocketsByUrgency(dockets.filter((docket) => isInLeadView(docket, activeLeadView))),
     [activeLeadView, dockets],
   );
 
@@ -436,8 +436,8 @@ export default function AgentDashboardPage() {
 
         {!loading && !error && dockets.length > 0 ? (
           <>
-            <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-3">
-              {MARKETABLE_LEAD_VIEWS.map((view) => {
+            <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-4">
+              {LEAD_VIEWS.map((view) => {
                 const isActiveView = activeLeadView === view.id;
                 return (
                   <button

@@ -1,5 +1,6 @@
 export type LeadSource = "exact_quote" | "find_my_jdm";
 export type MarketableLeadView = "garage" | "quote" | "find";
+export type LeadView = "all" | MarketableLeadView;
 export type LeadOrigin = MarketableLeadView | "legacy";
 
 export type LeadSourceDocket = {
@@ -7,11 +8,16 @@ export type LeadSourceDocket = {
   lead_source?: string | null;
 };
 
-export const MARKETABLE_LEAD_VIEWS: Array<{
-  id: MarketableLeadView;
+export const LEAD_VIEWS: Array<{
+  id: LeadView;
   label: string;
   description: string;
 }> = [
+  {
+    id: "all",
+    label: "All",
+    description: "Every docket",
+  },
   {
     id: "garage",
     label: "My Garage",
@@ -69,17 +75,22 @@ export function getLeadSourceLabel(leadSource: string | null | undefined) {
   }
 }
 
-export function countMarketableLeadViews<TDocket extends LeadSourceDocket>(dockets: TDocket[]) {
+export function countLeadViews<TDocket extends LeadSourceDocket>(dockets: TDocket[]) {
   return {
+    all: dockets.length,
     garage: dockets.filter((docket) => getLeadOrigin(docket) === "garage").length,
     quote: dockets.filter((docket) => getLeadOrigin(docket) === "quote").length,
     find: dockets.filter((docket) => getLeadOrigin(docket) === "find").length,
-  } satisfies Record<MarketableLeadView, number>;
+  } satisfies Record<LeadView, number>;
 }
 
-export function isInMarketableLeadView<TDocket extends LeadSourceDocket>(
+export function isInLeadView<TDocket extends LeadSourceDocket>(
   docket: TDocket,
-  view: MarketableLeadView,
+  view: LeadView,
 ) {
+  if (view === "all") {
+    return true;
+  }
+
   return getLeadOrigin(docket) === view;
 }

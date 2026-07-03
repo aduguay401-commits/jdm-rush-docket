@@ -1,5 +1,24 @@
 # Progress
 
+## 2026-07-03 - Nurture Phase 1 All-view refinement
+
+Summary: added an All dashboard view as the default on both admin and agent dashboards so legacy/pre-migration dockets remain reachable while the three marketable segment tabs stay available.
+
+Files changed:
+- `lib/dockets/leadSource.ts` - adds the `all` lead view, counts every docket for that tab, and keeps segment-only filtering explicit for My Garage, Quote Leads, and Find My JDM.
+- `app/admin/dashboard/AdminDashboardClient.tsx` - defaults to All, renders four lead-view tabs, and preserves the existing search/status/flag/archived filters.
+- `app/agent/dashboard/page.tsx` - mirrors the All-first four-tab layout for export agents.
+- `PROGRESS.md` - records this review refinement.
+
+Decisions/deviations:
+- Migration 010, route stamping, and the lead-source immutability trigger were left unchanged.
+- Null/legacy rows remain unclassified for marketing purposes, but they are visible in the operational All view.
+
+Verification:
+- Pending rerun: `git diff --check`, `npm run type-check`, and isolated nm-gate on the pushed branch.
+
+Status: refinement complete pending commit and isolated gate.
+
 ## 2026-07-03 - Nurture Engine Phase 1 lead-source segmentation
 
 Summary: added the Phase 1 immutable lead-source stamp and three-tab lead segmentation for admin and agent dashboards without changing selected_path, pricing, lifecycle, or site proxy behavior.
