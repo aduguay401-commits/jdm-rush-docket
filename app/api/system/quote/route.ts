@@ -19,10 +19,12 @@ import {
   calculateImportCost,
   normalizeDestinationCity,
   classifyVehicleType,
+  calculateCardEstimate,
 } from "@/lib/importCalculator";
 import type { DutyType } from "@/lib/importCalculator";
+import { buildAnchorModelKey, CASL_SENDER_IDENTITY } from "@/lib/nurture/consent";
 import { createServerClient } from "@/lib/supabase/server";
-import { getCustomerHomeBaseUrl } from "@/lib/urls";
+import { getCustomerHomeBaseUrl, getNurtureOptInUrl } from "@/lib/urls";
 
 // ── Request shape ───────────────────────────────────────────────────────
 
@@ -240,7 +242,7 @@ export async function POST(request: Request) {
         : "";
 
     // Helper: build email HTML/text bodies (needs report URL for CTA)
-    const makeEmailHtml = (reportUrl: string | null) => {
+    const makeEmailHtml = (reportUrl: string | null, nurtureOptInUrl: string | null) => {
       const reportCtaHtml = reportUrl
         ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="border-collapse: separate; margin: 24px auto;">
     <tr>
@@ -251,6 +253,23 @@ export async function POST(request: Request) {
       </td>
     </tr>
   </table>`
+        : "";
+
+      const nurtureOptInHtml = nurtureOptInUrl
+        ? `<div style="background: #151515; border: 1px solid #2a2a2a; padding: 20px; margin: 24px 0;">
+    <p style="font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 8px 0;">WANT US TO KEEP LOOKING?</p>
+    <p style="color: #cccccc; font-size: 14px; line-height: 1.7; margin: 0 0 16px 0;">
+      We can send you 3 similar Japan Stock matches about once a week based on this quote. You are not signed up unless you confirm on the next page.
+    </p>
+    <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="border-collapse: separate; margin: 0 auto 14px auto; width: 100%;">
+      <tr>
+        <td align="center" bgcolor="#E55125" style="background-color: #E55125; padding: 15px 20px;">
+          <a href="${escapeHtml(nurtureOptInUrl)}" target="_blank" style="display: inline-block; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 700; text-decoration: none; line-height: 1.3;">Send me 3 similar Japan Stock matches each week</a>
+        </td>
+      </tr>
+    </table>
+    <p style="color: #888888; font-size: 12px; line-height: 1.6; margin: 0;">By confirming, you agree to receive weekly vehicle match emails from ${escapeHtml(CASL_SENDER_IDENTITY)}. Unsubscribe anytime with one click.</p>
+  </div>`
         : "";
 
       return `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;">
@@ -284,6 +303,8 @@ export async function POST(request: Request) {
   </div>
 
   ${reportCtaHtml}
+
+  ${nurtureOptInHtml}
 
   <hr style="border: 0; border-top: 1px solid #2a2a2a; margin: 30px 0;" />
 
@@ -359,12 +380,63 @@ export async function POST(request: Request) {
     const reportUrl = docket.questions_url_token
       ? getCustomerHomeBaseUrl(docket.questions_url_token)
       : null;
+    let nurtureOptInUrl: string | null = null;
+
+    try {
+      const { data: tokenRow, error: tokenError } = await supabase
+        .from("dockets")
+        .select("marketing_unsubscribe_token")
+        .eq("id", docket.id);
+
+      if (tokenError) {
+        throw tokenError;
+      }
+
+      const token = tokenRow?.[0]?.marketing_unsubscribe_token;
+      if (!token) {
+        throw new Error("marketing_unsubscribe_token not available");
+      }
+
+      const anchorYear = toNumber(body.year);
+      const anchorCardEstimateCAD = calculateCardEstimate({
+        vehiclePriceJPY,
+        dutyType,
+        exchangeRate: exchange.rate,
+      });
+
+      const { error: savedSearchError } = await supabase.from("lead_saved_searches").insert({
+        docket_id: docket.id,
+        email: customerOriginalEmail,
+        anchor_ref: ref,
+        anchor_url: null,
+        anchor_year: anchorYear,
+        anchor_make: make,
+        anchor_model: model,
+        anchor_model_key: buildAnchorModelKey(make, model),
+        anchor_price_jpy: Math.round(vehiclePriceJPY),
+        anchor_card_estimate_cad: anchorCardEstimateCAD,
+        anchor_duty_type: dutyType,
+        destination_city: breakdown.destinationLabel,
+        active: false,
+      });
+
+      if (savedSearchError) {
+        throw savedSearchError;
+      }
+
+      nurtureOptInUrl = getNurtureOptInUrl(String(token));
+    } catch (savedSearchSeedError) {
+      console.error("[Quote] Saved search opt-in seed skipped", savedSearchSeedError);
+    }
 
     // ── 10. Send email ───────────────────────────────────────────────
-    const htmlBody = makeEmailHtml(reportUrl);
+    const htmlBody = makeEmailHtml(reportUrl, nurtureOptInUrl);
 
     const reportCtaText = reportUrl
       ? `\nView your full quote: ${reportUrl}\n`
+      : "";
+    const nurtureOptInText = nurtureOptInUrl
+      ? `\nSend me 3 similar Japan Stock matches each week: ${nurtureOptInUrl}\nConfirming signs you up for weekly vehicle match emails from ${CASL_SENDER_IDENTITY}. You can unsubscribe anytime with one click.\n`
       : "";
 
     const textBody = `${devModeBannerText}Your exact import quote — ${vehicleLabel}
@@ -384,6 +456,7 @@ What's included:
 
 ⚠️ This estimate is calculated at today's exchange rate of ${exchange.rate.toFixed(4)} JPY/CAD (Bank of Canada, ${exchange.date}). Final amounts may vary slightly based on the exchange rate at time of purchase and any changes in import fees. Duty classification for Japanese makes (0%) is based on Canada's tariff schedule and is our best assessment — not a legal guarantee.
 ${reportCtaText}
+${nurtureOptInText}
 Ready to move forward? Reply to this email and we'll get the ball rolling.
 
 — Adam & the JDM Rush Team
@@ -398,7 +471,7 @@ support@jdmrushimports.ca`;
         html: htmlBody,
         text: textBody,
       });
-    } catch (err) {
+    } catch {
       console.error("[Quote] Email send failed");
 
       await supabase
@@ -436,7 +509,7 @@ support@jdmrushimports.ca`;
       totalDeliveredCAD: breakdown.totalDeliveredCAD,
       reportToken: docket.questions_url_token,
     });
-  } catch (err) {
+  } catch {
     console.error("[Quote] Unexpected error");
     return NextResponse.json(
       { ok: false, error: "Internal server error" },

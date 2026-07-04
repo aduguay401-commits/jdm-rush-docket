@@ -1,6 +1,14 @@
 import { type ReactNode } from "react";
 
-export function AuthPageShell({ subtitle, children }: { subtitle: string; children: ReactNode }) {
+export function AuthPageShell({
+  title = "My JDM Garage",
+  subtitle,
+  children,
+}: {
+  title?: string;
+  subtitle: string;
+  children: ReactNode;
+}) {
   return (
     <div className="min-h-screen bg-[#111111]">
       <main id="main-content">
@@ -18,7 +26,7 @@ export function AuthPageShell({ subtitle, children }: { subtitle: string; childr
               className="text-[#E55125] font-extrabold tracking-tight leading-none text-center"
               style={{ fontSize: "clamp(26px, 5vw, 36px)" }}
             >
-              My JDM Garage
+              {title}
             </h1>
             <p className="text-white/60 text-[14px] mt-2">{subtitle}</p>
           </div>
