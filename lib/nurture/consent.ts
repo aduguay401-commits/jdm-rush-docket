@@ -258,6 +258,24 @@ export async function recordLeadUnsubscribe(
   const supabase = createServerClient();
   const now = new Date().toISOString();
 
+  const { error: eventInsertError } = await supabase.from("lead_consent_events").insert({
+    docket_id: lead.docket.id,
+    event_type: "unsubscribe",
+    event_source: "weekly_email_unsubscribe",
+    email: lead.docket.customer_email,
+    ip_hash: meta.ip_hash,
+    user_agent: meta.user_agent,
+    token,
+    metadata: {
+      saved_search_id: lead.savedSearch.id,
+      vehicle: vehicleLabelForLead(lead),
+    },
+  });
+
+  if (eventInsertError) {
+    return null;
+  }
+
   const { error: docketUpdateError } = await supabase
     .from("dockets")
     .update({
@@ -276,24 +294,6 @@ export async function recordLeadUnsubscribe(
     .eq("id", lead.savedSearch.id);
 
   if (savedSearchUpdateError) {
-    return null;
-  }
-
-  const { error: eventInsertError } = await supabase.from("lead_consent_events").insert({
-    docket_id: lead.docket.id,
-    event_type: "unsubscribe",
-    event_source: "weekly_email_unsubscribe",
-    email: lead.docket.customer_email,
-    ip_hash: meta.ip_hash,
-    user_agent: meta.user_agent,
-    token,
-    metadata: {
-      saved_search_id: lead.savedSearch.id,
-      vehicle: vehicleLabelForLead(lead),
-    },
-  });
-
-  if (eventInsertError) {
     return null;
   }
 
