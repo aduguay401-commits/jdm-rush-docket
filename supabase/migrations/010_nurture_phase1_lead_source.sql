@@ -1,3 +1,4 @@
+-- editor-safe, no DO/dollar-dollar blocks.
 -- Nurture Engine Phase 1: immutable lead source segmentation.
 -- Adam-run production migration. Additive only; does not mutate selected_path or lifecycle fields.
 
@@ -20,20 +21,11 @@ ALTER TABLE public.dockets
 ALTER TABLE public.dockets
   ALTER COLUMN lead_source_detail SET NOT NULL;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'dockets_lead_source_check'
-      AND conrelid = 'public.dockets'::regclass
-  ) THEN
-    ALTER TABLE public.dockets
-      ADD CONSTRAINT dockets_lead_source_check
-      CHECK (lead_source IS NULL OR lead_source IN ('exact_quote', 'find_my_jdm'));
-  END IF;
-END;
-$$;
+ALTER TABLE public.dockets DROP CONSTRAINT IF EXISTS dockets_lead_source_check;
+
+ALTER TABLE public.dockets
+  ADD CONSTRAINT dockets_lead_source_check
+  CHECK (lead_source IS NULL OR lead_source IN (exact_quote, find_my_jdm));
 
 UPDATE public.dockets
 SET
@@ -48,7 +40,7 @@ WHERE lead_source IS NULL
 CREATE OR REPLACE FUNCTION public.prevent_dockets_lead_source_change()
 RETURNS trigger
 LANGUAGE plpgsql
-AS $$
+AS $dollar-fn-dollar$
 BEGIN
   IF TG_OP = 'UPDATE'
     AND OLD.lead_source IS NOT NULL
@@ -67,7 +59,7 @@ BEGIN
 
   RETURN NEW;
 END;
-$$;
+$dollar-fn-dollar$;
 
 DROP TRIGGER IF EXISTS dockets_lead_source_immutable ON public.dockets;
 
