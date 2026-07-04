@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-07-04 - Nurture Engine Phase 3B pre-go-live fixes
+
+Summary: closed Adam's four pre-go-live fixes on the Phase 3B weekly send job without expanding scope beyond the cron/email path.
+
+Files changed:
+- `app/api/cron/nurture-matches/route.ts` - adds six-day sent-ledger dedupe independent of `last_sent_at`, skips real suppression timestamp updates in DEV_MODE, strips List-Unsubscribe mailto down to a bare email address, and records the original intended recipient in `nurture_email_sends` rows even when delivery reroutes to ADMIN_EMAIL.
+- `PROGRESS.md` - records the pre-go-live fix pass.
+
+Decisions/deviations:
+- The sent ledger row is written immediately after a successful email send and before the non-DEV suppression timestamp updates, so a later partial write failure no longer permits a resend within six days.
+- DEV_MODE idempotency now relies on the sent ledger row, not on `lead_saved_searches.last_sent_at`; this prevents test runs against shared data from suppressing real customer sends.
+- `email_log.recipient_email` still reflects the actual delivery target for QA visibility, while `nurture_email_sends.recipient_email` reflects the original customer recipient.
+
+Verification:
+- `git diff --check` PASS.
+- `npm run type-check` PASS.
+- `npm run lint` PASS with 11 baseline warnings and 0 errors.
+- `npm run build` PASS.
+- Full isolated `bash .agents/bin/nm-gate nurture-p3b-sendjob` PASS on the pushed branch: lint PASS advisory, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: fixes complete, pushed, and isolated gate PASS.
+
 ## 2026-07-04 - Nurture Engine Phase 3B weekly send job
 
 Summary: implemented the weekly nurture send job that turns Phase 3A matches into customer emails while keeping launch controls off until Adam sets production env. The cron requires Bearer CRON_SECRET, supports DEV_MODE rerouting to ADMIN_EMAIL, fetches Japan Stock inventory once per run, sends at most three matched cars, records the nurture send ledger, updates the six-day idempotency timestamp, logs email_log weekly_matches rows, and includes List-Unsubscribe/List-Unsubscribe-Post headers.

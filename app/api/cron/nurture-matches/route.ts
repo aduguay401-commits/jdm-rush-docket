@@ -57,6 +57,7 @@ type CronCounters = {
   processed: number;
   sent: number;
   skipped_insufficient_matches: number;
+  skipped_recently_sent: number;
   skipped_unsubscribed: number;
   failed: number;
 };
@@ -91,6 +92,15 @@ function buildAnchorVehicleLabel(row: SavedSearchRow, docket: DocketForNurture):
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message.slice(0, 1000);
   return String(error).slice(0, 1000);
+}
+
+function bareEmailAddress(value: string): string {
+  const bracketMatch = value.match(/<([^<>\s]+@[^<>\s]+)>/);
+  if (bracketMatch?.[1]) return bracketMatch[1];
+
+  const trimmed = value.trim().replace(/^mailto:/i, "");
+  const plainMatch = trimmed.match(/[^\s<>]+@[^\s<>]+/);
+  return plainMatch?.[0] ?? trimmed;
 }
 
 function getFirstImageUrl(row: JapanStockInventoryRow | undefined): string | null {
@@ -197,6 +207,7 @@ async function handleNurtureMatchesCron(request: Request) {
     processed: 0,
     sent: 0,
     skipped_insufficient_matches: 0,
+    skipped_recently_sent: 0,
     skipped_unsubscribed: 0,
     failed: 0,
   };
@@ -216,7 +227,31 @@ async function handleNurtureMatchesCron(request: Request) {
     return Response.json({ error: savedSearchesError.message }, { status: 500 });
   }
 
-  const leads = (savedSearches ?? []) as SavedSearchRow[];
+  let leads = (savedSearches ?? []) as SavedSearchRow[];
+  if (leads.length === 0) {
+    return Response.json({ message: "No due nurture matches", ...counters });
+  }
+
+  const savedSearchIds = leads.map((lead) => lead.id);
+  const { data: recentSentRows, error: recentSentError } = await supabase
+    .from("nurture_email_sends")
+    .select("saved_search_id")
+    .in("saved_search_id", savedSearchIds)
+    .eq("status", "sent")
+    .gte("created_at", cutoffIso);
+
+  if (recentSentError) {
+    return Response.json({ error: recentSentError.message }, { status: 500 });
+  }
+
+  const recentlySentSavedSearchIds = new Set(
+    ((recentSentRows ?? []) as { saved_search_id: string | null }[])
+      .map((row) => row.saved_search_id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  leads = leads.filter((lead) => !recentlySentSavedSearchIds.has(lead.id));
+  counters.skipped_recently_sent = savedSearchIds.length - leads.length;
+
   if (leads.length === 0) {
     return Response.json({ message: "No due nurture matches", ...counters });
   }
@@ -297,7 +332,7 @@ async function handleNurtureMatchesCron(request: Request) {
         text: email.text,
         listUnsubscribe: {
           url: email.unsubscribeUrl,
-          mailto: fromEmail,
+          mailto: bareEmailAddress(fromEmail),
           oneClick: true,
         },
       });
@@ -306,26 +341,39 @@ async function handleNurtureMatchesCron(request: Request) {
         throw sendResult.error;
       }
 
-      const { error: savedSearchUpdateError } = await supabase
-        .from("lead_saved_searches")
-        .update({ last_sent_at: nowIso })
-        .eq("id", lead.id);
-
-      const { error: docketUpdateError } = await supabase
-        .from("dockets")
-        .update({ marketing_last_email_at: nowIso })
-        .eq("id", lead.docket_id);
-
       await insertNurtureSend(supabase, {
         saved_search_id: lead.id,
         docket_id: lead.docket_id,
-        recipient_email: recipientEmail,
+        recipient_email: originalRecipient,
         status: "sent",
         subject: email.subject,
         inventory_refs: inventoryRefs,
         match_config: matchConfig,
         sent_at: nowIso,
       });
+
+      if (!DEV_MODE) {
+        const { error: savedSearchUpdateError } = await supabase
+          .from("lead_saved_searches")
+          .update({ last_sent_at: nowIso })
+          .eq("id", lead.id);
+
+        const { error: docketUpdateError } = await supabase
+          .from("dockets")
+          .update({ marketing_last_email_at: nowIso })
+          .eq("id", lead.docket_id);
+
+        if (savedSearchUpdateError || docketUpdateError) {
+          console.error("[Nurture Matches] post-send suppression write failed", {
+            savedSearchId: lead.id,
+            docketId: lead.docket_id,
+            savedSearchUpdateError,
+            docketUpdateError,
+          });
+          counters.failed += 1;
+          continue;
+        }
+      }
 
       const { error: emailLogError } = await supabase.from("email_log").insert({
         docket_id: lead.docket_id,
@@ -335,12 +383,10 @@ async function handleNurtureMatchesCron(request: Request) {
         body_snapshot: email.html,
       });
 
-      if (savedSearchUpdateError || docketUpdateError || emailLogError) {
-        console.error("[Nurture Matches] post-send write failed", {
+      if (emailLogError) {
+        console.error("[Nurture Matches] email_log insert failed", {
           savedSearchId: lead.id,
           docketId: lead.docket_id,
-          savedSearchUpdateError,
-          docketUpdateError,
           emailLogError,
         });
         counters.failed += 1;
@@ -353,7 +399,7 @@ async function handleNurtureMatchesCron(request: Request) {
       await insertNurtureSend(supabase, {
         saved_search_id: lead.id,
         docket_id: lead.docket_id,
-        recipient_email: recipientEmail,
+        recipient_email: originalRecipient,
         status: "failed",
         error: errorMessage(error),
       });
