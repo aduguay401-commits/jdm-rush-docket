@@ -1,5 +1,42 @@
 # Progress
 
+## 2026-07-04 - Nurture Engine Phase 2 consent ledger and opt-in
+
+Summary: implemented the Docket-owned Phase 2 consent ledger, inactive quote saved-search seed, no-login opt-in confirmation, one-click unsubscribe suppression, and optional List-Unsubscribe email header support. Scope stayed additive: no matching engine, no weekly cron, no Garage upgrade, and no changes to Phase 1 lead_source stamping or selected_path behavior.
+
+Pre-build live schema gate:
+- Live Supabase `dockets` was inspected through the service-role PostgREST OpenAPI metadata before authoring migration 011.
+- Confirmed Phase 1 columns are live: `lead_source`, `lead_source_set_at`, and `lead_source_detail`.
+- Confirmed `gen_random_uuid()` is available on live because `dockets.id` defaults to `gen_random_uuid()`.
+- Existing dockets indexes visible from applied tracked migrations: `dockets_pkey` and `idx_dockets_customer_id`. Supabase only exposes `public` and `graphql_public` via PostgREST, so `pg_catalog.pg_indexes` was not directly readable from this seat.
+
+Files changed:
+- `supabase/migrations/011_nurture_phase2_consent.sql` - adds Docket marketing consent fields, unique unsubscribe-token index, `lead_consent_events`, `lead_saved_searches`, checks, indexes, RLS enablement, and named `$fn$` trigger functions without SQL-editor-hostile `DO` or anonymous `$$` blocks.
+- `app/api/system/quote/route.ts` - creates an inactive saved search for new exact-quote dockets, computes the anchor card estimate with the existing calculator helper, and adds the weekly-matches opt-in CTA plus concise consent language to the transactional quote email.
+- `lib/nurture/consent.ts` - centralizes token shape validation, per-IP lookup throttling, non-enumerable exact-quote saved-search lookups, hashed IP/user-agent proof metadata, opt-in recording, unsubscribe recording, and simple anchor model-key generation.
+- `app/nurture/opt-in/[token]/page.tsx` - adds the no-login confirmation page using the existing AuthPageShell/AuthUi styling, vehicle recap, consent card, full-width POST CTA, idempotent confirmed state, and invalid-link ErrorBanner state.
+- `app/api/nurture/opt-in/[token]/route.ts` - records express consent via POST only, activates the saved search, inserts a consent event, and redirects back to the confirmation page.
+- `app/nurture/unsubscribe/[token]/page.tsx` - adds the one-click suppression confirmation page with the neutral non-orange card and invalid-link ErrorBanner state.
+- `app/api/nurture/unsubscribe/[token]/route.ts` - supports unsubscribe suppression from API GET/POST paths, including one-click List-Unsubscribe-Post style POST responses.
+- `lib/email.ts` - adds optional custom headers plus List-Unsubscribe/List-Unsubscribe-Post support for future commercial sends.
+- `lib/urls.ts` - adds canonical Docket opt-in and unsubscribe URL builders.
+- `app/account/_components/AuthPageShell.tsx` - adds a backward-compatible optional `title` prop so the nurture pages can reuse the existing shell with their required headings.
+- `ISSUES.md` - records migration 011 as Adam-run before runtime QA/merge and moves the now-live migration 010 item to Resolved.
+
+Decisions/deviations:
+- Migration 011 is authored but not run; Adam must paste the delivered SQL into production Supabase before runtime QA.
+- The quote email remains transactional by default. The weekly-match CTA links to a confirmation page; no GET route grants consent.
+- Existing dockets that receive generated unsubscribe tokens from migration 011 are not opt-in eligible unless they also have `lead_source = 'exact_quote'` and a Phase 2 `lead_saved_searches` row, preventing legacy-token enumeration or accidental marketing consent.
+- CASL sender identity uses the locked address `JDM Rush Imports Inc., 11 Humboldt Ave, Winnipeg, MB R3B 0S5, Canada`; Adam still needs to confirm the postal address before broad marketing sends.
+
+Verification so far:
+- `git diff --check` PASS.
+- `npx tsc --noEmit --pretty false` PASS.
+- `npm run lint` PASS with 11 baseline warnings outside the Phase 2 changes.
+- Full isolated nm-gate will run after commit and push.
+
+Status: implementation complete pending commit and isolated gate.
+
 ## 2026-07-03 - Nurture Phase 1 All-view refinement
 
 Summary: added an All dashboard view as the default on both admin and agent dashboards so legacy/pre-migration dockets remain reachable while the three marketable segment tabs stay available.

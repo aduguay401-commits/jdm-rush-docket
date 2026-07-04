@@ -18,6 +18,8 @@ export async function sendEmail({
   html,
   text,
   attachments,
+  headers,
+  listUnsubscribe,
 }: {
   from: string;
   to: string;
@@ -26,10 +28,28 @@ export async function sendEmail({
   html?: string;
   text?: string;
   attachments?: { filename: string; content: Buffer; contentType?: string }[];
+  headers?: Record<string, string>;
+  listUnsubscribe?: {
+    url: string;
+    mailto?: string;
+    oneClick?: boolean;
+  };
 }) {
   const formattedFrom = from.includes('<')
     ? from
     : `JDM Rush Imports <${from}>`;
+
+  const messageHeaders: Record<string, string> = { ...(headers ?? {}) };
+  if (listUnsubscribe) {
+    const values = [`<${listUnsubscribe.url}>`];
+    if (listUnsubscribe.mailto) {
+      values.push(`<mailto:${listUnsubscribe.mailto}>`);
+    }
+    messageHeaders['List-Unsubscribe'] = values.join(', ');
+    if (listUnsubscribe.oneClick) {
+      messageHeaders['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click';
+    }
+  }
 
   const result = await transporter.sendMail({
     from: formattedFrom,
@@ -39,6 +59,7 @@ export async function sendEmail({
     ...(html ? { html } : {}),
     ...(text ? { text } : {}),
     ...(attachments ? { attachments } : {}),
+    ...(Object.keys(messageHeaders).length > 0 ? { headers: messageHeaders } : {}),
   });
   return { data: result, error: null };
 }

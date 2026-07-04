@@ -11,3 +11,11 @@ export function getCustomerHomeBaseUrl(token: string): string {
 export function getCustomerReportUrl(token: string): string {
   return `${getAppBaseUrl()}/report/${encodeURIComponent(token)}`;
 }
+
+export function getNurtureOptInUrl(token: string): string {
+  return `${getAppBaseUrl()}/nurture/opt-in/${encodeURIComponent(token)}`;
+}
+
+export function getNurtureUnsubscribeUrl(token: string): string {
+  return `${getAppBaseUrl()}/nurture/unsubscribe/${encodeURIComponent(token)}`;
+}
