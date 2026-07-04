@@ -1,5 +1,53 @@
 # Progress
 
+## 2026-07-04 - Nurture Engine Phase 3B pre-go-live fixes
+
+Summary: closed Adam's four pre-go-live fixes on the Phase 3B weekly send job without expanding scope beyond the cron/email path.
+
+Files changed:
+- `app/api/cron/nurture-matches/route.ts` - adds six-day sent-ledger dedupe independent of `last_sent_at`, skips real suppression timestamp updates in DEV_MODE, strips List-Unsubscribe mailto down to a bare email address, and records the original intended recipient in `nurture_email_sends` rows even when delivery reroutes to ADMIN_EMAIL.
+- `PROGRESS.md` - records the pre-go-live fix pass.
+
+Decisions/deviations:
+- The sent ledger row is written immediately after a successful email send and before the non-DEV suppression timestamp updates, so a later partial write failure no longer permits a resend within six days.
+- DEV_MODE idempotency now relies on the sent ledger row, not on `lead_saved_searches.last_sent_at`; this prevents test runs against shared data from suppressing real customer sends.
+- `email_log.recipient_email` still reflects the actual delivery target for QA visibility, while `nurture_email_sends.recipient_email` reflects the original customer recipient.
+
+Verification:
+- `git diff --check` PASS.
+- `npm run type-check` PASS.
+- `npm run lint` PASS with 11 baseline warnings and 0 errors.
+- `npm run build` PASS.
+- Full isolated `bash .agents/bin/nm-gate nurture-p3b-sendjob` PASS on the pushed branch: lint PASS advisory, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: fixes complete, pushed, and isolated gate PASS.
+
+## 2026-07-04 - Nurture Engine Phase 3B weekly send job
+
+Summary: implemented the weekly nurture send job that turns Phase 3A matches into customer emails while keeping launch controls off until Adam sets production env. The cron requires Bearer CRON_SECRET, supports DEV_MODE rerouting to ADMIN_EMAIL, fetches Japan Stock inventory once per run, sends at most three matched cars, records the nurture send ledger, updates the six-day idempotency timestamp, logs email_log weekly_matches rows, and includes List-Unsubscribe/List-Unsubscribe-Post headers.
+
+Files changed:
+- `lib/emails/weeklyMatches.ts` - adds the table-based single-column weekly 3-match email renderer with inline styles, card-estimate CAD pricing, live listing buttons, reply-to-contact CTA, CASL footer, and unsubscribe link via getNurtureUnsubscribeUrl.
+- `app/api/cron/nurture-matches/route.ts` - adds the authenticated weekly cron route using the Phase 3A inventory loader and matcher, service-role Supabase, DEV_MODE recipient override, send/skip/failure ledger writes, last_sent_at and marketing_last_email_at updates, email_log insertion, and List-Unsubscribe headers.
+- `vercel.json` - adds the Monday 15:00 UTC /api/cron/nurture-matches schedule while preserving the existing follow-up cron.
+- `PROGRESS.md` - records this implementation.
+- `ISSUES.md` - records migration 012 as an Adam-run prerequisite for Phase 3B runtime QA/go-live.
+
+Decisions/deviations:
+- Added both GET and POST handlers to the nurture cron so Vercel cron GETs and QA POST/curl checks use the same authenticated code path.
+- The global CTA is Garage-independent for Phase 3B: reply/contact plus a Browse all Japan Stock link. No Garage Phase 4 behavior, scraper Phase 5 behavior, NURTURE_OPTIN_ENABLED flip, or secret changes were included.
+- Skips for insufficient matches write nurture_email_sends but do not send email. Successful sends update lead_saved_searches.last_sent_at, which keeps same-week reruns from double-sending.
+- Migration 012 is still Adam-run; this branch builds against the shipped schema but does not apply production SQL.
+
+Verification:
+- `git diff --check` PASS.
+- `npm run type-check` PASS.
+- `npm run lint` PASS with 11 baseline warnings and 0 errors.
+- `npm run build` PASS.
+- Full isolated `bash .agents/bin/nm-gate nurture-p3b-sendjob` PASS on the pushed branch: lint PASS advisory, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported a non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-04 - Nurture Engine Phase 2 consent ledger and opt-in
 
 Summary: implemented the Docket-owned Phase 2 consent ledger, inactive quote saved-search seed, no-login opt-in confirmation, one-click unsubscribe suppression, and optional List-Unsubscribe email header support. Scope stayed additive: no matching engine, no weekly cron, no Garage upgrade, and no changes to Phase 1 lead_source stamping or selected_path behavior.
