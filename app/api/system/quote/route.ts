@@ -26,6 +26,10 @@ import { buildAnchorModelKey, CASL_SENDER_IDENTITY } from "@/lib/nurture/consent
 import { createServerClient } from "@/lib/supabase/server";
 import { getCustomerHomeBaseUrl, getNurtureOptInUrl } from "@/lib/urls";
 
+function isNurtureOptInEnabled(): boolean {
+  return process.env.NURTURE_OPTIN_ENABLED === "true";
+}
+
 // ── Request shape ───────────────────────────────────────────────────────
 
 interface QuotePayload {
@@ -380,53 +384,56 @@ export async function POST(request: Request) {
     const reportUrl = docket.questions_url_token
       ? getCustomerHomeBaseUrl(docket.questions_url_token)
       : null;
+    const nurtureOptInEnabled = isNurtureOptInEnabled();
     let nurtureOptInUrl: string | null = null;
 
-    try {
-      const { data: tokenRow, error: tokenError } = await supabase
-        .from("dockets")
-        .select("marketing_unsubscribe_token")
-        .eq("id", docket.id);
+    if (nurtureOptInEnabled) {
+      try {
+        const { data: tokenRow, error: tokenError } = await supabase
+          .from("dockets")
+          .select("marketing_unsubscribe_token")
+          .eq("id", docket.id);
 
-      if (tokenError) {
-        throw tokenError;
+        if (tokenError) {
+          throw tokenError;
+        }
+
+        const token = tokenRow?.[0]?.marketing_unsubscribe_token;
+        if (!token) {
+          throw new Error("marketing_unsubscribe_token not available");
+        }
+
+        const anchorYear = toNumber(body.year);
+        const anchorCardEstimateCAD = calculateCardEstimate({
+          vehiclePriceJPY,
+          dutyType,
+          exchangeRate: exchange.rate,
+        });
+
+        const { error: savedSearchError } = await supabase.from("lead_saved_searches").insert({
+          docket_id: docket.id,
+          email: customerOriginalEmail,
+          anchor_ref: ref,
+          anchor_url: null,
+          anchor_year: anchorYear,
+          anchor_make: make,
+          anchor_model: model,
+          anchor_model_key: buildAnchorModelKey(make, model),
+          anchor_price_jpy: Math.round(vehiclePriceJPY),
+          anchor_card_estimate_cad: anchorCardEstimateCAD,
+          anchor_duty_type: dutyType,
+          destination_city: breakdown.destinationLabel,
+          active: false,
+        });
+
+        if (savedSearchError) {
+          throw savedSearchError;
+        }
+
+        nurtureOptInUrl = getNurtureOptInUrl(String(token));
+      } catch (savedSearchSeedError) {
+        console.error("[Quote] Saved search opt-in seed skipped", savedSearchSeedError);
       }
-
-      const token = tokenRow?.[0]?.marketing_unsubscribe_token;
-      if (!token) {
-        throw new Error("marketing_unsubscribe_token not available");
-      }
-
-      const anchorYear = toNumber(body.year);
-      const anchorCardEstimateCAD = calculateCardEstimate({
-        vehiclePriceJPY,
-        dutyType,
-        exchangeRate: exchange.rate,
-      });
-
-      const { error: savedSearchError } = await supabase.from("lead_saved_searches").insert({
-        docket_id: docket.id,
-        email: customerOriginalEmail,
-        anchor_ref: ref,
-        anchor_url: null,
-        anchor_year: anchorYear,
-        anchor_make: make,
-        anchor_model: model,
-        anchor_model_key: buildAnchorModelKey(make, model),
-        anchor_price_jpy: Math.round(vehiclePriceJPY),
-        anchor_card_estimate_cad: anchorCardEstimateCAD,
-        anchor_duty_type: dutyType,
-        destination_city: breakdown.destinationLabel,
-        active: false,
-      });
-
-      if (savedSearchError) {
-        throw savedSearchError;
-      }
-
-      nurtureOptInUrl = getNurtureOptInUrl(String(token));
-    } catch (savedSearchSeedError) {
-      console.error("[Quote] Saved search opt-in seed skipped", savedSearchSeedError);
     }
 
     // ── 10. Send email ───────────────────────────────────────────────
