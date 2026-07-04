@@ -10,6 +10,11 @@ Pre-build live schema gate:
 - Confirmed `gen_random_uuid()` is available on live because `dockets.id` defaults to `gen_random_uuid()`.
 - Existing dockets indexes visible from applied tracked migrations: `dockets_pkey` and `idx_dockets_customer_id`. Supabase only exposes `public` and `graphql_public` via PostgREST, so `pg_catalog.pg_indexes` was not directly readable from this seat.
 
+Review fix round:
+- B1: made the saved-search seed and opt-in CTA best-effort. Quote docket creation, transactional email send, and successful JSON response no longer depend on Phase 2 tables/columns being present or writable.
+- S1: reordered opt-in writes so the consent ledger row is inserted before `dockets.marketing_consent` or `lead_saved_searches.active` are flipped.
+- S2: made migration 011 explicitly idempotent/re-runnable and added a direct-delete prevention trigger for `lead_consent_events` while allowing parent docket purge cascades for right-to-erasure cleanup.
+
 Files changed:
 - `supabase/migrations/011_nurture_phase2_consent.sql` - adds Docket marketing consent fields, unique unsubscribe-token index, `lead_consent_events`, `lead_saved_searches`, checks, indexes, RLS enablement, and named `$fn$` trigger functions without SQL-editor-hostile `DO` or anonymous `$$` blocks.
 - `app/api/system/quote/route.ts` - creates an inactive saved search for new exact-quote dockets, computes the anchor card estimate with the existing calculator helper, and adds the weekly-matches opt-in CTA plus concise consent language to the transactional quote email.

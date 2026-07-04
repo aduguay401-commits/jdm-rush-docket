@@ -1,6 +1,7 @@
 -- Migration 011: Nurture Engine Phase 2 - consent ledger + opt-in saved searches
 -- Adam-run on production Supabase SQL editor.
 -- SQL-editor-safe: no DO blocks, no anonymous dollar-dollar blocks.
+-- Idempotent/re-runnable: uses IF NOT EXISTS, DROP ... IF EXISTS, and CREATE OR REPLACE.
 --
 -- Pre-build live schema gate, 2026-07-04:
 -- - public.dockets exists on live Supabase and includes Phase 1 columns:
@@ -129,7 +130,29 @@ CREATE TRIGGER lead_consent_events_append_only_update
   FOR EACH ROW
   EXECUTE FUNCTION public.prevent_lead_consent_events_mutation();
 
+CREATE OR REPLACE FUNCTION public.prevent_direct_lead_consent_events_delete()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $fn$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.dockets
+    WHERE id = OLD.docket_id
+  ) THEN
+    RAISE EXCEPTION 'lead_consent_events is append-only; delete the parent docket for right-to-erasure purges';
+  END IF;
+
+  RETURN OLD;
+END;
+$fn$;
+
 DROP TRIGGER IF EXISTS lead_consent_events_append_only_delete ON public.lead_consent_events;
+
+CREATE TRIGGER lead_consent_events_append_only_delete
+  BEFORE DELETE ON public.lead_consent_events
+  FOR EACH ROW
+  EXECUTE FUNCTION public.prevent_direct_lead_consent_events_delete();
 
 ALTER TABLE public.lead_consent_events ENABLE ROW LEVEL SECURITY;
 

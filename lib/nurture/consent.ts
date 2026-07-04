@@ -195,6 +195,24 @@ export async function recordLeadOptIn(
   const now = new Date().toISOString();
   const eventType = lead.docket.marketing_unsubscribed_at ? "resubscribe" : "opt_in";
 
+  const { error: eventInsertError } = await supabase.from("lead_consent_events").insert({
+    docket_id: lead.docket.id,
+    event_type: eventType,
+    event_source: "quote_email_optin",
+    email: lead.docket.customer_email,
+    ip_hash: meta.ip_hash,
+    user_agent: meta.user_agent,
+    token,
+    metadata: {
+      saved_search_id: lead.savedSearch.id,
+      vehicle: vehicleLabelForLead(lead),
+    },
+  });
+
+  if (eventInsertError) {
+    return null;
+  }
+
   const { error: docketUpdateError } = await supabase
     .from("dockets")
     .update({
@@ -215,24 +233,6 @@ export async function recordLeadOptIn(
     .eq("id", lead.savedSearch.id);
 
   if (savedSearchUpdateError) {
-    return null;
-  }
-
-  const { error: eventInsertError } = await supabase.from("lead_consent_events").insert({
-    docket_id: lead.docket.id,
-    event_type: eventType,
-    event_source: "quote_email_optin",
-    email: lead.docket.customer_email,
-    ip_hash: meta.ip_hash,
-    user_agent: meta.user_agent,
-    token,
-    metadata: {
-      saved_search_id: lead.savedSearch.id,
-      vehicle: vehicleLabelForLead(lead),
-    },
-  });
-
-  if (eventInsertError) {
     return null;
   }
 

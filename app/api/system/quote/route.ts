@@ -366,7 +366,7 @@ export async function POST(request: Request) {
     const { data: docket, error: insertError } = await supabase
       .from("dockets")
       .insert(docketInsert)
-      .select("id, questions_url_token, marketing_unsubscribe_token")
+      .select("id, questions_url_token")
       .single();
 
     if (insertError || !docket) {
@@ -377,51 +377,57 @@ export async function POST(request: Request) {
       );
     }
 
-    const anchorYear = toNumber(body.year);
-    const anchorCardEstimateCAD = calculateCardEstimate({
-      vehiclePriceJPY,
-      dutyType,
-      exchangeRate: exchange.rate,
-    });
-
-    const { error: savedSearchError } = await supabase.from("lead_saved_searches").insert({
-      docket_id: docket.id,
-      email: customerOriginalEmail,
-      anchor_ref: ref,
-      anchor_url: null,
-      anchor_year: anchorYear,
-      anchor_make: make,
-      anchor_model: model,
-      anchor_model_key: buildAnchorModelKey(make, model),
-      anchor_price_jpy: Math.round(vehiclePriceJPY),
-      anchor_card_estimate_cad: anchorCardEstimateCAD,
-      anchor_duty_type: dutyType,
-      destination_city: breakdown.destinationLabel,
-      active: false,
-    });
-
-    if (savedSearchError) {
-      console.error("[Quote] Saved search insert failed");
-
-      await supabase
-        .from("dockets")
-        .update({
-          additional_notes: `[SAVED SEARCH FAILED] ${docketInsert.additional_notes}`,
-        })
-        .eq("id", docket.id);
-
-      return NextResponse.json(
-        { ok: false, error: "Unable to prepare your weekly match opt-in. Please try again." },
-        { status: 500 },
-      );
-    }
-
     const reportUrl = docket.questions_url_token
       ? getCustomerHomeBaseUrl(docket.questions_url_token)
       : null;
-    const nurtureOptInUrl = docket.marketing_unsubscribe_token
-      ? getNurtureOptInUrl(String(docket.marketing_unsubscribe_token))
-      : null;
+    let nurtureOptInUrl: string | null = null;
+
+    try {
+      const { data: tokenRow, error: tokenError } = await supabase
+        .from("dockets")
+        .select("marketing_unsubscribe_token")
+        .eq("id", docket.id);
+
+      if (tokenError) {
+        throw tokenError;
+      }
+
+      const token = tokenRow?.[0]?.marketing_unsubscribe_token;
+      if (!token) {
+        throw new Error("marketing_unsubscribe_token not available");
+      }
+
+      const anchorYear = toNumber(body.year);
+      const anchorCardEstimateCAD = calculateCardEstimate({
+        vehiclePriceJPY,
+        dutyType,
+        exchangeRate: exchange.rate,
+      });
+
+      const { error: savedSearchError } = await supabase.from("lead_saved_searches").insert({
+        docket_id: docket.id,
+        email: customerOriginalEmail,
+        anchor_ref: ref,
+        anchor_url: null,
+        anchor_year: anchorYear,
+        anchor_make: make,
+        anchor_model: model,
+        anchor_model_key: buildAnchorModelKey(make, model),
+        anchor_price_jpy: Math.round(vehiclePriceJPY),
+        anchor_card_estimate_cad: anchorCardEstimateCAD,
+        anchor_duty_type: dutyType,
+        destination_city: breakdown.destinationLabel,
+        active: false,
+      });
+
+      if (savedSearchError) {
+        throw savedSearchError;
+      }
+
+      nurtureOptInUrl = getNurtureOptInUrl(String(token));
+    } catch (savedSearchSeedError) {
+      console.error("[Quote] Saved search opt-in seed skipped", savedSearchSeedError);
+    }
 
     // ── 10. Send email ───────────────────────────────────────────────
     const htmlBody = makeEmailHtml(reportUrl, nurtureOptInUrl);
