@@ -77,9 +77,14 @@ export default async function NurtureOptInPage({ params }: OptInPageProps) {
             <dl className="flex flex-col gap-3">
               <DetailRow label="Vehicle" value={vehicleLabel} />
               {lead.savedSearch.anchor_ref ? <DetailRow label="Ref" value={lead.savedSearch.anchor_ref} /> : null}
-              {quotedPrice ? <DetailRow label="Quoted price" value={quotedPrice} /> : null}
+              {quotedPrice ? <DetailRow label="Est. match price" value={quotedPrice} /> : null}
             </dl>
           </section>
+          {quotedPrice ? (
+            <p className="text-white/40 text-[12px] leading-relaxed">
+              A normalized reference we use to find similarly-priced matches — not the exact landed-cost total in the quote email we sent you.
+            </p>
+          ) : null}
 
           <section className="bg-black border border-white/[0.08] px-5 sm:px-6 py-6 flex flex-col gap-4">
             <dl className="flex flex-col gap-3">
