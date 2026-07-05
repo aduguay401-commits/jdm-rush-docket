@@ -1,5 +1,23 @@
 # Progress
 
+## 2026-07-05 - On-ramp fast-follow confirmation card fold
+
+Summary: folded Adam's gate note into the existing on-ramp fast-follow branch by changing only the post-submit confirmation card on the no-login connect page to first-person Adam voice.
+
+Files changed:
+- `app/questions/[token]/CustomerQuestionsClient.tsx` - rewrites the answer-submitted confirmation card from team voice to Adam first-person voice.
+
+Decisions/deviations:
+- No quote email code or landed-cost breakdown table rows were changed.
+- The change is copy-only and limited to the confirmation card Adam flagged.
+
+Verification:
+- `git diff --check` PASS.
+- Quote table grep PASS: the landed-cost breakdown markers remain present and the full-quote button remains absent.
+- Full isolated `bash .agents/bin/nm-gate feature/onramp-nits-voice-escape` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - On-ramp fast-follow voice and escape helper nits
 
 Summary: folded two non-blocking Home Base rename nits into a narrow follow-up: made the connect page voice consistent with Adam's first-person heading and deduplicated the HTML escaping helper across the touched email/on-ramp modules.

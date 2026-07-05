@@ -398,9 +398,9 @@ export function CustomerQuestionsClient({
 
               {answersSubmitted ? (
                 <div className="mt-6 border border-[#E55125]/25 bg-[#E55125]/10 p-4">
-                  <p className="text-sm font-semibold text-white">Thanks, we received your answers.</p>
+                  <p className="text-sm font-semibold text-white">Thanks, I have your answers.</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
-                    Our team is reviewing what you sent and will follow up shortly.
+                    I will review what you sent and get back to you soon.
                   </p>
                 </div>
               ) : (
