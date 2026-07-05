@@ -363,7 +363,7 @@ export function CustomerQuestionsClient({
 
           {docket.status === "new" ? (
             <section className="border border-white/[0.08] bg-black p-5">
-              <h2 className="text-xl font-semibold text-white">Original Request</h2>
+              <h2 className="text-xl font-semibold text-white">What I have from you</h2>
               <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                 <div>
                   <dt className="text-white/45">Vehicle</dt>
@@ -477,9 +477,9 @@ export function CustomerQuestionsClient({
           </section>
 
           <section className="border border-white/[0.08] bg-black p-5 sm:p-6">
-            <h2 className="text-xl font-semibold text-white">Got a question? Ask anytime</h2>
+            <h2 className="text-xl font-semibold text-white">Have a question for me?</h2>
             <p className="mt-2 text-sm leading-6 text-white/65">
-              We are here to help - send us a message and we will get back to you.
+              Send me a message and I will get back to you.
             </p>
 
             <div className="mt-5">
@@ -487,7 +487,7 @@ export function CustomerQuestionsClient({
                 className="min-h-28 w-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
                 disabled={isSendingQuestion}
                 onChange={(event) => setQuestionForTeam(event.target.value)}
-                placeholder="Type your question or extra details"
+                placeholder="Type your question or extra details for Adam"
                 value={questionForTeam}
               />
             </div>

@@ -19,6 +19,7 @@ import {
   renderAccountUpsellEmailTextFooter,
 } from "@/lib/customer/AccountUpsell";
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
+import { escapeHtml } from "@/lib/html";
 import {
   calculateImportCost,
   normalizeDestinationCity,
@@ -63,15 +64,6 @@ function toNumber(value: unknown): number | null {
     return Number.isFinite(n) ? n : null;
   }
   return null;
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 /**

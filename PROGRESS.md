@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-07-05 - On-ramp fast-follow voice and escape helper nits
+
+Summary: folded two non-blocking Home Base rename nits into a narrow follow-up: made the connect page voice consistent with Adam's first-person heading and deduplicated the HTML escaping helper across the touched email/on-ramp modules.
+
+Files changed:
+- `app/questions/[token]/CustomerQuestionsClient.tsx` - rewrites the original-request and ask-anytime card copy to Adam first-person voice.
+- `lib/html.ts` - adds one shared `escapeHtml` helper.
+- `lib/customer/AccountUpsell.tsx` - imports the shared helper instead of defining its own copy.
+- `app/api/system/intake/route.ts`, `app/api/system/quote/route.ts`, `app/api/agent/send-questions/route.ts`, and `app/api/cron/follow-up/route.ts` - import the shared helper and remove local duplicate definitions.
+
+Decisions/deviations:
+- No quote email layout or landed-cost breakdown table rows were changed.
+- Unrelated existing `escapeHtml` helpers outside the just-merged email/on-ramp surface were left alone to keep this fast-follow narrow.
+
+Verification:
+- `git diff --check` PASS.
+- Scoped helper grep PASS: the touched on-ramp/email files now have one `escapeHtml` definition in `lib/html.ts`.
+- Quote table grep PASS: the landed-cost breakdown markers remain present and the full-quote button remains absent.
+- `bash .agents/bin/nm-gate --quick feature/onramp-nits-voice-escape` PASS: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED.
+- Full isolated `bash .agents/bin/nm-gate feature/onramp-nits-voice-escape` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - Home Base copy cleanup and My Garage on-ramp
 
 Summary: removed customer-facing Home Base branding from the token answer flow and Funnel A conversation emails, added a shared My Garage account upsell for emails/page panels, wired register email/next query params, and cleaned the quote email CTA stack without changing the landed-cost breakdown.
