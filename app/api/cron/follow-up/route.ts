@@ -5,6 +5,7 @@ import {
   renderAccountUpsellEmailFooter,
   renderAccountUpsellEmailTextFooter,
 } from '@/lib/customer/AccountUpsell'
+import { escapeHtml } from '@/lib/html'
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from '@/lib/urls'
 
 type SequenceType = 'A' | 'B' | 'C'
@@ -108,15 +109,6 @@ function nonEmpty(value: string | null | undefined): string | null {
 
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : null
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 function buildVehicleLabel(docket: DocketRow): string {

@@ -6,6 +6,7 @@ import {
   renderAccountUpsellEmailFooter,
   renderAccountUpsellEmailTextFooter,
 } from "@/lib/customer/AccountUpsell";
+import { escapeHtml } from "@/lib/html";
 import { createServerClient } from "@/lib/supabase/server";
 import { getCustomerHomeBaseUrl } from "@/lib/urls";
 
@@ -32,15 +33,6 @@ function buildVehicleLabel(
   return [year, make, model]
     .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
     .join(" ");
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 function buildQuestionsEmailHtml({

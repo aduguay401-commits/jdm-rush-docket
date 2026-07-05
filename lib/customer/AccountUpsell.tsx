@@ -1,3 +1,4 @@
+import { escapeHtml } from "@/lib/html";
 import { getAppBaseUrl } from "@/lib/urls";
 
 type AccountRegisterLinkInput = {
@@ -19,15 +20,6 @@ const ACCOUNT_UPSELL_BODY = "Track this build, your imports, and your documents 
 function cleanString(value: string | null | undefined) {
   const trimmed = value?.trim();
   return trimmed && trimmed.length > 0 ? trimmed : null;
-}
-
-function escapeHtml(value: string) {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
 }
 
 export function buildAccountRegisterPath({ email, nextPath }: AccountRegisterLinkInput = {}) {

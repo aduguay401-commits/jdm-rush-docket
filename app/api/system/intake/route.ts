@@ -11,6 +11,7 @@ import {
   renderAccountUpsellEmailTextFooter,
 } from '@/lib/customer/AccountUpsell'
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
+import { escapeHtml } from '@/lib/html'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
@@ -162,15 +163,6 @@ function toAdditionalInfoValue(value: unknown): string | number | boolean | null
   }
 
   return null
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
 }
 
 function buildAdditionalInfo(payload: IntakePayload): Record<string, string | number | boolean> | null {
