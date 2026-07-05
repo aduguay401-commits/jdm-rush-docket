@@ -10,10 +10,14 @@
 //   - fetchJPYtoCAD                                  (lib/exchangeRate)
 //   - sendEmail                                      (lib/email)
 //   - Supabase docket insert + email_log insert      (mirrors intake)
-//   - getCustomerHomeBaseUrl                         (lib/urls)
 
 import { NextResponse } from "next/server";
 import { sendEmail } from "@/lib/email";
+import {
+  buildAccountRegisterUrl,
+  renderAccountUpsellEmailPanel,
+  renderAccountUpsellEmailTextFooter,
+} from "@/lib/customer/AccountUpsell";
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
 import {
   calculateImportCost,
@@ -24,7 +28,7 @@ import {
 import type { DutyType } from "@/lib/importCalculator";
 import { buildAnchorModelKey, CASL_SENDER_IDENTITY } from "@/lib/nurture/consent";
 import { createServerClient } from "@/lib/supabase/server";
-import { getCustomerHomeBaseUrl, getNurtureOptInUrl } from "@/lib/urls";
+import { getNurtureOptInUrl } from "@/lib/urls";
 
 function isNurtureOptInEnabled(): boolean {
   return process.env.NURTURE_OPTIN_ENABLED === "true";
@@ -245,20 +249,8 @@ export async function POST(request: Request) {
         ? `[DEV MODE — This email would normally go to: ${customerOriginalEmail}]\n\n`
         : "";
 
-    // Helper: build email HTML/text bodies (needs report URL for CTA)
-    const makeEmailHtml = (reportUrl: string | null, nurtureOptInUrl: string | null) => {
-      const reportCtaHtml = reportUrl
-        ? `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="border-collapse: separate; margin: 24px auto;">
-    <tr>
-      <td align="center" bgcolor="#E55125" style="background-color: #E55125; border-radius: 8px; padding: 16px 32px;">
-        <a href="${escapeHtml(reportUrl)}" target="_blank" style="display: inline-block; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; text-decoration: none; line-height: 1.2;">
-          📋 View Your Full Quote →
-        </a>
-      </td>
-    </tr>
-  </table>`
-        : "";
-
+    // Helper: build email HTML/text bodies.
+    const makeEmailHtml = (nurtureOptInUrl: string | null, accountRegisterUrl: string) => {
       const nurtureOptInHtml = nurtureOptInUrl
         ? `<div style="background: #151515; border: 1px solid #2a2a2a; padding: 20px; margin: 24px 0;">
     <p style="font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 8px 0;">WANT US TO KEEP LOOKING?</p>
@@ -275,6 +267,7 @@ export async function POST(request: Request) {
     <p style="color: #888888; font-size: 12px; line-height: 1.6; margin: 0;">By confirming, you agree to receive weekly vehicle match emails from ${escapeHtml(CASL_SENDER_IDENTITY)}. Unsubscribe anytime with one click.</p>
   </div>`
         : "";
+      const accountUpsellHtml = renderAccountUpsellEmailPanel({ registerUrl: accountRegisterUrl });
 
       return `<div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;">
   ${devModeBannerHtml}
@@ -306,9 +299,9 @@ export async function POST(request: Request) {
     </table>
   </div>
 
-  ${reportCtaHtml}
-
   ${nurtureOptInHtml}
+
+  ${accountUpsellHtml}
 
   <hr style="border: 0; border-top: 1px solid #2a2a2a; margin: 30px 0;" />
 
@@ -381,9 +374,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const reportUrl = docket.questions_url_token
-      ? getCustomerHomeBaseUrl(docket.questions_url_token)
-      : null;
+    const accountRegisterUrl = buildAccountRegisterUrl({
+      email: customerOriginalEmail,
+      nextPath: "/account",
+    });
     const nurtureOptInEnabled = isNurtureOptInEnabled();
     let nurtureOptInUrl: string | null = null;
 
@@ -437,14 +431,12 @@ export async function POST(request: Request) {
     }
 
     // ── 10. Send email ───────────────────────────────────────────────
-    const htmlBody = makeEmailHtml(reportUrl, nurtureOptInUrl);
+    const htmlBody = makeEmailHtml(nurtureOptInUrl, accountRegisterUrl);
 
-    const reportCtaText = reportUrl
-      ? `\nView your full quote: ${reportUrl}\n`
-      : "";
     const nurtureOptInText = nurtureOptInUrl
       ? `\nSend me 3 similar Japan Stock matches each week: ${nurtureOptInUrl}\nConfirming signs you up for weekly vehicle match emails from ${CASL_SENDER_IDENTITY}. You can unsubscribe anytime with one click.\n`
       : "";
+    const accountUpsellText = renderAccountUpsellEmailTextFooter({ registerUrl: accountRegisterUrl });
 
     const textBody = `${devModeBannerText}Your exact import quote — ${vehicleLabel}
 
@@ -462,8 +454,9 @@ What's included:
 - Inland transport: $${breakdown.transportCostCAD.toLocaleString("en-CA")}
 
 ⚠️ This estimate is calculated at today's exchange rate of ${exchange.rate.toFixed(4)} JPY/CAD (Bank of Canada, ${exchange.date}). Final amounts may vary slightly based on the exchange rate at time of purchase and any changes in import fees. Duty classification for Japanese makes (0%) is based on Canada's tariff schedule and is our best assessment — not a legal guarantee.
-${reportCtaText}
 ${nurtureOptInText}
+${accountUpsellText}
+
 Ready to move forward? Reply to this email and we'll get the ball rolling.
 
 — Adam & the JDM Rush Team

@@ -7,6 +7,7 @@ import CustomerCommunicationTimeline, {
   type TimelineMarcusQuestion,
 } from "@/components/CustomerCommunicationTimeline";
 import MarkdownMessage from "@/components/MarkdownMessage";
+import { AccountUpsellPanel } from "@/lib/customer/AccountUpsell";
 import type { CustomerHomeBaseStatusCopy } from "@/lib/customer/homeBaseStatusCopy";
 
 type Question = {
@@ -19,6 +20,7 @@ type HomeBaseDocket = {
   status: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
+  customer_email: string | null;
   vehicle_description: string | null;
   destination_city: string | null;
   destination_province: string | null;
@@ -29,6 +31,7 @@ type HomeBaseDocket = {
 };
 
 type CustomerQuestionsClientProps = {
+  accountRegisterUrl: string;
   allMarcusQuestions: TimelineMarcusQuestion[];
   askEndpoint: string;
   customerQuestions: TimelineCustomerQuestion[];
@@ -141,6 +144,7 @@ function ChevronIcon({ isExpanded }: { isExpanded: boolean }) {
 }
 
 export function CustomerQuestionsClient({
+  accountRegisterUrl,
   allMarcusQuestions,
   askEndpoint,
   customerQuestions,
@@ -162,6 +166,7 @@ export function CustomerQuestionsClient({
   const [isConversationExpanded, setIsConversationExpanded] = useState(false);
   const [isSubmittingAnswers, setIsSubmittingAnswers] = useState(false);
   const [isSendingQuestion, setIsSendingQuestion] = useState(false);
+  const customerFirstName = docket.customer_first_name?.trim() || "there";
 
   const currentUnansweredQuestions = useMemo(
     () => (answersSubmitted ? [] : unansweredQuestions),
@@ -321,25 +326,24 @@ export function CustomerQuestionsClient({
   }
 
   return (
-    <main className="min-h-screen bg-[#0d0d0d] px-5 py-8 text-white sm:px-6 sm:py-10">
+    <main className="min-h-screen bg-[#111111] px-4 py-10 text-white sm:px-6 sm:py-16">
       <div className="mx-auto max-w-[680px]">
         <header className="text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img alt="JDM Rush Imports" className="mx-auto h-[50px] w-auto" src={LOGO_URL} />
+          <img alt="JDM Rush Imports" className="mx-auto h-10 w-auto" src={LOGO_URL} />
         </header>
 
-        <div className="mt-10 space-y-5">
+        <div className="mt-8 space-y-5">
           <section className="text-center">
-            <p className="text-base font-medium text-white/55 sm:text-lg">Welcome to Your</p>
-            <h1 className="mt-2 text-[2rem] font-black leading-none tracking-[0.02em] text-white sm:text-6xl sm:tracking-[0.04em]">
-              JDM <span className="text-[#E55125]">HOME BASE</span>
+            <h1 className="text-[#E55125] font-extrabold tracking-tight leading-none text-center" style={{ fontSize: "clamp(26px, 5vw, 36px)" }}>
+              Hi {customerFirstName}, I have a few questions
             </h1>
-            <p className="mx-auto mt-4 max-w-[520px] text-sm leading-6 text-white/55">
-              Your project hub for everything related to your JDM journey
+            <p className="mx-auto mt-3 max-w-[520px] text-[14px] leading-6 text-white/60">
+              Send your answers here so I can keep your JDM search moving.
             </p>
           </section>
 
-          <section className={`rounded-[20px] border p-6 transition sm:p-7 ${toneStyles[displayedStatusCopy.tone]}`}>
+          <section className={`border p-5 transition sm:p-6 ${toneStyles[displayedStatusCopy.tone]}`}>
             <p className={`text-xs font-bold uppercase tracking-[0.18em] ${tagStyles[displayedStatusCopy.tone]}`}>
               {displayedStatusCopy.tag}
             </p>
@@ -349,7 +353,7 @@ export function CustomerQuestionsClient({
             <p className="mt-3 text-sm leading-6 text-white/68 sm:text-base">{displayedStatusCopy.message}</p>
             {shouldShowReportCta && reportUrl ? (
               <a
-                className="mt-6 inline-flex min-h-11 w-full items-center justify-center rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
+                className="mt-6 inline-flex min-h-11 w-full items-center justify-center bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 sm:w-auto"
                 href={reportUrl}
               >
                 View Your Custom Report →
@@ -358,7 +362,7 @@ export function CustomerQuestionsClient({
           </section>
 
           {docket.status === "new" ? (
-            <section className="rounded-[20px] border border-white/10 bg-[#141414] p-5">
+            <section className="border border-white/[0.08] bg-black p-5">
               <h2 className="text-xl font-semibold text-white">Original Request</h2>
               <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-2">
                 <div>
@@ -382,14 +386,9 @@ export function CustomerQuestionsClient({
           ) : null}
 
           {shouldRenderLatestMessageCard || answersSubmitted ? (
-            <section className="rounded-[20px] border border-[#E55125]/45 bg-[#141414] p-6 shadow-[0_18px_60px_rgba(229,81,37,0.14)] sm:p-8">
+            <section className="border border-[#E55125]/45 bg-black p-5 shadow-[0_18px_60px_rgba(229,81,37,0.14)] sm:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
-                <h2 className="text-xl font-semibold text-white">
-                  <span aria-hidden="true" className="mr-2">
-                    📨
-                  </span>
-                  Latest Message from JDM Rush Team
-                </h2>
+                <h2 className="text-xl font-semibold text-white">Latest message from Adam</h2>
                 {latestUnansweredQuestionTimestamp ? (
                   <time className="text-xs text-white/55" dateTime={latestUnansweredQuestionTimestamp}>
                     {formatMessageTimestamp(latestUnansweredQuestionTimestamp)}
@@ -398,7 +397,7 @@ export function CustomerQuestionsClient({
               </div>
 
               {answersSubmitted ? (
-                <div className="mt-6 rounded-2xl border border-[#E55125]/25 bg-[#E55125]/10 p-4">
+                <div className="mt-6 border border-[#E55125]/25 bg-[#E55125]/10 p-4">
                   <p className="text-sm font-semibold text-white">Thanks, we received your answers.</p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
                     Our team is reviewing what you sent and will follow up shortly.
@@ -414,7 +413,7 @@ export function CustomerQuestionsClient({
                         <label className="mt-3 block">
                           <span className="sr-only">Answer this question</span>
                           <textarea
-                            className="min-h-[84px] w-full resize-y rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                            className="min-h-[84px] w-full resize-y border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
                             disabled={isSubmittingAnswers}
                             onChange={(event) => updateAnswer(question.id, event.target.value)}
                             placeholder="Type your answer here"
@@ -427,7 +426,7 @@ export function CustomerQuestionsClient({
                   </ol>
 
                   <button
-                    className="min-h-11 w-full rounded-2xl bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
+                    className="min-h-11 w-full bg-[#E55125] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-70"
                     disabled={isSubmittingAnswers}
                     onClick={submitAnswers}
                     type="button"
@@ -439,7 +438,9 @@ export function CustomerQuestionsClient({
             </section>
           ) : null}
 
-          <section className="rounded-[20px] border border-white/10 bg-[#141414] transition hover:border-[#E55125]/35">
+          {answersSubmitted ? <AccountUpsellPanel registerUrl={accountRegisterUrl} /> : null}
+
+          <section className="border border-white/[0.08] bg-black transition hover:border-[#E55125]/35">
             <button
               aria-controls="customer-conversation-content"
               aria-expanded={isConversationExpanded}
@@ -452,7 +453,7 @@ export function CustomerQuestionsClient({
                   <span className="block text-xl font-semibold text-white">Our Conversation</span>
                   <span className="mt-2 block text-sm leading-6 text-white/55">{conversationSummary}</span>
                 </span>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-[#E55125]/35 bg-black/20">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center border border-[#E55125]/35 bg-black/20">
                   <ChevronIcon isExpanded={isConversationExpanded} />
                 </span>
               </span>
@@ -475,7 +476,7 @@ export function CustomerQuestionsClient({
             </div>
           </section>
 
-          <section className="rounded-[20px] border border-white/10 bg-[#141414] p-6 sm:p-8">
+          <section className="border border-white/[0.08] bg-black p-5 sm:p-6">
             <h2 className="text-xl font-semibold text-white">Got a question? Ask anytime</h2>
             <p className="mt-2 text-sm leading-6 text-white/65">
               We are here to help - send us a message and we will get back to you.
@@ -483,7 +484,7 @@ export function CustomerQuestionsClient({
 
             <div className="mt-5">
               <textarea
-                className="min-h-28 w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
+                className="min-h-28 w-full border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white outline-none transition focus:border-[#E55125] focus:ring-2 focus:ring-[#E55125]/20"
                 disabled={isSendingQuestion}
                 onChange={(event) => setQuestionForTeam(event.target.value)}
                 placeholder="Type your question or extra details"
@@ -495,7 +496,7 @@ export function CustomerQuestionsClient({
             {askSuccess ? <p className="mt-4 text-sm text-emerald-400">{askSuccess}</p> : null}
 
             <button
-              className="mt-5 rounded-2xl border border-[#E55125] px-5 py-3 text-sm font-semibold text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-5 border border-[#E55125] px-5 py-3 text-sm font-semibold text-[#E55125] transition hover:bg-[#E55125] hover:text-white disabled:cursor-not-allowed disabled:opacity-70"
               disabled={isSendingQuestion}
               onClick={submitCustomerQuestion}
               type="button"

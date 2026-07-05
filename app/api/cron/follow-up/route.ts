@@ -1,5 +1,10 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { sendEmail } from '@/lib/email'
+import {
+  buildAccountRegisterUrl,
+  renderAccountUpsellEmailFooter,
+  renderAccountUpsellEmailTextFooter,
+} from '@/lib/customer/AccountUpsell'
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from '@/lib/urls'
 
 type SequenceType = 'A' | 'B' | 'C'
@@ -54,8 +59,8 @@ const SUBJECTS: Record<SequenceType, Record<1 | 2 | 3, string>> = {
 const BODY_LINES: Record<SequenceType, Record<1 | 2 | 3, string>> = {
   A: {
     1: 'Wanted to quickly check in and see if your preferences or timing have changed at all.',
-    2: 'We are still ready to move forward as soon as you are, and we can adjust your search immediately.',
-    3: 'This is our last check-in for now. If you still want to proceed, just reply and we will jump back in.',
+    2: 'I am still ready to move forward as soon as you are, and I can adjust your search immediately.',
+    3: 'This is my last check-in for now. If you still want to proceed, just reply and I will jump back in.',
   },
   B: {
     1: 'Your report is ready and waiting for review whenever you are ready to take a look.',
@@ -105,6 +110,15 @@ function nonEmpty(value: string | null | undefined): string | null {
   return trimmed.length > 0 ? trimmed : null
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function buildVehicleLabel(docket: DocketRow): string {
   const label = [docket.vehicle_year, docket.vehicle_make, docket.vehicle_model]
     .map((item) => nonEmpty(item))
@@ -138,11 +152,19 @@ function buildEmailContent({
   const rawSubject = SUBJECTS[sequenceType][step]
   const subject = rawSubject.replace('[vehicle]', vehicle)
   const bodyLine = BODY_LINES[sequenceType][step]
+  const questionsUrl = sequenceType === 'A' && questionsUrlToken ? getCustomerHomeBaseUrl(questionsUrlToken) : null
+  const accountRegisterUrl =
+    sequenceType === 'A'
+      ? buildAccountRegisterUrl({
+          email: originalRecipient,
+          nextPath: questionsUrlToken ? `/questions/${questionsUrlToken}` : '/account',
+        })
+      : null
   const cta =
-    sequenceType === 'A' && questionsUrlToken
+    questionsUrl
       ? {
-          label: 'Answer Questions →',
-          url: getCustomerHomeBaseUrl(questionsUrlToken),
+          label: 'Answer these',
+          url: questionsUrl,
         }
       : (sequenceType === 'B' || sequenceType === 'C') && reportUrlToken
         ? {
@@ -150,8 +172,10 @@ function buildEmailContent({
             url: getCustomerReportUrl(reportUrlToken),
           }
         : null
-  const ctaButton = cta
-    ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+  const ctaHtml = cta
+    ? sequenceType === 'A'
+      ? `<p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;"><a href="${escapeHtml(cta.url)}" style="color:#E55125;font-weight:700;text-decoration:none;">${cta.label}</a></p>`
+      : `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
                   <tr>
                     <td align="center" style="border-radius:999px;background:#E55125;">
                       <a href="${cta.url}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${cta.label}</a>
@@ -159,10 +183,22 @@ function buildEmailContent({
                   </tr>
                 </table>`
     : ''
-  const textCta = cta ? `\n\n${cta.label} ${cta.url}` : ''
+  const textCta = cta
+    ? sequenceType === 'A'
+      ? `\n\nAnswer these: ${cta.url}`
+      : `\n\n${cta.label} ${cta.url}`
+    : ''
+  const accountFooterHtml =
+    sequenceType === 'A' && accountRegisterUrl
+      ? renderAccountUpsellEmailFooter({ registerUrl: accountRegisterUrl })
+      : ''
+  const accountFooterText =
+    sequenceType === 'A' && accountRegisterUrl
+      ? `\n\n${renderAccountUpsellEmailTextFooter({ registerUrl: accountRegisterUrl })}`
+      : ''
   const devBanner =
     devMode && originalRecipient
-      ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${originalRecipient}</div>`
+      ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${escapeHtml(originalRecipient)}</div>`
       : ''
   const devTextBanner =
     devMode && originalRecipient
@@ -184,12 +220,17 @@ function buildEmailContent({
             <tr>
               <td style="padding:24px;">
                 ${devBanner}
-                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">${subject}</h1>
-                <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
+                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">${escapeHtml(subject)}</h1>
+                <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${escapeHtml(firstName)},</p>
                 <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;">${bodyLine}</p>
-                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.</p>
-                ${ctaButton}
-                <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">${
+                  sequenceType === 'A'
+                    ? 'If anything has changed with your budget, timing, or vehicle preferences, reply and I will adjust the search.'
+                    : 'If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.'
+                }</p>
+                ${ctaHtml}
+                <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">${sequenceType === 'A' ? 'Adam' : 'Adam &amp; the JDM Rush Team'}<br />support@jdmrushimports.ca</p>
+                ${accountFooterHtml}
               </td>
             </tr>
           </table>
@@ -203,10 +244,11 @@ function buildEmailContent({
 
 ${bodyLine}
 
-If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.
+${sequenceType === 'A' ? 'If anything has changed with your budget, timing, or vehicle preferences, reply and I will adjust the search.' : 'If you have updates on budget, timing, or vehicle preferences, reply and we will adjust immediately.'}
 ${textCta}
 
-Adam & the JDM Rush Team
+${sequenceType === 'A' ? 'Adam' : 'Adam & the JDM Rush Team'}${accountFooterText}
+
 support@jdmrushimports.ca`
 
   return { subject, html, text }
@@ -346,7 +388,7 @@ export async function POST(request: Request) {
 
     try {
       const sendResult = await sendEmail({
-        from: fromEmail,
+        from: sequenceType === 'A' ? `Adam · JDM Rush <${fromEmail}>` : fromEmail,
         to: recipientEmail,
         subject,
         html,

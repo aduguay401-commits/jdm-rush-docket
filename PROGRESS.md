@@ -1,5 +1,32 @@
 # Progress
 
+## 2026-07-05 - Home Base copy cleanup and My Garage on-ramp
+
+Summary: removed customer-facing Home Base branding from the token answer flow and Funnel A conversation emails, added a shared My Garage account upsell for emails/page panels, wired register email/next query params, and cleaned the quote email CTA stack without changing the landed-cost breakdown.
+
+Files changed:
+- `lib/customer/AccountUpsell.tsx` - adds shared register-link builders, email footer/panel renderers, and the post-answer My Garage page panel.
+- `app/account/register/page.tsx` and `app/account/register/RegisterClient.tsx` - read `email`/`next` query params, prefill the register form, and carry `next` through password and Google auth callbacks.
+- `app/questions/[token]/page.tsx` and `app/questions/[token]/CustomerQuestionsClient.tsx` - remove visible Home Base naming, restyle the no-login answer page with the account doorway aesthetic, keep answers primary, and show the My Garage panel only after answer submit.
+- `app/api/system/intake/route.ts` - changes the intake welcome email to Adam's first-person voice with a plain `Answer these` link and the shared account footer.
+- `app/api/agent/send-questions/route.ts` - changes the questions email to Adam's first-person voice with a plain `Answer these` link and the shared account footer.
+- `app/api/cron/follow-up/route.ts` - changes Sequence A follow-ups to Adam's first-person voice with a plain answer link and shared account footer while leaving B/C report and purchase CTAs intact.
+- `app/api/admin/remind/[id]/route.ts` - changes answer reminders to Adam's first-person voice with a plain answer link and shared account footer while preserving report/purchase reminder buttons.
+- `app/api/system/quote/route.ts` - removes the misleading Home Base full-quote button and adds the My Garage account panel below the existing weekly-matches opt-in without touching the total or itemized landed-cost table.
+
+Decisions/deviations:
+- `lib/customer/homeBaseStatusCopy.ts` was intentionally left unchanged per dispatch because its customer-visible strings do not say Home Base.
+- Internal route/helper names such as `/questions/[token]` and `getCustomerHomeBaseUrl` remain unchanged to avoid cosmetic symbol churn.
+- The quote email stays branded/team-voice; only the bad full-quote CTA was removed and the Rung-2 My Garage panel was added.
+
+Verification:
+- Scoped grep PASS: no customer-facing `Home Base` / `JDM Home Base` strings remain in the touched Funnel A email, connect-page, or quote-email surfaces; no `View Your Full Quote` CTA remains in `app/api/system/quote/route.ts`.
+- `git diff --check` PASS.
+- `bash .agents/bin/nm-gate --quick feature/homebase-mygarage-onramp` PASS: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED.
+- Full isolated `bash .agents/bin/nm-gate feature/homebase-mygarage-onramp` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-04 - Nurture Engine Phase 3B pre-go-live fixes
 
 Summary: closed Adam's four pre-go-live fixes on the Phase 3B weekly send job without expanding scope beyond the cron/email path.

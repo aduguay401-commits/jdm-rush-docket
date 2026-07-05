@@ -5,6 +5,11 @@
 
 import { sendEmail } from '@/lib/email'
 
+import {
+  buildAccountRegisterUrl,
+  renderAccountUpsellEmailFooter,
+  renderAccountUpsellEmailTextFooter,
+} from '@/lib/customer/AccountUpsell'
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { createServerClient } from '@/lib/supabase/server'
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
@@ -312,6 +317,10 @@ export async function POST(request: Request) {
     const customerHomeBaseUrl = docket.questions_url_token
       ? getCustomerHomeBaseUrl(docket.questions_url_token)
       : null
+    const customerAccountUrl = buildAccountRegisterUrl({
+      email: customerOriginalEmail,
+      nextPath: docket.questions_url_token ? `/questions/${docket.questions_url_token}` : '/account',
+    })
     const makeModelForSummary = [vehicleMake, vehicleModel].filter(Boolean).join(' ')
     const vehicleForSummary =
       vehicleDescription ?? (makeModelForSummary.length > 0 ? makeModelForSummary : 'N/A')
@@ -330,48 +339,40 @@ export async function POST(request: Request) {
         : ''
 
     if (!customerHomeBaseUrl) {
-      console.warn('[Intake] Missing questions_url_token for customer Home Base CTA', {
+      console.warn('[Intake] Missing questions_url_token for customer answer link', {
         docketId: docket.id,
       })
     }
 
     // Email 1: Customer Welcome
     try {
-      const subject = `Welcome to JDM Rush — your docket is ready, ${customerFirstNameForEmail}`
+      const subject = `I got your JDM request, ${customerFirstNameForEmail}`
       const devModeBannerHtml =
         devMode && customerOriginalEmail
           ? `<div style='margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;'>[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
           : ''
-      const homeBaseCtaHtml = customerHomeBaseUrl
+      const answerLinkHtml = customerHomeBaseUrl
         ? `<p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;'>
-    We have set up your JDM Home Base — your personal project hub where everything related to your JDM journey lives. Save the link below and come back any time to catch up on conversations, ask us anything, or access your custom report when it is ready.
+    If I need more detail, I will send a few quick questions here:
+    <a href='${escapeHtml(customerHomeBaseUrl)}' target='_blank' style='color: #E55125; font-weight: 700; text-decoration: none;'>Answer these</a>.
   </p>
-  <table role='presentation' cellspacing='0' cellpadding='0' border='0' align='center' style='border-collapse: separate; margin: 24px auto;'>
-    <tr>
-      <td align='center' bgcolor='#E55125' style='background-color: #E55125; border-radius: 8px; padding: 16px 32px;'>
-        <a href='${escapeHtml(customerHomeBaseUrl)}' target='_blank' style='display: inline-block; color: #ffffff; font-family: Arial, Helvetica, sans-serif; font-size: 16px; font-weight: 700; text-decoration: none; line-height: 1.2;'>
-          🏠 Visit Your JDM Home Base →
-        </a>
-      </td>
-    </tr>
-  </table>
-  <p style='color: #888888; font-size: 13px; line-height: 1.6; text-align: center; margin: 0 0 28px 0;'>No login required. Just save the link somewhere safe.</p>`
+  <p style='color: #888888; font-size: 13px; line-height: 1.6; margin: 0 0 28px 0;'>No login required for that reply page.</p>`
         : ''
-      const homeBaseCtaText = customerHomeBaseUrl
-        ? `We have set up your JDM Home Base — your personal project hub where everything related to your JDM journey lives. Save the link below and come back any time to catch up on conversations, ask us anything, or access your custom report when it is ready.
+      const answerLinkText = customerHomeBaseUrl
+        ? `If I need more detail, I will send a few quick questions here.
 
-Visit your JDM Home Base: ${customerHomeBaseUrl}
-
-No login required. Just save the link somewhere safe.
+Answer these: ${customerHomeBaseUrl}
 
 ---`
         : ''
+      const accountFooterHtml = renderAccountUpsellEmailFooter({ registerUrl: customerAccountUrl })
+      const accountFooterText = renderAccountUpsellEmailTextFooter({ registerUrl: customerAccountUrl })
       const bodySnapshot = `<div style='font-family: sans-serif; max-width: 600px; margin: 0 auto; background: #0d0d0d; color: #ffffff; padding: 40px 32px; border-radius: 12px;'>
   ${devModeBannerHtml}
   <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
-  <h1 style='font-size: 24px; font-weight: 700; line-height: 1.3; margin: 0 0 16px 0;'>Welcome aboard, ${escapeHtml(customerFirstNameForEmail)} 🚗</h1>
+  <h1 style='font-size: 24px; font-weight: 700; line-height: 1.3; margin: 0 0 16px 0;'>I got your JDM request, ${escapeHtml(customerFirstNameForEmail)}</h1>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 24px 0;'>
-    Thanks for trusting us with your JDM journey. We have received your request and our team in Japan is reviewing it now.
+    Thanks for trusting me and the JDM Rush team with your search. I have your request and I am reviewing it with our team in Japan now.
   </p>
   <div style='background: #1a1a1a; border-radius: 10px; padding: 20px; margin: 24px 0;'>
     <p style='font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 12px 0;'>YOUR REQUEST SUMMARY</p>
@@ -380,47 +381,51 @@ No login required. Just save the link somewhere safe.
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Budget:</strong> ${escapeHtml(budgetForSummary)}</p>
     <p style='font-size: 14px; color: #aaaaaa; margin: 4px 0;'><strong style='color: #ffffff;'>Timeline:</strong> ${escapeHtml(timelineForSummary)}</p>
   </div>
-  ${homeBaseCtaHtml}
+  ${answerLinkHtml}
   <hr style='border: 0; border-top: 1px solid #2a2a2a; margin: 30px 0;' />
   <p style='font-size: 18px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;'>What happens next</p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
-    Our team will start researching options for you. If we need more details, we will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
+    I will start researching options for you. If I need more details, I will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
   </p>
   <p style='font-size: 14px; line-height: 1.7; margin: 18px 0 28px 0;'>
     <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125; text-decoration: none;'>Try the Import Calculator while you wait →</a>
   </p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;'>
-    Questions? Just reply to this email or message us through your Home Base.
+    Questions? Just reply to this email.
   </p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 28px 0;'>
-    — Adam & the JDM Rush Team
+    — Adam
   </p>
+  ${accountFooterHtml}
   <p style='color: #888888; font-size: 14px; margin-top: 32px; line-height: 1.6;'>
     <a href='mailto:support@jdmrushimports.ca' style='color: #E55125;'>support@jdmrushimports.ca</a>
   </p>
 </div>`
-      const textBody = `${customerDevPrefix}Welcome aboard, ${customerFirstNameForEmail}
+      const textBody = `${customerDevPrefix}I got your JDM request, ${customerFirstNameForEmail}
 
-Thanks for trusting us with your JDM journey. We have received your request and our team in Japan is reviewing it now.
+Thanks for trusting me and the JDM Rush team with your search. I have your request and I am reviewing it with our team in Japan now.
 
 Your request:
 - Vehicle: ${vehicleForSummary}
 - Destination: ${destinationForSummary}
 - Budget: ${budgetForSummary}
 - Timeline: ${timelineForSummary}
-${homeBaseCtaText}
+${answerLinkText}
 
 What happens next:
-Our team will start researching options for you. If we need more details, we will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
+I will start researching options for you. If I need more details, I will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
 
 Try the Import Calculator while you wait: https://www.jdmrushimports.ca/import-calculator
 
-Questions? Just reply to this email or message us through your Home Base.
+Questions? Just reply to this email.
 
-— Adam & the JDM Rush Team
+— Adam
+
+${accountFooterText}
+
 support@jdmrushimports.ca`
       const sendResult = await sendEmail({
-        from: fromEmail,
+        from: `Adam · JDM Rush <${fromEmail}>`,
         to: customerRecipientEmail ?? adminEmail ?? 'adam@jdmrushimports.ca',
         subject,
         html: bodySnapshot,

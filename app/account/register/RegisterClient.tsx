@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 
 import { ErrorBanner, GoogleIcon, OrDivider, SentStateCard } from "@/app/account/_components/AuthUi";
 import { PasswordInput } from "@/app/account/_components/PasswordInput";
-import { getCustomerAuthCallbackBaseUrl } from "@/lib/customer/auth-shared";
+import { getCustomerAuthCallbackUrl } from "@/lib/customer/auth-shared";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -25,9 +25,9 @@ function formatPhone(value: string) {
   return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
-export function RegisterClient() {
+export function RegisterClient({ initialEmail = "", nextPath }: { initialEmail?: string; nextPath: string }) {
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -90,7 +90,7 @@ export function RegisterClient() {
       email: normalizedEmail,
       password,
       options: {
-        emailRedirectTo: getCustomerAuthCallbackBaseUrl(),
+        emailRedirectTo: getCustomerAuthCallbackUrl(nextPath),
         data: {
           role: "customer",
           ...(firstName ? { first_name: firstName } : {}),
@@ -123,7 +123,7 @@ export function RegisterClient() {
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: getCustomerAuthCallbackBaseUrl(),
+        redirectTo: getCustomerAuthCallbackUrl(nextPath),
       },
     });
 

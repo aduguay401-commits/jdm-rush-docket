@@ -2,9 +2,15 @@ import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
 import { requireAdminOrAgent } from "@/lib/admin/auth";
+import {
+  buildAccountRegisterUrl,
+  renderAccountUpsellEmailFooter,
+  renderAccountUpsellEmailTextFooter,
+} from "@/lib/customer/AccountUpsell";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
 type ReminderCta = {
+  kind: "questions" | "report" | "purchase" | "reply";
   message: string;
   buttonLabel: string | null;
   buttonUrl: string | null;
@@ -21,15 +27,17 @@ function buildReminderCta({
 }): ReminderCta {
   if ((status === "questions_sent" || status === "new") && questionsUrlToken) {
     return {
+      kind: "questions",
       message:
-        "We sent you a few questions to help us find your perfect JDM. Your answers help us narrow down the best options for you.",
-      buttonLabel: "Answer Questions →",
+        "I sent you a few questions to help narrow down the right JDM options. Your answers help me keep the search accurate.",
+      buttonLabel: "Answer these",
       buttonUrl: getCustomerHomeBaseUrl(questionsUrlToken),
     };
   }
 
   if (status === "report_sent" && reportUrlToken) {
     return {
+      kind: "report",
       message:
         "Your personalized import report is ready and waiting. Take a look at the options our team in Japan found for you.",
       buttonLabel: "View Your Report →",
@@ -39,6 +47,7 @@ function buildReminderCta({
 
   if (status === "decision_made" && reportUrlToken) {
     return {
+      kind: "purchase",
       message: "You are almost there! Complete your next steps to lock in your JDM import.",
       buttonLabel: "Complete Next Steps →",
       buttonUrl: getCustomerReportUrl(reportUrlToken),
@@ -46,6 +55,7 @@ function buildReminderCta({
   }
 
   return {
+    kind: "reply",
     message:
       "Just checking in on your docket. If anything has changed with your preferences, budget, or timing, reply to this email and we will adjust your search right away.",
     buttonLabel: null,
@@ -56,11 +66,13 @@ function buildReminderCta({
 function buildReminderEmailHtml({
   customerName,
   cta,
+  accountRegisterUrl,
   devMode,
   originalRecipient,
 }: {
   customerName: string;
   cta: ReminderCta;
+  accountRegisterUrl: string | null;
   devMode: boolean;
   originalRecipient: string;
 }) {
@@ -69,7 +81,9 @@ function buildReminderEmailHtml({
     : "";
   const ctaButton =
     cta.buttonLabel && cta.buttonUrl
-      ? `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
+      ? cta.kind === "questions"
+        ? `<p style=\"margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;\"><a href=\"${cta.buttonUrl}\" style=\"color:#E55125;font-weight:700;text-decoration:none;\">${cta.buttonLabel}</a></p>`
+        : `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
                   <tr>
                     <td align="center" style="border-radius:999px;background:#E55125;">
                       <a href="${cta.buttonUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${cta.buttonLabel}</a>
@@ -77,6 +91,11 @@ function buildReminderEmailHtml({
                   </tr>
                 </table>`
       : `<p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">Reply to this email and we will follow up right away.</p>`;
+  const accountFooter =
+    cta.kind === "questions" && accountRegisterUrl
+      ? renderAccountUpsellEmailFooter({ registerUrl: accountRegisterUrl })
+      : "";
+  const signoff = cta.kind === "questions" ? "Adam" : "Adam &amp; the JDM Rush Team";
 
   return `<!doctype html>
 <html lang=\"en\">
@@ -97,7 +116,8 @@ function buildReminderEmailHtml({
                 <p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">Hi ${customerName},</p>
                 <p style=\"margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;\">${cta.message}</p>
                 ${ctaButton}
-                <p style=\"margin:0;color:#E55125;font-size:14px;line-height:1.6;\">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
+                <p style=\"margin:0;color:#E55125;font-size:14px;line-height:1.6;\">${signoff}<br />support@jdmrushimports.ca</p>
+                ${accountFooter}
               </td>
             </tr>
           </table>
@@ -159,11 +179,19 @@ export async function POST(
     questionsUrlToken: docket.questions_url_token,
     reportUrlToken: docket.report_url_token,
   });
+  const accountRegisterUrl =
+    cta.kind === "questions"
+      ? buildAccountRegisterUrl({
+          email: docket.customer_email,
+          nextPath: docket.questions_url_token ? `/questions/${docket.questions_url_token}` : "/account",
+        })
+      : null;
   const recipientEmail = devMode ? adminEmail : docket.customer_email;
   const subject = "Following up on your JDM request";
   const html = buildReminderEmailHtml({
     customerName,
     cta,
+    accountRegisterUrl,
     devMode,
     originalRecipient: docket.customer_email,
   });
@@ -171,16 +199,23 @@ export async function POST(
     ? `DEV MODE: This email would normally go to ${docket.customer_email}\n\n`
     : "";
   const textCta = cta.buttonLabel && cta.buttonUrl
-    ? `\n\n${cta.buttonLabel} ${cta.buttonUrl}`
+    ? cta.kind === "questions"
+      ? `\n\nAnswer these: ${cta.buttonUrl}`
+      : `\n\n${cta.buttonLabel} ${cta.buttonUrl}`
     : "\n\nReply to this email and we will follow up right away.";
+  const accountFooterText =
+    cta.kind === "questions" && accountRegisterUrl
+      ? `\n\n${renderAccountUpsellEmailTextFooter({ registerUrl: accountRegisterUrl })}`
+      : "";
+  const signoff = cta.kind === "questions" ? "Adam" : "Adam & the JDM Rush Team";
 
   try {
     const sendResult = await sendEmail({
-      from: fromEmail,
+      from: cta.kind === "questions" ? `Adam · JDM Rush <${fromEmail}>` : fromEmail,
       to: recipientEmail,
       subject,
       html,
-      text: `${textDevPrefix}Hi ${customerName},\n\n${cta.message}${textCta}\n\nAdam & the JDM Rush Team\nsupport@jdmrushimports.ca`,
+      text: `${textDevPrefix}Hi ${customerName},\n\n${cta.message}${textCta}\n\n${signoff}${accountFooterText}\n\nsupport@jdmrushimports.ca`,
     });
 
     if (sendResult.error) {
