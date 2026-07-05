@@ -37,6 +37,7 @@ type DocketRow = {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEV_MODE = process.env.DEV_MODE === 'true'
+const DUE_SEQUENCE_LIMIT = 50
 
 const SUBJECTS: Record<SequenceType, Record<1 | 2 | 3, string>> = {
   A: {
@@ -257,6 +258,76 @@ async function cancelSequence(
     .eq('id', sequenceId)
 }
 
+function getEmailType(sequenceType: SequenceType, step: 1 | 2 | 3) {
+  return `sequence_${sequenceType}_step_${step}`
+}
+
+function getNextSequenceUpdate({
+  sequenceType,
+  step,
+  emailsSent,
+  nowIso,
+}: {
+  sequenceType: SequenceType
+  step: 1 | 2 | 3
+  emailsSent: number
+  nowIso: string
+}) {
+  if (step < 3) {
+    const timings = SEQUENCE_TIMING[sequenceType] ?? [0, 0, 0]
+    const currentIndex = step - 1
+    const nextIndex = step
+    const delayDays = Math.max(
+      0,
+      (timings[nextIndex] ?? 0) - (timings[currentIndex] ?? 0)
+    )
+
+    return {
+      step: step + 1,
+      next_send_at: new Date(Date.now() + delayDays * DAY_MS).toISOString(),
+      last_sent_at: nowIso,
+      emails_sent: emailsSent,
+    }
+  }
+
+  return {
+    status: 'completed',
+    completed: true,
+    last_sent_at: nowIso,
+    emails_sent: emailsSent,
+  }
+}
+
+async function advanceSequenceForStep({
+  supabase,
+  sequence,
+  sequenceType,
+  step,
+  emailsSent,
+  nowIso,
+}: {
+  supabase: SupabaseClient
+  sequence: FollowUpSequenceRow
+  sequenceType: SequenceType
+  step: 1 | 2 | 3
+  emailsSent: number
+  nowIso: string
+}) {
+  let query = supabase
+    .from('follow_up_sequences')
+    .update(getNextSequenceUpdate({ sequenceType, step, emailsSent, nowIso }))
+    .eq('id', sequence.id)
+    .eq('status', 'active')
+    .or('completed.is.false,completed.is.null')
+
+  query =
+    typeof sequence.step === 'number'
+      ? query.eq('step', sequence.step)
+      : query.is('step', null)
+
+  return query.select('id').maybeSingle()
+}
+
 export async function POST(request: Request) {
   const cronSecret = process.env.CRON_SECRET
   const authorization = request.headers.get('authorization')
@@ -288,6 +359,8 @@ export async function POST(request: Request) {
     .eq('status', 'active')
     .lte('next_send_at', nowIso)
     .or('completed.is.false,completed.is.null')
+    .order('next_send_at', { ascending: true })
+    .limit(DUE_SEQUENCE_LIMIT)
 
   if (sequencesError) {
     return Response.json({ error: sequencesError.message }, { status: 500 })
@@ -373,92 +446,100 @@ export async function POST(request: Request) {
       devMode: DEV_MODE,
       originalRecipient,
     })
+    const emailType = getEmailType(sequenceType, step)
+    const nextEmailsSent = (typeof sequence.emails_sent === 'number' ? sequence.emails_sent : 0) + 1
 
-    try {
-      const sendResult = await sendEmail({
-        from: sequenceType === 'A' ? `Adam · JDM Rush <${fromEmail}>` : fromEmail,
-        to: recipientEmail,
-        subject,
-        html,
-        text,
+    const { data: existingLog, error: existingLogError } = await supabase
+      .from('email_log')
+      .select('id')
+      .eq('docket_id', docket.id)
+      .eq('email_type', emailType)
+      .limit(1)
+      .maybeSingle()
+
+    if (existingLogError) {
+      continue
+    }
+
+    if (existingLog) {
+      const { data: advanced, error: advanceError } = await advanceSequenceForStep({
+        supabase,
+        sequence,
+        sequenceType,
+        step,
+        emailsSent: nextEmailsSent,
+        nowIso,
       })
 
-      if (sendResult.error) {
+      if (advanceError || !advanced) {
+        continue
+      }
+
+      if (step < 3) {
+        processed += 1
+        continue
+      }
+    } else {
+      const { data: advanced, error: advanceError } = await advanceSequenceForStep({
+        supabase,
+        sequence,
+        sequenceType,
+        step,
+        emailsSent: nextEmailsSent,
+        nowIso,
+      })
+
+      if (advanceError || !advanced) {
+        continue
+      }
+
+      const { error: emailLogError } = await supabase.from('email_log').insert({
+        docket_id: docket.id,
+        email_type: emailType,
+        recipient_email: recipientEmail,
+        subject,
+        body_snapshot: html,
+      })
+
+      if (emailLogError) {
+        continue
+      }
+
+      try {
+        const sendResult = await sendEmail({
+          from: sequenceType === 'A' ? `Adam · JDM Rush <${fromEmail}>` : fromEmail,
+          to: recipientEmail,
+          subject,
+          html,
+          text,
+        })
+
+        if (sendResult.error) {
+          console.error('[Follow-up Email Send Error]', {
+            sequenceId: sequence.id,
+            docketId: docket.id,
+            sequenceType,
+            step,
+            recipient: recipientEmail,
+            error: sendResult.error,
+          })
+          continue
+        }
+      } catch (error) {
         console.error('[Follow-up Email Send Error]', {
           sequenceId: sequence.id,
           docketId: docket.id,
           sequenceType,
           step,
           recipient: recipientEmail,
-          error: sendResult.error,
+          error,
         })
         continue
       }
-    } catch (error) {
-      console.error('[Follow-up Email Send Error]', {
-        sequenceId: sequence.id,
-        docketId: docket.id,
-        sequenceType,
-        step,
-        recipient: recipientEmail,
-        error,
-      })
-      continue
     }
-
-    const { error: emailLogError } = await supabase.from('email_log').insert({
-      docket_id: docket.id,
-      email_type: `sequence_${sequenceType}_step_${step}`,
-      recipient_email: recipientEmail,
-      subject,
-      body_snapshot: html,
-    })
-
-    if (emailLogError) {
-      continue
-    }
-
-    const nextEmailsSent = (typeof sequence.emails_sent === 'number' ? sequence.emails_sent : 0) + 1
 
     if (step < 3) {
-      const timings = SEQUENCE_TIMING[sequenceType] ?? [0, 0, 0]
-      const currentIndex = step - 1
-      const nextIndex = step
-      const delayDays = Math.max(
-        0,
-        (timings[nextIndex] ?? 0) - (timings[currentIndex] ?? 0)
-      )
-      const nextSendAt = new Date(Date.now() + delayDays * DAY_MS).toISOString()
-
-      const { error: updateSequenceError } = await supabase
-        .from('follow_up_sequences')
-        .update({
-          step: step + 1,
-          next_send_at: nextSendAt,
-          last_sent_at: nowIso,
-          emails_sent: nextEmailsSent,
-        })
-        .eq('id', sequence.id)
-
-      if (updateSequenceError) {
-        continue
-      }
-
       processed += 1
-      continue
-    }
-
-    const { error: completeSequenceError } = await supabase
-      .from('follow_up_sequences')
-      .update({
-        status: 'completed',
-        completed: true,
-        last_sent_at: nowIso,
-        emails_sent: nextEmailsSent,
-      })
-      .eq('id', sequence.id)
-
-    if (completeSequenceError) {
       continue
     }
 

@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-07-05 - Follow-up cron hardening
+
+Summary: hardened the schema-correct follow-up cron against future backlog blasts and duplicate step sends, and retired the dead legacy decision endpoint that could bypass Sequence C creation.
+
+Files changed:
+- `app/api/cron/follow-up/route.ts` - orders due rows by `next_send_at`, caps each daily cron run at 50 sequences, claims and advances the sequence before delivery, writes the step `email_log` before sending, and repairs rows that already have a step log without re-sending.
+- `app/api/customer/report/[token]/decision/route.ts` - returns HTTP 410 so the old unused decision endpoint can no longer set `decision_made` without the canonical approve route's Sequence C insert.
+- `PROGRESS.md` - records the hardening scope, rationale, and verification.
+
+Decisions/deviations:
+- The throttle is 50 because `/api/cron/follow-up` runs once daily at 14:00 UTC; that drains a backlog over days instead of blasting all due customers at once, while still allowing far more than normal daily follow-up volume.
+- No migration was added. Idempotency is handled in route code by advancing the current guarded step before send, inserting `email_log` before send, and checking an existing `sequence_X_step_Y` log to heal a prior partial write without another email.
+- Existing Sequence A and B timing remains untouched; those sequence types are intentionally reserved for the future nurture segmentation engine.
+- The quote email and landed-cost breakdown were not touched.
+
+Verification:
+- `npm run type-check` PASS.
+- `git diff --check` PASS.
+- `bash .agents/bin/nm-gate --quick fix/followup-cron-hardening` PASS: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED.
+- Full isolated `bash .agents/bin/nm-gate fix/followup-cron-hardening` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - Follow-up cron schema fix
 
 Summary: reproduced the production follow-up cron 500 against the real Supabase schema, confirmed `follow_up_sequences` has a `completed` boolean instead of `cancelled_at` / `completed_at` timestamps, and fixed the cron with a code-only schema adaptation.
