@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-07-05 - Opt-in price basis label
+
+Summary: clarified the nurture opt-in confirmation price basis with copy-only changes so the saved-search card estimate is not confused with the quote email landed-cost total.
+
+Files changed:
+- `app/nurture/opt-in/[token]/page.tsx` - relabels the vehicle recap price row from `Quoted price` to `Est. match price` and adds the approved explanatory footnote below the recap card.
+- `PROGRESS.md` - records the copy-only scope and verification.
+
+Decisions/deviations:
+- The value remains `lead.savedSearch.anchor_card_estimate_cad` formatted through the existing `formatCadAmount`; no calculation or saved-search data changed.
+- `lib/importCalculator.ts`, `lib/nurture/matching.ts`, and `app/api/system/quote/route.ts` were not touched. The quote email landed-cost breakdown and TOTAL LANDED COST figure remain untouched.
+
+Verification:
+- `npm run type-check` PASS.
+- `git diff --check` PASS.
+- Protected-file diff check PASS: `lib/importCalculator.ts`, `lib/nurture/matching.ts`, and `app/api/system/quote/route.ts` have no changes.
+- `bash .agents/bin/nm-gate --quick fix/opt-in-price-basis-label` PASS: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED.
+- Full isolated `bash .agents/bin/nm-gate fix/opt-in-price-basis-label` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - Follow-up cron hardening
 
 Summary: hardened the schema-correct follow-up cron against future backlog blasts and duplicate step sends, and retired the dead legacy decision endpoint that could bypass Sequence C creation.
