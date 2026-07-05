@@ -17,8 +17,7 @@ type FollowUpSequenceRow = {
   step: number | null
   status: string | null
   next_send_at: string | null
-  cancelled_at: string | null
-  completed_at: string | null
+  completed: boolean | null
   emails_sent?: number | null
 }
 
@@ -248,14 +247,12 @@ support@jdmrushimports.ca`
 
 async function cancelSequence(
   supabase: SupabaseClient,
-  sequenceId: string,
-  nowIso: string
+  sequenceId: string
 ) {
   return supabase
     .from('follow_up_sequences')
     .update({
       status: 'cancelled',
-      cancelled_at: nowIso,
     })
     .eq('id', sequenceId)
 }
@@ -287,11 +284,10 @@ export async function POST(request: Request) {
 
   const { data: sequences, error: sequencesError } = await supabase
     .from('follow_up_sequences')
-    .select('id, docket_id, sequence_type, step, status, next_send_at, cancelled_at, completed_at, emails_sent')
+    .select('id, docket_id, sequence_type, step, status, next_send_at, completed, emails_sent')
     .eq('status', 'active')
     .lte('next_send_at', nowIso)
-    .is('cancelled_at', null)
-    .is('completed_at', null)
+    .or('completed.is.false,completed.is.null')
 
   if (sequencesError) {
     return Response.json({ error: sequencesError.message }, { status: 500 })
@@ -327,7 +323,7 @@ export async function POST(request: Request) {
     const docket = docketById.get(sequence.docket_id)
 
     if (!docket) {
-      const { error } = await cancelSequence(supabase, sequence.id, nowIso)
+      const { error } = await cancelSequence(supabase, sequence.id)
       if (!error) {
         processed += 1
       }
@@ -336,7 +332,7 @@ export async function POST(request: Request) {
 
     const docketStatus = nonEmpty(docket.status)?.toLowerCase() ?? null
     if (docket.is_archived || docketStatus === 'cleared' || docketStatus === 'lost') {
-      const { error } = await cancelSequence(supabase, sequence.id, nowIso)
+      const { error } = await cancelSequence(supabase, sequence.id)
       if (!error) {
         processed += 1
       }
@@ -345,7 +341,7 @@ export async function POST(request: Request) {
 
     const sequenceType = asSequenceType(sequence.sequence_type)
     if (!sequenceType) {
-      const { error } = await cancelSequence(supabase, sequence.id, nowIso)
+      const { error } = await cancelSequence(supabase, sequence.id)
       if (!error) {
         processed += 1
       }
@@ -358,7 +354,7 @@ export async function POST(request: Request) {
     const recipientEmail = DEV_MODE ? adminEmail : originalRecipient
 
     if (!recipientEmail) {
-      const { error } = await cancelSequence(supabase, sequence.id, nowIso)
+      const { error } = await cancelSequence(supabase, sequence.id)
       if (!error) {
         processed += 1
       }
@@ -456,7 +452,7 @@ export async function POST(request: Request) {
       .from('follow_up_sequences')
       .update({
         status: 'completed',
-        completed_at: nowIso,
+        completed: true,
         last_sent_at: nowIso,
         emails_sent: nextEmailsSent,
       })
