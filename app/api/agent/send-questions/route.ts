@@ -1,6 +1,11 @@
 import { sendEmail } from '@/lib/email';
 import { sendSMS } from '@/lib/sms';
 
+import {
+  buildAccountRegisterUrl,
+  renderAccountUpsellEmailFooter,
+  renderAccountUpsellEmailTextFooter,
+} from "@/lib/customer/AccountUpsell";
 import { createServerClient } from "@/lib/supabase/server";
 import { getCustomerHomeBaseUrl } from "@/lib/urls";
 
@@ -29,23 +34,38 @@ function buildVehicleLabel(
     .join(" ");
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function buildQuestionsEmailHtml({
   firstName,
   vehicle,
   questionsUrl,
+  accountRegisterUrl,
   devMode,
   originalRecipient,
 }: {
   firstName: string;
   vehicle: string;
   questionsUrl: string;
+  accountRegisterUrl: string;
   devMode: boolean;
   originalRecipient: string | null;
 }) {
+  const safeFirstName = escapeHtml(firstName);
+  const safeVehicle = escapeHtml(vehicle);
+  const safeQuestionsUrl = escapeHtml(questionsUrl);
   const devBanner =
     devMode && originalRecipient
-      ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${originalRecipient}</div>`
+      ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${escapeHtml(originalRecipient)}</div>`
       : "";
+  const accountFooter = renderAccountUpsellEmailFooter({ registerUrl: accountRegisterUrl });
 
   return `<!doctype html>
 <html lang="en">
@@ -62,17 +82,14 @@ function buildQuestionsEmailHtml({
             <tr>
               <td style="padding:24px;">
                 ${devBanner}
-                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">A few quick questions about your JDM request</h1>
-                <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${firstName},</p>
-                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your vehicle. Your answers help us find exactly the right car for you.</p>
-                <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;">
-                  <tr>
-                    <td align="center" style="border-radius:999px;background:#E55125;">
-                      <a href="${questionsUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">Answer Questions →</a>
-                    </td>
-                  </tr>
-                </table>
-                <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
+                <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">I have a few quick questions about your JDM request</h1>
+                <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${safeFirstName},</p>
+                <p style="margin:0 0 16px;font-size:15px;line-height:1.7;color:#d6d6d6;">I reviewed your ${safeVehicle} request and need a bit more detail before I pull the right auction data and private dealer options.</p>
+                <p style="margin:0 0 20px;font-size:15px;line-height:1.7;color:#d6d6d6;">
+                  <a href="${safeQuestionsUrl}" style="color:#E55125;font-weight:700;text-decoration:none;">Answer these</a>
+                </p>
+                <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam<br />support@jdmrushimports.ca</p>
+                ${accountFooter}
               </td>
             </tr>
           </table>
@@ -199,11 +216,16 @@ export async function POST(request: Request) {
         ? docket.customer_first_name.trim()
         : "there";
     const questionsUrl = getCustomerHomeBaseUrl(docket.questions_url_token);
-    const subject = "A few quick questions about your JDM request";
+    const accountRegisterUrl = buildAccountRegisterUrl({
+      email: originalRecipient,
+      nextPath: `/questions/${docket.questions_url_token}`,
+    });
+    const subject = "I have a few quick questions about your JDM request";
     const html = buildQuestionsEmailHtml({
       firstName,
       vehicle,
       questionsUrl,
+      accountRegisterUrl,
       devMode,
       originalRecipient,
     });
@@ -213,15 +235,18 @@ export async function POST(request: Request) {
         : "";
     const text = `${textDevPrefix}Hi ${firstName},
 
-Our export agent in Japan has reviewed your request and has a few quick questions before pulling auction data and private dealer options for your vehicle. Your answers help us find exactly the right car for you.
+I reviewed your ${vehicle} request and need a bit more detail before I pull the right auction data and private dealer options.
 
-Answer Questions → ${questionsUrl}
+Answer these: ${questionsUrl}
 
-Adam & the JDM Rush Team
+Adam
+
+${renderAccountUpsellEmailTextFooter({ registerUrl: accountRegisterUrl })}
+
 support@jdmrushimports.ca`;
     try {
       const sendResult = await sendEmail({
-        from: fromEmail,
+        from: `Adam · JDM Rush <${fromEmail}>`,
         to: recipientEmail ?? adminEmail ?? "adam@jdmrushimports.ca",
         subject,
         html,

@@ -6,12 +6,13 @@ import type {
   TimelineCustomerQuestion,
   TimelineMarcusQuestion,
 } from "@/components/CustomerCommunicationTimeline";
+import { buildAccountRegisterPath } from "@/lib/customer/AccountUpsell";
 import { getCustomerHomeBaseStatusCopy } from "@/lib/customer/homeBaseStatusCopy";
 import { createServerClient } from "@/lib/supabase/server";
 import { getCustomerReportUrl } from "@/lib/urls";
 
 export const metadata = {
-  title: "Your JDM Home Base | JDM Rush Imports",
+  title: "Your JDM Request | JDM Rush Imports",
 };
 
 type CustomerQuestionsPageProps = {
@@ -23,6 +24,7 @@ type HomeBaseDocket = {
   status: string | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
+  customer_email: string | null;
   vehicle_description: string | null;
   destination_city: string | null;
   destination_province: string | null;
@@ -39,7 +41,7 @@ export default async function CustomerQuestionsPage({ params }: CustomerQuestion
   const { data: docket, error: docketError } = await supabase
     .from("dockets")
     .select(
-      "id, status, customer_first_name, customer_last_name, vehicle_description, destination_city, destination_province, budget_bracket, timeline, questions_url_token, report_url_token"
+      "id, status, customer_first_name, customer_last_name, customer_email, vehicle_description, destination_city, destination_province, budget_bracket, timeline, questions_url_token, report_url_token"
     )
     .eq("questions_url_token", token)
     .maybeSingle<HomeBaseDocket>();
@@ -78,9 +80,14 @@ export default async function CustomerQuestionsPage({ params }: CustomerQuestion
   const shouldShowQuestionForm = (statusCopy.showQuestionForm || unansweredQuestions.length > 0) && unansweredQuestions.length > 0;
   const reportUrl =
     statusCopy.showReportLink && docket.report_url_token ? getCustomerReportUrl(docket.report_url_token) : null;
+  const accountRegisterUrl = buildAccountRegisterPath({
+    email: docket.customer_email,
+    nextPath: `/questions/${encodeURIComponent(token)}`,
+  });
 
   return (
     <CustomerQuestionsClient
+      accountRegisterUrl={accountRegisterUrl}
       askEndpoint={`/api/customer/questions/${token}/ask`}
       customerQuestions={customerQuestions ?? []}
       docket={docket}
