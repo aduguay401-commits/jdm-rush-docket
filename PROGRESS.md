@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-07-05 - Follow-up cron schema fix
+
+Summary: reproduced the production follow-up cron 500 against the real Supabase schema, confirmed `follow_up_sequences` has a `completed` boolean instead of `cancelled_at` / `completed_at` timestamps, and fixed the cron with a code-only schema adaptation.
+
+Files changed:
+- `app/api/cron/follow-up/route.ts` - removes nonexistent timestamp columns from the due-sequence select and terminal updates, filters active due rows with `completed` boolean, keeps `status='cancelled'` as the existing cancellation signal, and marks final-step sequences `completed=true`.
+- `PROGRESS.md` - records the repro, schema decision, fix path, and harness verification.
+
+Decisions/deviations:
+- Code-only path taken. The existing schema is sufficient: `status` distinguishes active/cancelled/completed lifecycle and `completed` is the terminal boolean, so no Adam-run migration is required.
+- The isolated harness used `/tmp/jdm-rush-docket-followup-repro` on port `3065` with `DEV_MODE=true`; no shared `:3005` server was touched.
+- Throwaway docket `c063e9e0-f021-4dac-b2b9-d8d0527d63b3` and follow-up sequence `0e244e02-02c6-405f-b236-47866c433510` were deleted after verification; cascade cleanup left no docket, sequence, or email_log rows for that test data.
+
+Verification:
+- Repro PASS: current `main` route returned HTTP 500 with `column follow_up_sequences.cancelled_at does not exist`.
+- Real schema PASS: Supabase OpenAPI reported `follow_up_sequences` columns `completed,created_at,docket_id,emails_sent,id,last_sent_at,next_send_at,sequence_type,status,step`.
+- Fixed harness PASS: the cron returned HTTP 200 and `{"processed":1}` for a due Sequence A row; it wrote `email_log.sequence_A_step_1` to `ADMIN_EMAIL` under `DEV_MODE=true`, advanced the sequence to `step=2`, set `last_sent_at`, `emails_sent=1`, and moved `next_send_at` three days out.
+- Idempotency PASS: immediate second cron run returned HTTP 200 with `processed:0` / no due follow-up sequences.
+- `bash .agents/bin/nm-gate --quick fix/followup-cron-schema` PASS: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED.
+- Full isolated `bash .agents/bin/nm-gate fix/followup-cron-schema` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: implementation complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - On-ramp fast-follow confirmation card fold
 
 Summary: folded Adam's gate note into the existing on-ramp fast-follow branch by changing only the post-submit confirmation card on the no-login connect page to first-person Adam voice.
