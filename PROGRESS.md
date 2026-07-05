@@ -1,5 +1,26 @@
 # Progress
 
+## 2026-07-05 - Opt-in price basis polish
+
+Summary: folded Adam's copy polish into the opt-in price-basis branch after Reviewer and QA passed.
+
+Files changed:
+- `app/nurture/opt-in/[token]/page.tsx` - gates the explanatory footnote behind the same `quotedPrice` condition as the `Est. match price` row and updates the footnote wording to reference the quote email instead of a non-existent email block above it.
+- `PROGRESS.md` - records the refinement and verification.
+
+Decisions/deviations:
+- Copy/presentational-only change on the same branch.
+- The `quotedPrice` value still comes from `lead.savedSearch.anchor_card_estimate_cad`; no value binding, calculator, matching, or quote email code changed.
+- `lib/importCalculator.ts`, `lib/nurture/matching.ts`, and `app/api/system/quote/route.ts` remain untouched.
+
+Verification:
+- `npm run type-check` PASS.
+- `git diff --check` PASS.
+- Protected-file diff check PASS: `lib/importCalculator.ts`, `lib/nurture/matching.ts`, and `app/api/system/quote/route.ts` have no changes.
+- Full isolated `bash .agents/bin/nm-gate fix/opt-in-price-basis-label` PASS on the pushed branch: lint advisory PASS, typecheck PASS, build PASS, test SKIPPED. Mobile overflow check reported the same non-fatal harness error, and the gate result remained ALL PASS.
+
+Status: refinement complete, pushed, and isolated gate PASS.
+
 ## 2026-07-05 - Opt-in price basis label
 
 Summary: clarified the nurture opt-in confirmation price basis with copy-only changes so the saved-search card estimate is not confused with the quote email landed-cost total.
