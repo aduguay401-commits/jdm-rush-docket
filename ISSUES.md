@@ -2,6 +2,10 @@
 
 ## Open
 
+### 2026-07-09 - Canonical purchase-path values duplicated (DRY follow-up)
+
+The two real customer-chosen paths ("auction", "private_dealer") are now defined canonically as REAL_CHOSEN_PATHS in lib/agreements/templates.ts, but the same literals are still hardcoded independently in app/api/customer/approve/[token]/route.ts (payload validation) and app/report/[token]/ReportClient.tsx (decision-state union type). Non-blocking; a future cleanup should have those import the shared constant so the set has one source of truth. Deferred to keep the agreement-path-guard fix tightly scoped.
+
 ### 2026-07-04 - Migration 012 must be applied before Nurture Phase 3B runtime QA/go-live
 
 Nurture Engine Phase 3B writes to `nurture_email_sends`, which is created by `supabase/migrations/012_nurture_phase3_matching.sql`. Adam is applying this migration in production Supabase. Runtime QA of /api/cron/nurture-matches and final launch should wait until migration 012 is live.
@@ -21,6 +25,10 @@ Reviewer found that `public.customers` RLS had no authenticated self-select poli
 Stage 0.4 customer portal child-table reads and message inserts depend on `supabase/migrations/009_customer_dashboard_child_rls.sql`. Codex wrote the migration but did not apply SQL to production. Adam must apply 009 before QA performs runtime verification of `/account/research`, `/account/messages`, and customer message posting.
 
 ## Resolved
+### 2026-07-09 - Agreement engine could send a defaulted Auction contract on quote-only dockets
+
+QA-confirmed on prod: a docket with only selected_path="quote-endpoint" (no customer path choice) showed an enabled Send Agreement button and, if sent, generated a legally-binding Auction agreement by default (pickTemplate defaulted everything non-private_dealer to Auction; the send/sign guards only checked for a truthy path). Fixed on fix/agreement-path-guard via a canonical resolveChosenPath() threaded through all five agreement path gates; quote-endpoint/null now resolve to no-path and are refused at the dashboard button, the send API, the customer sign API, and the sign page. Pending isolated gate + review + merge.
+
 ### 2026-07-04 - Migration 011 applied for Nurture Phase 2
 
 Checkpoint and Phase 3A runtime state confirm migration 011 is live: Docket marketing consent fields, `lead_consent_events`, and `lead_saved_searches` are available, and Phase 2 shipped successfully.

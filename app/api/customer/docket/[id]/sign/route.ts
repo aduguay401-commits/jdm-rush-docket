@@ -2,7 +2,7 @@ import { headers } from "next/headers";
 
 import { signAgreementPdf } from "@/lib/agreements/sign";
 import { fillAgreementTemplate } from "@/lib/agreements/fillTemplate";
-import { pickTemplate } from "@/lib/agreements/templates";
+import { pickTemplate, resolveChosenPath } from "@/lib/agreements/templates";
 import { MAX_LICENSE_BYTES, getLicenseExtension, uploadLicenseDocument, uploadSignatureImage } from "@/lib/storage/licenses";
 import { uploadSignedAgreementPdf } from "@/lib/storage/agreements";
 import { buildSignedAgreementEmail } from "@/lib/emails/signedAgreement";
@@ -90,7 +90,7 @@ export async function POST(
     return jsonError("Agreement is already signed", 409);
   }
 
-  const chosenPath = docket.chosen_path ?? docket.selected_path;
+  const chosenPath = resolveChosenPath({ chosen_path: docket.chosen_path, selected_path: docket.selected_path });
   if (!chosenPath) {
     return jsonError("A purchase path must be selected before this agreement can be signed", 400);
   }
@@ -135,6 +135,9 @@ export async function POST(
   const headersList = await headers();
   const customerEmail = auth.user.email ?? docket.customer_email ?? "unknown@email.com";
   const template = pickTemplate(docket);
+  if (!template) {
+    return jsonError("A purchase path must be selected before this agreement can be signed", 400);
+  }
   const filledAgreementMarkdown = fillAgreementTemplate(template.body, docket, { customer_address: address.full });
   const signedAt = new Date().toISOString();
   const ipAddress = getClientIp(headersList);
