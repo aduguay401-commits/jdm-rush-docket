@@ -15,6 +15,7 @@ type AgreementDocket = {
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_email: string | null;
+  customer_id?: string | null;
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
@@ -49,19 +50,27 @@ function escapeHtml(value: string) {
 function buildAgreementEmailHtml({
   firstName,
   vehicle,
-  signUrl,
+  ctaUrl,
+  firstTime,
   devMode,
   originalRecipient,
 }: {
   firstName: string;
   vehicle: string;
-  signUrl: string;
+  ctaUrl: string;
+  firstTime: boolean;
   devMode: boolean;
   originalRecipient: string;
 }) {
   const devBanner = devMode
     ? `<div style="margin:0 0 16px;padding:12px;border:1px solid #E55125;border-radius:8px;background:#2a130a;color:#f8d1c5;font-size:13px;">[DEV MODE] This email would normally go to ${escapeHtml(originalRecipient)}</div>`
     : "";
+
+  const ctaLabel = firstTime ? "Create Your Account to Sign" : "Review and Sign Agreement";
+  const bodyLine = firstTime
+    ? `Please review and sign the purchase agreement for ${escapeHtml(vehicle)}. Create your My JDM Garage account to get started; it only takes a minute and takes you straight to the agreement.`
+    : `Please review and sign the purchase agreement for ${escapeHtml(vehicle)} in your My JDM Garage account.`;
+  const ctaHref = ctaUrl.replace(/&/g, "&amp;");
 
   return `<!doctype html>
 <html lang="en">
@@ -76,8 +85,8 @@ function buildAgreementEmailHtml({
             ${devBanner}
             <h1 style="margin:0 0 14px;font-size:24px;line-height:1.3;color:#ffffff;">Your purchase agreement is ready</h1>
             <p style="margin:0 0 14px;font-size:15px;line-height:1.7;color:#efefef;">Hi ${escapeHtml(firstName)},</p>
-            <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#d6d6d6;">Please review and sign the purchase agreement for ${escapeHtml(vehicle)} in your My JDM Garage account.</p>
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td align="center" style="border-radius:999px;background:#E55125;"><a href="${signUrl}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">Review and Sign Agreement</a></td></tr></table>
+            <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#d6d6d6;">${bodyLine}</p>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 0 20px;"><tr><td align="center" style="border-radius:999px;background:#E55125;"><a href="${ctaHref}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:700;color:#ffffff;text-decoration:none;">${ctaLabel}</a></td></tr></table>
             <p style="margin:0;color:#E55125;font-size:14px;line-height:1.6;">Adam &amp; the JDM Rush Team<br />support@jdmrushimports.ca</p>
           </td></tr>
         </table>
@@ -102,7 +111,7 @@ export async function POST(request: Request) {
   const supabase = createServerClient();
   const { data: docket, error: docketError } = await supabase
     .from("dockets")
-    .select("id, customer_first_name, customer_last_name, customer_email, vehicle_year, vehicle_make, vehicle_model, vehicle_description, selected_path, chosen_path, agreement_sent_at, agreement_signed")
+    .select("id, customer_first_name, customer_last_name, customer_email, customer_id, vehicle_year, vehicle_make, vehicle_model, vehicle_description, selected_path, chosen_path, agreement_sent_at, agreement_signed")
     .eq("id", docketId)
     .maybeSingle<AgreementDocket>();
 
@@ -147,18 +156,43 @@ export async function POST(request: Request) {
   const vehicle = buildVehicle(docket);
   const fullName = buildCustomerName(docket);
   const firstName = fullName.split(/\s+/)[0] || "there";
-  const signUrl = `${getAppBaseUrl()}/account/docket/${encodeURIComponent(docket.id)}/sign`;
+
+  // First-time customer = docket not yet linked AND no existing account for this email.
+  // Such a recipient has no My JDM Garage account, so a direct sign link would bounce
+  // them to login; route them to register (email prefilled, next = the sign page) instead.
+  const normalizedEmail = docket.customer_email.trim().toLowerCase();
+  let hasAccount = docket.customer_id != null;
+  if (!hasAccount) {
+    const { data: existingCustomer, error: customerLookupError } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("email", normalizedEmail)
+      .maybeSingle<{ id: string }>();
+    // On a lookup error, fall back to the returning-customer (direct sign) path so a
+    // transient DB issue never blocks sending; the sign link still works for everyone.
+    hasAccount = customerLookupError ? true : Boolean(existingCustomer);
+  }
+  const firstTime = !hasAccount;
+
+  const signPath = `/account/docket/${encodeURIComponent(docket.id)}/sign`;
+  const signUrl = `${getAppBaseUrl()}${signPath}`;
+  const ctaUrl = firstTime
+    ? `${getAppBaseUrl()}/account/register?email=${encodeURIComponent(docket.customer_email)}&next=${encodeURIComponent(signPath)}`
+    : signUrl;
   const recipientEmail = devMode ? adminEmail : docket.customer_email;
   const subject = `Purchase agreement ready for ${vehicle}`;
   const html = buildAgreementEmailHtml({
     firstName,
     vehicle,
-    signUrl,
+    ctaUrl,
+    firstTime,
     devMode,
     originalRecipient: docket.customer_email,
   });
   const textDevPrefix = devMode ? `[DEV MODE] This email would normally go to ${docket.customer_email}\n\n` : "";
-  const text = `${textDevPrefix}Hi ${firstName},\n\nPlease review and sign the purchase agreement for ${vehicle}: ${signUrl}\n\nAdam & the JDM Rush Team\nsupport@jdmrushimports.ca`;
+  const text = firstTime
+    ? `${textDevPrefix}Hi ${firstName},\n\nPlease review and sign the purchase agreement for ${vehicle}. Create your My JDM Garage account to get started and you will go straight to the agreement:\n${ctaUrl}\n\nAdam & the JDM Rush Team\nsupport@jdmrushimports.ca`
+    : `${textDevPrefix}Hi ${firstName},\n\nPlease review and sign the purchase agreement for ${vehicle}: ${ctaUrl}\n\nAdam & the JDM Rush Team\nsupport@jdmrushimports.ca`;
 
   const sendResult = await sendEmail({
     from: fromEmail,
