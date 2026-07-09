@@ -656,3 +656,18 @@ Equivalence: isRealChosenPath(x) is exactly (x === "private_dealer" || x === "au
 Verification: docket nm-gate on the branch (typecheck + build); reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer static equivalence check.
+
+
+## 2026-07-09 - Frictionless first-time agreement signing on-ramp
+
+Summary: made the customer-facing agreement signing on-ramp work for a first-time customer with no My JDM Garage account (real case: Dennis Cunningham). The chain was broken at one hop (login Sign-up link dropped the return path) and the agreement email always linked to the account-only sign page. Two edits close it; the returning-customer path is unchanged.
+
+Files changed:
+- app/account/login/LoginClient.tsx - the Sign up link now carries next (the return path LoginClient already receives) and the entered email when present, so login -> Sign up -> register -> confirm -> callback claim -> back to the sign page is an unbroken loop. Built with URLSearchParams (auto-encoded).
+- app/api/agent/send-agreement/route.ts - branch the email CTA by whether the customer already has an account. First-time (docket.customer_id null AND no customers row for the email) points the button at /account/register?email=<email>&next=<signPath> with create-account copy; a returning customer keeps the unchanged direct sign link + copy. Added customer_id to the docket select; the & in the register URL is escaped to &amp; in the HTML href; on a customers-lookup error it falls back to the direct-sign path so a DB hiccup never blocks sending.
+
+Traced end to end: first-time (email -> register prefilled+next -> confirm -> callback claims docket -> lands on the sign page) and returning (direct sign link). normalizeCustomerNextPath still constrains next to internal paths (origin-checked, no open redirect). Agreement content, path-guard, and signing wizard untouched. New-customer email copy kept minimal; orchestrator to surface it to Adam at the gate.
+
+Verification: docket nm-gate on the branch (typecheck + build); reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.

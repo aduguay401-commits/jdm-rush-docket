@@ -50,6 +50,11 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
   const [loadingMode, setLoadingMode] = useState<"google" | null>(null);
   const isLoading = loadingMode !== null;
 
+  const registerParams = new URLSearchParams({ next: nextPath });
+  if (email.trim()) {
+    registerParams.set("email", email.trim());
+  }
+  const registerHref = `/account/register?${registerParams.toString()}`;
 
   async function handleGoogleSignIn() {
     setError("");
@@ -137,7 +142,7 @@ export function LoginClient({ nextPath, errorMessage }: { nextPath: string; erro
 
       <p className="text-center text-white/50 text-[13px] mt-2">
         Don&apos;t have an account?{" "}
-        <Link href="/account/register" className="text-[#E55125] hover:brightness-110 font-medium">
+        <Link href={registerHref} className="text-[#E55125] hover:brightness-110 font-medium">
           Sign up
         </Link>
       </p>
