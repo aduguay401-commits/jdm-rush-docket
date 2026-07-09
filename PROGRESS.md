@@ -641,3 +641,18 @@ Decisions/deviations:
 Verification: isolated nm-gate (build + typecheck) to run on the pushed branch; result reported with code_ready.
 
 Status: implementation complete, pending isolated gate + review.
+
+
+## 2026-07-09 - DRY: ReportClient real-chosen-path narrowing uses the shared helper
+
+Summary: Reviewer-flagged DRY tidy on the agreement path-guard work. Replaced ReportClient's inline duplication of the real-chosen-path narrowing with the shared single-source definition. Added an isRealChosenPath type-guard predicate to lib/agreements/templates.ts (derived from REAL_CHOSEN_PATHS) and routed both resolveChosenPath and ReportClient through it, so there is exactly one definition of what counts as a real path. Pure no-behavior-change.
+
+Files changed:
+- lib/agreements/templates.ts - added isRealChosenPath(value) type guard (single source, derived from REAL_CHOSEN_PATHS); resolveChosenPath now delegates to it (output identical for all inputs).
+- app/report/[token]/ReportClient.tsx - imported isRealChosenPath; the decisionState initializer selectedPath narrowing now uses it in place of the inline chosen_path/selected_path literal checks, keeping the exact two-field structure.
+
+Equivalence: isRealChosenPath(x) is exactly (x === "private_dealer" || x === "auction"), so selectedPath is identical to before for every input - auction stays auction, private_dealer stays private_dealer, quote-endpoint and null stay not-real. Deliberately did NOT collapse to a bare resolveChosenPath(docket) swap: resolveChosenPath uses chosen_path ?? selected_path, which would differ from ReportClient's independent per-field narrowing in the (unreachable) case where chosen_path is a non-null non-real value while selected_path is real. The predicate approach preserves exact behavior.
+
+Verification: docket nm-gate on the branch (typecheck + build); reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer static equivalence check.
