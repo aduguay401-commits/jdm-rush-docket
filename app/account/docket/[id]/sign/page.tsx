@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 
 import { AccountHeader } from "@/app/account/_components/header";
 import { fillAgreementTemplate } from "@/lib/agreements/fillTemplate";
-import { pickTemplate } from "@/lib/agreements/templates";
+import { pickTemplate, resolveChosenPath } from "@/lib/agreements/templates";
 import {
   getCustomerPortalContext,
   getDocketHref,
@@ -64,7 +64,7 @@ export default async function SignAgreementPage({
   const vehicle = getVehicleLabel(docket);
   const messagesHref = getDocketHref("/account/messages", docket.id);
   const carHref = getDocketHref("/account/car", docket.id);
-  const chosenPath = docket.chosen_path ?? docket.selected_path;
+  const chosenPath = resolveChosenPath({ chosen_path: docket.chosen_path, selected_path: docket.selected_path });
   const template = chosenPath ? pickTemplate(docket) : null;
   const agreementText = template
     ? fillAgreementTemplate(template.body, docket, {

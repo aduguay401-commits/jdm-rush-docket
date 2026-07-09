@@ -620,3 +620,24 @@ Verification:
 - Full isolated nm-gate will run after this branch is committed and pushed.
 
 Status: implementation complete pending commit and isolated gate.
+
+
+## 2026-07-09 - Agreement path guard: no defaulted Auction contract on quote-only dockets
+
+Summary: fixed a QA-confirmed prod bug where a docket that only passed through the quote endpoint (selected_path="quote-endpoint", no customer path choice) presented an enabled Send Agreement button and, if sent, generated a legally-binding AUCTION agreement by default. Introduced a single canonical resolver and threaded it through every agreement path gate so only the two real customer-chosen paths (auction, private_dealer) count as a chosen path; everything else (quote-endpoint, null) is treated as no-path and refused end to end.
+
+Files changed:
+- lib/agreements/templates.ts - added REAL_CHOSEN_PATHS + RealChosenPath + resolveChosenPath() as the single source of truth; pickTemplate() now uses it and returns null for no-path instead of silently defaulting to the Auction template.
+- app/api/agent/send-agreement/route.ts - send guard now rejects unless resolveChosenPath() returns a real path (was: any truthy chosen_path/selected_path, which quote-endpoint satisfied).
+- app/agent/docket/[id]/page.tsx - dashboard chosenPath derived via resolveChosenPath(), so canSendAgreement and the Send Agreement button are disabled on quote-only dockets; the decision_made status line is unaffected (a genuinely approved docket always carries a real path).
+- app/api/customer/docket/[id]/sign/route.ts - customer sign route guard now uses resolveChosenPath(); added a null-template guard after pickTemplate() so a no-path docket cannot be signed (defense in depth at the customer surface).
+- app/account/docket/[id]/sign/page.tsx - sign page chosenPath via resolveChosenPath(); a null template renders the existing not-ready state (no crash, no error).
+
+Decisions/deviations:
+- Scope kept tight (guard/gate correctness, no redesign). Did NOT refactor the duplicate canonical path literals in app/api/customer/approve/[token]/route.ts and app/report/[token]/ReportClient.tsx to import the new constant - logged as a deferred DRY follow-up in ISSUES.md.
+- Left the already-signed resend guard untouched (already correct).
+- Did not change the quote endpoint selected_path="quote-endpoint" stamp; the fix changes how the gates INTERPRET it, not the stored value.
+
+Verification: isolated nm-gate (build + typecheck) to run on the pushed branch; result reported with code_ready.
+
+Status: implementation complete, pending isolated gate + review.

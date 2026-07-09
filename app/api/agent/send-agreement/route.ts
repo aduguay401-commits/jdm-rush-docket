@@ -1,4 +1,5 @@
 import { requireAdminOrAgent } from "@/lib/admin/auth";
+import { resolveChosenPath } from "@/lib/agreements/templates";
 import { sendEmail } from "@/lib/email";
 import { createServerClient } from "@/lib/supabase/server";
 import { getAppBaseUrl } from "@/lib/urls";
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
     return Response.json({ success: false, error: "Customer email is missing" }, { status: 400 });
   }
 
-  if (!(docket.chosen_path ?? docket.selected_path)) {
+  if (!resolveChosenPath(docket)) {
     return Response.json({ success: false, error: "Choose a purchase path before sending the agreement" }, { status: 400 });
   }
 

@@ -12,6 +12,7 @@ import SuccessToast from "@/components/SuccessToast";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
+import { resolveChosenPath } from "@/lib/agreements/templates";
 
 type Docket = {
   id: string;
@@ -909,7 +910,7 @@ export default function AgentDocketDetailPage({
   const reportUrl = docket?.report_url_token
     ? getCustomerReportUrl(docket.report_url_token)
     : null;
-  const chosenPath = docket?.chosen_path ?? docket?.selected_path ?? null;
+  const chosenPath = resolveChosenPath({ chosen_path: docket?.chosen_path, selected_path: docket?.selected_path });
   const agreementSentAt = docket?.agreement_sent_at ?? null;
   const agreementSigned = Boolean(docket?.agreement_signed);
   const canSendAgreement = Boolean(docket && chosenPath && !agreementSigned);
