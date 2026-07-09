@@ -19,6 +19,15 @@ export const REAL_CHOSEN_PATHS = ["private_dealer", "auction"] as const;
 export type RealChosenPath = (typeof REAL_CHOSEN_PATHS)[number];
 
 /**
+ * Single source of truth for whether a value is one of the two real
+ * customer-chosen paths. Everything else — the `quote-endpoint` marker stamped on
+ * every quoted docket, or null/undefined — is NOT a chosen path.
+ */
+export function isRealChosenPath(value: string | null | undefined): value is RealChosenPath {
+  return value != null && (REAL_CHOSEN_PATHS as readonly string[]).includes(value);
+}
+
+/**
  * The only two purchase paths a customer can actually choose (via the report
  * approve flow). Any other value — notably the `quote-endpoint` marker stamped
  * on every quoted docket, or null — means NO path has been chosen yet, so the
@@ -26,7 +35,7 @@ export type RealChosenPath = (typeof REAL_CHOSEN_PATHS)[number];
  */
 export function resolveChosenPath(docket: AgreementDocket): RealChosenPath | null {
   const path = docket.chosen_path ?? docket.selected_path;
-  return path === "private_dealer" || path === "auction" ? path : null;
+  return isRealChosenPath(path) ? path : null;
 }
 
 export function pickTemplate(docket: AgreementDocket): AgreementTemplate | null {

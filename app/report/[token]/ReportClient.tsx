@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { UIEvent } from "react";
 
 import MarkdownMessage from "@/components/MarkdownMessage";
+import { isRealChosenPath } from "@/lib/agreements/templates";
 
 type FeeBreakdown = {
   vehiclePriceCAD?: number;
@@ -886,12 +887,11 @@ export function ReportClient({
     path: "private_dealer" | "auction";
     optionNumber: 1 | 2 | 3 | 4 | 5 | 6 | null;
   } | null>(() => {
-    const selectedPath =
-      docket.chosen_path === "private_dealer" || docket.chosen_path === "auction"
-        ? docket.chosen_path
-        : docket.selected_path === "private_dealer" || docket.selected_path === "auction"
-          ? docket.selected_path
-          : null;
+    const selectedPath = isRealChosenPath(docket.chosen_path)
+      ? docket.chosen_path
+      : isRealChosenPath(docket.selected_path)
+        ? docket.selected_path
+        : null;
 
     const selectedOption =
       docket.chosen_dealer_index === 1 ||
