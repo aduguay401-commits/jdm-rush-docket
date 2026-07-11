@@ -714,3 +714,35 @@ Invariants held: triage chip counts stay DOCKET counts (unchanged), lead-view co
 Verification: docket nm-gate on the branch (typecheck + build in an isolated worktree); reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+## 2026-07-11 - Intake spam guardrails (4 layers) — docket endpoints
+
+Cross-repo task (site half in jdm-rush-next). The public intake surface (POST /api/system/quote + /api/system/intake) creates dockets and sends real emails; unchecked spam would clutter the pipeline and burn sender reputation. Added 4 defense layers, FAIL-OPEN everywhere — a guardrail error never blocks a real customer or 500s the endpoint, and genuine repeat interest (Jordan Warwick pattern) is never hard-blocked.
+
+New: lib/intake/guardrails.ts — all logic + the tunable constants in ONE place (INTAKE_GUARDRAILS: IP_HOURLY=5, EMAIL_DAILY_DOCKETS=4, EMAIL_DAILY_WELCOME=2, MIN_FILL_SECONDS=3).
+
+- Layer 1 (honeypot + fill-time): detectHoneypotOrTooFast — a filled company_website honeypot OR submit-minus-render < 3s => SILENT DISCARD (log + return the normal success shape, no docket, no email). Negative elapsed = client clock ahead (skew) => NOT discarded (fail-open on skew).
+- Layer 2 (per-IP 5/rolling hour): isIpRateLimited against the new intake_events table => 429 polite JSON. IP via getIntakeClientIp (x-intake-client-ip forwarded by the site proxy, then x-forwarded-for first hop, then x-real-ip). Missing IP or missing table or any query error => skip (fail-open), never 500.
+- Layer 3 (per-email 4 new dockets/rolling 24h): countRecentDocketsForEmail on the existing dockets table (normalized email, exact match in JS after an escaped ilike). Beyond 4 => do NOT create a docket; appendNoteToNewestDocketForEmail records the submission on the newest existing docket and returns the normal success shape. Count error => allow (fail-open).
+- Layer 4 (welcome-email cap 2/rolling 24h): isUnderWelcomeEmailCap from the existing email_log (recipient_email + email_type in {email_1_customer_welcome, quote_exact_estimate} + sent_at). Beyond cap => docket still created, the customer welcome/quote email send is SKIPPED and logged (server log only — email_log has no skipped marker, no schema bending). Internal marcus/admin notifications are never capped. Check error => send (fail-open).
+
+Endpoints wire the layers in order L1 -> L2 -> L3 -> create docket -> L4. Existing dedup, agreement engine, dashboard, and cron untouched.
+
+SQL (Adam-run-only): supabase/migrations/013_intake_events.sql — intake_events(id, ip, email, endpoint, created_at) + (ip, created_at) index + created_at index + RLS enabled with a service_role policy (self-contained). NOT run by me. Endpoints fail-open until it exists, so deploy order cannot break intake.
+
+Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready; Adam must run 013 before the change is fully active.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL run.
+
+### 2026-07-11 - intake-guardrails review fixes (docket) — indistinguishable discard + secret-gated IP
+
+Reviewer CHANGES_NEEDED (1 blocker + 1 security), both resolved:
+
+- BLOCKER (fingerprintable L1 discard): the silent-discard body now carries the SAME key set as a real success on both endpoints. Quote: the L1 check moved to AFTER the real breakdown is computed, so the discard returns the real totalDeliveredCAD plus a synthesized reportToken (randomUUID) — no docket, no lead, no email, no DB writes. The L3 note-append response on quote likewise returns the full success key set (real total + synthesized token; it did capture interest, so the computed quote is honest). Intake: L1 discard returns { success: true, docketId: randomUUID() }.
+- SECURITY (spoofable x-intake-client-ip): getIntakeClientIp now trusts the forwarded client IP ONLY when x-intake-proxy-secret matches process.env.INTAKE_PROXY_SECRET. A forwarded header without a valid secret (our own proxy's shared egress) => Layer 2 skipped (return null, fail-open) so proxied users are never collectively 429d. A direct caller (no forwarded header) is keyed on x-real-ip, never x-forwarded-for.
+
+New env INTAKE_PROXY_SECRET documented in .env.example (repo gitignores .env*, so .env.example is opted in via a !.env.example negation). Re-gated.
+
+### 2026-07-11 - intake-guardrails re-review SHOULD-FIX — three-state IP trust close
+
+Reviewer re-review: everything APPROVED, blocker closed; one residual SHOULD-FIX. Previously, when INTAKE_PROXY_SECRET was set but a request carried a junk x-intake-client-ip without a valid secret, getIntakeClientIp returned null and skipped L2 — so once the secret was live a direct attacker could disable L2 for themselves by sending any forwarded IP. Closed with a three-state resolution: (1) secret env UNSET + forwarded header present => null (bootstrap fail-open, unchanged); (2) secret SET + header secret VALID => trust the forwarded IP; (3) secret SET + header secret INVALID/MISSING while a forwarded header is present => IGNORE the forwarded header and key L2 on the direct caller's x-real-ip (a direct attacker can no longer opt out), plus a loud server warning (logs header presence only, no PII/secret) since it is an attack probe or a proxy misconfig. Accepted trade documented in-code: mismatched secrets across our own two apps would key legit proxied traffic on the shared egress IP and could collectively 429 at volume — detectable via the warning, verified live at deploy. Docket-only change; site unchanged. Re-gated.
