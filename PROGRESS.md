@@ -698,3 +698,19 @@ Reviewer blocker: a docket at status=questions_sent whose latest activity is a c
 Should-fix (done): cleared has a green status stripe but sits in the Cold bucket; the card was already dimmed (opacity-60). Muted the cleared card's stripe to neutral grey so a done docket no longer reads as an active green action. Chips/sort unchanged.
 
 Verification: docket nm-gate re-run on the branch (typecheck + build). Reviewer's other findings were already PASS (route security, no auto-archive, no regressions); brand convention confirmed correct (docket = rounded-lg/white/10, not the marketplace rounded-none law).
+
+## 2026-07-11 - Agent dashboard: group same-person dockets into stacked cards
+
+Summary: one engaged person spawns many dockets (every new search/quote = another), so the dashboard read as e.g. "5 Hot leads" when it was one person (Jordan Warwick). Grouped dockets belonging to the same person into one stacked, expandable card. Pure display-layer change — no schema, no endpoint changes.
+
+Grouping key (lib/dockets/dashboardDisplay.ts, new getDocketGroupKey/groupDocketsForDisplay): customer_id when set, else normalized (trim+lowercase) customer_email; a docket with neither is never grouped (singleton). groupDocketsForDisplay takes the ALREADY-ordered list (filtered + urgency-sorted + pinned-first) and buckets by key preserving first-appearance order, so each group lands at the position of its most-urgent/pinned-first member and members keep the list order — group placement and within-group order fall out of the existing ordering for free.
+
+Files changed:
+- lib/dockets/dashboardDisplay.ts — getDocketGroupKey, groupDocketsForDisplay, DocketGroup type.
+- app/agent/dashboard/page.tsx — added customer_email to the docket select + type (existing column, not a schema change). Extracted the per-docket card into <DocketCard> and the archived card into <ArchivedDocketCard> (module-level, unchanged UI). New generic <GroupCard>: collapsed by default with a header (customer name + "N dockets" + one group temperature badge [Hot if any member Hot, else Warm if any, else Cold] + summed unread badge + a pinned-star if any member is pinned) and a one-line summary of the MOST URGENT member (its stripe + status line + latest activity) so nothing urgent is hidden; expanded, it renders each member as its full normal card (pins-first then urgency). Only groups with 2+ members in the CURRENT filtered view stack; a single passing member renders as a normal card. Grouping is applied to both the active list (visibleGroups) and the Show-Archived list (archivedGroups).
+
+Invariants held: triage chip counts stay DOCKET counts (unchanged), lead-view composition, Show Archived, urgency sort, pin/archive/unarchive actions all still work from cards inside a group, unread counts unchanged (group header shows the sum). No docket is ever hidden — collapsed groups surface the most-urgent member and expand to all. Matched existing docket styling (rounded-lg/xl, white/10-12 borders, #E55125 accents).
+
+Verification: docket nm-gate on the branch (typecheck + build in an isolated worktree); reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.
