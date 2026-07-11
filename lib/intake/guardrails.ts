@@ -87,24 +87,39 @@ export function detectHoneypotOrTooFast(
 // client IP in x-intake-client-ip. Fall back to platform headers for direct hits.
 export function getIntakeClientIp(request: Request): string | null {
   const forwardedClientIp = toTrimmedString(request.headers.get("x-intake-client-ip"));
+  const expectedSecret = process.env.INTAKE_PROXY_SECRET;
 
   if (forwardedClientIp) {
-    // The forwarded header is spoofable, so trust it ONLY when the shared
-    // secret matches (both apps must set INTAKE_PROXY_SECRET).
+    // State 1 — secret UNSET (bootstrap): we cannot validate the proxy, and
+    // every proxied request shares one egress IP, so skip Layer 2 (fail-open)
+    // rather than collectively 429 all proxied users. Ends once the secret is live.
+    if (!expectedSecret) {
+      return null;
+    }
+
     const proxySecret = request.headers.get("x-intake-proxy-secret");
-    const expectedSecret = process.env.INTAKE_PROXY_SECRET;
-    if (expectedSecret && proxySecret && proxySecret === expectedSecret) {
+
+    // State 2 — secret SET + valid: trust the forwarded real client IP.
+    if (proxySecret && proxySecret === expectedSecret) {
       return forwardedClientIp;
     }
-    // A forwarded IP without a valid secret means the direct caller is our own
-    // site proxy (a shared egress IP). Keying the per-IP limit on that would
-    // 429 every proxied user at once (forbidden), so skip Layer 2 (fail-open)
-    // until the secret is configured in both apps.
-    return null;
+
+    // State 3 — secret SET + invalid/missing while a forwarded header is present:
+    // an attack probe trying to disable L2 with a junk x-intake-client-ip, or a
+    // proxy secret misconfig. IGNORE the forwarded header and key L2 on the direct
+    // caller's x-real-ip below — a direct attacker cannot opt out of the limit.
+    // Accepted trade: if our OWN two apps ever run mismatched secrets, legit
+    // proxied traffic lands here and keys on the shared proxy egress IP, which can
+    // collectively 429 at volume — surfaced by the warning below and verified live
+    // at deploy.
+    console.warn(
+      `[Guardrail L2] x-intake-client-ip present with ${proxySecret ? "an invalid" : "no"} proxy secret while INTAKE_PROXY_SECRET is set — ignoring the forwarded IP and keying on x-real-ip (attack probe or proxy misconfig).`,
+    );
   }
 
-  // Direct caller (not via our proxy): key on the platform-set x-real-ip.
-  // Deliberately NOT x-forwarded-for, whose first element the client can spoof.
+  // Direct caller (no forwarded header), or State 3 fall-through: key on the
+  // platform-set x-real-ip. Deliberately NOT x-forwarded-for, whose first element
+  // the client can spoof.
   return toTrimmedString(request.headers.get("x-real-ip"));
 }
 
