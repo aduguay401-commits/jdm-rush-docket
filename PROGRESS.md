@@ -690,3 +690,11 @@ Constraints honored: NO auto-archive anywhere; follow-up cron untouched; no sche
 Verification: docket nm-gate on the branch (typecheck + build in an isolated worktree); reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+### 2026-07-11 - agent-triage review fix (CHANGES_NEEDED -> resolved)
+
+Reviewer blocker: a docket at status=questions_sent whose latest activity is a customer_answer is painted green ("Customer answered — respond or pull research") by getStatusDisplay, but getDocketUrgencyPriority let that case fall through to priority 5 (Working bucket), hiding a fresh answer from the default Needs You chip and sorting it below new leads. Fix: getDocketUrgencyPriority now maps (status questions_sent OR answers_received) + source_type customer_answer to priority 1, so it lands in Needs You and sorts with answered dockets. questions_sent without a customer answer still falls to priority 5 (Working), unchanged. This corrects the bucket and the urgency sort in one place.
+
+Should-fix (done): cleared has a green status stripe but sits in the Cold bucket; the card was already dimmed (opacity-60). Muted the cleared card's stripe to neutral grey so a done docket no longer reads as an active green action. Chips/sort unchanged.
+
+Verification: docket nm-gate re-run on the branch (typecheck + build). Reviewer's other findings were already PASS (route security, no auto-archive, no regressions); brand convention confirmed correct (docket = rounded-lg/white/10, not the marketplace rounded-none law).

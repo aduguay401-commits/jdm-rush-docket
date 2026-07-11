@@ -775,9 +775,9 @@ export default function AgentDashboardPage() {
                     const lastCommunication = getLatestActivity(docket);
                     const statusDisplay = getStatusDisplay(docket, lastCommunication);
                     const unreadCount = statusDisplay.unreadCount;
-                    const stripeColor = statusDisplay.stripeColor;
                     const isPending = pendingActionId === docket.id;
                     const isCleared = docket.status === "cleared";
+                    const stripeColor = isCleared ? "rgba(168,162,158,0.5)" : statusDisplay.stripeColor;
                     const customerName =
                       `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
                       "Unnamed Customer";

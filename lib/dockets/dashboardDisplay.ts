@@ -530,7 +530,7 @@ function getDocketUrgencyPriority({ docket, latestActivity }: DocketWithLatestAc
     return 0;
   }
 
-  if (status === "answers_received" && sourceType === "customer_answer") {
+  if ((status === "answers_received" || status === "questions_sent") && sourceType === "customer_answer") {
     return 1;
   }
 
