@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   getDocketTemperature,
@@ -10,6 +10,7 @@ import {
   getLatestActivity,
   getProgressBarStage,
   getStatusDisplay,
+  groupDocketsForDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
 import type { DocketTemperature, DocketTriageBucket } from "@/lib/dockets/dashboardDisplay";
@@ -30,6 +31,7 @@ type Docket = {
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_id: string | null;
+  customer_email: string | null;
   lead_source: string | null;
   is_flagged: boolean | null;
   archived_at?: string | null;
@@ -97,7 +99,9 @@ const TRIAGE_CHIPS: { id: TriageChipId; label: string }[] = [
 ];
 
 const DOCKET_SELECT =
-  "id, created_at, status, customer_first_name, customer_last_name, customer_id, lead_source, is_flagged, archived_at, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)";
+  "id, created_at, status, customer_first_name, customer_last_name, customer_id, customer_email, lead_source, is_flagged, archived_at, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)";
+
+const CLEARED_STRIPE_COLOR = "rgba(168,162,158,0.5)";
 
 const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
 const DASHBOARD_SUCCESS_MESSAGE_KEY = "dashboard_success_message";
@@ -121,6 +125,14 @@ function withAlpha(color: string, alpha: number) {
 function formatStatus(status: string | null | undefined) {
   const normalized = status ?? "new";
   return STATUS_LABELS[normalized] ?? normalized;
+}
+
+function getCustomerName(docket: Pick<Docket, "customer_first_name" | "customer_last_name">) {
+  return `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() || "Unnamed Customer";
+}
+
+function getStripeColor(docket: Docket, statusStripe: string) {
+  return docket.status === "cleared" ? CLEARED_STRIPE_COLOR : statusStripe;
 }
 
 function deriveDisplayNameFromEmail(email?: string | null) {
@@ -178,6 +190,22 @@ function getNewMessageBadgeLabel(unreadCount: number) {
   return `NEW MESSAGES (${unreadCount})`;
 }
 
+function getGroupTemperature(members: Docket[]): DocketTemperature {
+  if (members.some((member) => getDocketTemperature(member) === "hot")) {
+    return "hot";
+  }
+  if (members.some((member) => getDocketTemperature(member) === "warm")) {
+    return "warm";
+  }
+  return "cold";
+}
+
+// pinned members first, then urgency order — the same convention as the flat list.
+function orderGroupMembers(members: Docket[]) {
+  const byUrgency = sortDocketsByUrgency(members);
+  return [...byUrgency.filter((member) => member.is_flagged), ...byUrgency.filter((member) => !member.is_flagged)];
+}
+
 function LeadOriginBadge({ docket }: { docket: Pick<Docket, "customer_id" | "lead_source"> }) {
   return (
     <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#E55125]/35 bg-[#E55125]/10 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#f47a55]">
@@ -206,6 +234,14 @@ function TemperatureBadge({ temperature }: { temperature: DocketTemperature }) {
   return (
     <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-white/5 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
       Cold
+    </span>
+  );
+}
+
+function UnreadBadge({ unreadCount }: { unreadCount: number }) {
+  return (
+    <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
+      {getNewMessageBadgeLabel(unreadCount)}
     </span>
   );
 }
@@ -275,6 +311,218 @@ function DocketProgressBar({ docket }: { docket: Docket }) {
         })}
       </div>
     </div>
+  );
+}
+
+function DocketCard({
+  docket,
+  isPending,
+  onTogglePin,
+  onArchive,
+}: {
+  docket: Docket;
+  isPending: boolean;
+  onTogglePin: (docketId: string, nextPinned: boolean) => void;
+  onArchive: (docketId: string) => void;
+}) {
+  const lastCommunication = getLatestActivity(docket);
+  const statusDisplay = getStatusDisplay(docket, lastCommunication);
+  const unreadCount = statusDisplay.unreadCount;
+  const isCleared = docket.status === "cleared";
+  const stripeColor = getStripeColor(docket, statusDisplay.stripeColor);
+
+  return (
+    <article
+      className={`overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg ${
+        isCleared ? "opacity-60" : ""
+      }`}
+    >
+      <div className="p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-semibold text-white">{getCustomerName(docket)}</h2>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <LeadOriginBadge docket={docket} />
+              <TemperatureBadge temperature={getDocketTemperature(docket)} />
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <PinButton
+              busy={isPending}
+              onToggle={() => onTogglePin(docket.id, !docket.is_flagged)}
+              pinned={Boolean(docket.is_flagged)}
+            />
+            <button
+              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-white/70 transition hover:border-white/30 hover:text-white disabled:opacity-50"
+              disabled={isPending}
+              onClick={() => onArchive(docket.id)}
+              type="button"
+            >
+              Archive
+            </button>
+            <Link
+              className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+              href={`/agent/docket/${docket.id}`}
+            >
+              Open Docket
+            </Link>
+          </div>
+        </div>
+        <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <p className={`text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+          {unreadCount > 0 ? <UnreadBadge unreadCount={unreadCount} /> : null}
+        </div>
+        <div
+          className="rounded bg-white/[0.03] px-[14px] py-2.5"
+          style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
+        >
+          {lastCommunication ? (
+            <>
+              <p className="text-xs text-[#888]">
+                {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
+              </p>
+              {lastCommunication.snippet ? (
+                <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
+              ) : null}
+            </>
+          ) : (
+            <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
+          )}
+        </div>
+      </div>
+      <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
+        <DocketProgressBar docket={docket} />
+      </div>
+    </article>
+  );
+}
+
+function ArchivedDocketCard({
+  docket,
+  isPending,
+  onUnarchive,
+}: {
+  docket: Docket;
+  isPending: boolean;
+  onUnarchive: (docketId: string) => void;
+}) {
+  const lastCommunication = getLatestActivity(docket);
+  const statusDisplay = getStatusDisplay(docket, lastCommunication);
+
+  return (
+    <article className="overflow-hidden rounded-xl border border-white/12 bg-[#141414] p-5 opacity-90">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-semibold text-white">{getCustomerName(docket)}</h2>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <LeadOriginBadge docket={docket} />
+            <TemperatureBadge temperature={getDocketTemperature(docket)} />
+          </div>
+          <p className={`mt-2 text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+          {docket.archived_at ? (
+            <p className="mt-1 text-xs text-white/45">Archived {formatRelativeTime(docket.archived_at)}</p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <button
+            className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
+            disabled={isPending}
+            onClick={() => onUnarchive(docket.id)}
+            type="button"
+          >
+            {isPending ? "Working…" : "Unarchive"}
+          </button>
+          <Link
+            className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+            href={`/agent/docket/${docket.id}`}
+          >
+            Open Docket
+          </Link>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+// One stacked, collapsible card for 2+ dockets from the same person. Collapsed,
+// it surfaces the single most-urgent member so nothing urgent is hidden; expanded,
+// each member renders as its full normal card via renderMember.
+function GroupCard({ members, renderMember }: { members: Docket[]; renderMember: (docket: Docket) => ReactNode }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const orderedMembers = orderGroupMembers(members);
+  const summaryMember = sortDocketsByUrgency(members)[0];
+  const summaryActivity = getLatestActivity(summaryMember);
+  const summaryStatus = getStatusDisplay(summaryMember, summaryActivity);
+  const stripeColor = getStripeColor(summaryMember, summaryStatus.stripeColor);
+  const groupUnread = members.reduce((sum, member) => sum + getStatusDisplay(member).unreadCount, 0);
+  const hasPinned = members.some((member) => member.is_flagged);
+
+  return (
+    <article className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg">
+      <button
+        aria-expanded={expanded}
+        className="w-full p-5 text-left transition hover:bg-white/[0.02]"
+        onClick={() => setExpanded((previous) => !previous)}
+        type="button"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              {hasPinned ? (
+                <span aria-label="Pinned" className="text-[#E55125]" title="Contains a pinned docket">
+                  ★
+                </span>
+              ) : null}
+              <h2 className="truncate text-xl font-semibold text-white">{getCustomerName(summaryMember)}</h2>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-white/20 bg-white/10 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-white/80">
+                {members.length} dockets
+              </span>
+              <TemperatureBadge temperature={getGroupTemperature(members)} />
+              {groupUnread > 0 ? <UnreadBadge unreadCount={groupUnread} /> : null}
+            </div>
+          </div>
+          <span
+            aria-hidden="true"
+            className={`shrink-0 text-xl text-[#E55125] transition-transform ${expanded ? "rotate-180" : ""}`}
+          >
+            v
+          </span>
+        </div>
+        {expanded ? null : (
+          <div className="mt-3">
+            <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
+            <p className={`text-sm ${summaryStatus.className}`}>{summaryStatus.text}</p>
+            <div
+              className="mt-2 rounded bg-white/[0.03] px-[14px] py-2.5"
+              style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
+            >
+              {summaryActivity ? (
+                <>
+                  <p className="text-xs text-[#888]">
+                    Most urgent · {summaryActivity.directionLabel} · {formatRelativeTime(summaryActivity.timestamp)}
+                  </p>
+                  {summaryActivity.snippet ? (
+                    <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{summaryActivity.snippet}</p>
+                  ) : null}
+                </>
+              ) : (
+                <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
+              )}
+            </div>
+            <p className="mt-3 text-xs font-medium text-[#E55125]">Show all {members.length} dockets ▾</p>
+          </div>
+        )}
+      </button>
+      {expanded ? (
+        <div className="space-y-3 border-t border-white/10 bg-white/[0.02] p-4">
+          {orderedMembers.map((member) => renderMember(member))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
@@ -497,6 +745,9 @@ export default function AgentDashboardPage() {
     return [...pinned, ...unpinned];
   }, [activeTriage, leadViewDockets]);
 
+  const visibleGroups = useMemo(() => groupDocketsForDisplay(visibleDockets), [visibleDockets]);
+  const archivedGroups = useMemo(() => groupDocketsForDisplay(archivedDockets), [archivedDockets]);
+
   async function patchDocket(docketId: string, body: Record<string, unknown>) {
     const response = await fetch(`/api/agent/docket/${docketId}`, {
       method: "PATCH",
@@ -577,6 +828,25 @@ export default function AgentDashboardPage() {
     router.push("/agent/login");
   }
 
+  const renderActiveMember = (docket: Docket) => (
+    <DocketCard
+      docket={docket}
+      isPending={pendingActionId === docket.id}
+      key={docket.id}
+      onArchive={handleArchive}
+      onTogglePin={handleTogglePin}
+    />
+  );
+
+  const renderArchivedMember = (docket: Docket) => (
+    <ArchivedDocketCard
+      docket={docket}
+      isPending={pendingActionId === docket.id}
+      key={docket.id}
+      onUnarchive={handleUnarchive}
+    />
+  );
+
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <div className="mx-auto w-full max-w-6xl">
@@ -644,58 +914,19 @@ export default function AgentDashboardPage() {
             {showArchived ? (
               archivedLoading ? (
                 <p className="text-white/70">Loading archived dockets...</p>
-              ) : archivedDockets.length === 0 ? (
+              ) : archivedGroups.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.03] p-8 text-center text-white/70">
                   No archived dockets.
                 </div>
               ) : (
                 <div className="grid gap-4">
-                  {archivedDockets.map((docket) => {
-                    const lastCommunication = getLatestActivity(docket);
-                    const statusDisplay = getStatusDisplay(docket, lastCommunication);
-                    const customerName =
-                      `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
-                      "Unnamed Customer";
-
-                    return (
-                      <article
-                        className="overflow-hidden rounded-xl border border-white/12 bg-[#141414] p-5 opacity-90"
-                        key={docket.id}
-                      >
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="min-w-0">
-                            <h2 className="truncate text-lg font-semibold text-white">{customerName}</h2>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <LeadOriginBadge docket={docket} />
-                              <TemperatureBadge temperature={getDocketTemperature(docket)} />
-                            </div>
-                            <p className={`mt-2 text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
-                            {docket.archived_at ? (
-                              <p className="mt-1 text-xs text-white/45">
-                                Archived {formatRelativeTime(docket.archived_at)}
-                              </p>
-                            ) : null}
-                          </div>
-                          <div className="flex shrink-0 flex-col items-end gap-2">
-                            <button
-                              className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
-                              disabled={pendingActionId === docket.id}
-                              onClick={() => handleUnarchive(docket.id)}
-                              type="button"
-                            >
-                              {pendingActionId === docket.id ? "Working…" : "Unarchive"}
-                            </button>
-                            <Link
-                              className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-                              href={`/agent/docket/${docket.id}`}
-                            >
-                              Open Docket
-                            </Link>
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
+                  {archivedGroups.map((group) =>
+                    group.dockets.length >= 2 ? (
+                      <GroupCard key={group.key} members={group.dockets} renderMember={renderArchivedMember} />
+                    ) : (
+                      renderArchivedMember(group.dockets[0])
+                    ),
+                  )}
                 </div>
               )
             ) : dockets.length === 0 ? (
@@ -771,89 +1002,14 @@ export default function AgentDashboardPage() {
                   </p>
                 </section>
                 <div className="grid gap-4">
-                  {visibleDockets.map((docket) => {
-                    const lastCommunication = getLatestActivity(docket);
-                    const statusDisplay = getStatusDisplay(docket, lastCommunication);
-                    const unreadCount = statusDisplay.unreadCount;
-                    const isPending = pendingActionId === docket.id;
-                    const isCleared = docket.status === "cleared";
-                    const stripeColor = isCleared ? "rgba(168,162,158,0.5)" : statusDisplay.stripeColor;
-                    const customerName =
-                      `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
-                      "Unnamed Customer";
-
-                    return (
-                      <article
-                        className={`overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg ${
-                          isCleared ? "opacity-60" : ""
-                        }`}
-                        key={docket.id}
-                      >
-                        <div className="p-5">
-                          <div className="mb-4 flex items-start justify-between gap-4">
-                            <div className="min-w-0">
-                              <h2 className="truncate text-xl font-semibold text-white">{customerName}</h2>
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                <LeadOriginBadge docket={docket} />
-                                <TemperatureBadge temperature={getDocketTemperature(docket)} />
-                              </div>
-                            </div>
-                            <div className="flex shrink-0 items-center gap-2">
-                              <PinButton
-                                busy={isPending}
-                                onToggle={() => handleTogglePin(docket.id, !docket.is_flagged)}
-                                pinned={Boolean(docket.is_flagged)}
-                              />
-                              <button
-                                className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-white/70 transition hover:border-white/30 hover:text-white disabled:opacity-50"
-                                disabled={isPending}
-                                onClick={() => handleArchive(docket.id)}
-                                type="button"
-                              >
-                                Archive
-                              </button>
-                              <Link
-                                className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-                                href={`/agent/docket/${docket.id}`}
-                              >
-                                Open Docket
-                              </Link>
-                            </div>
-                          </div>
-                          <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
-                          <div className="mb-4 flex flex-wrap items-center gap-2">
-                            <p className={`text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
-                            {unreadCount > 0 ? (
-                              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
-                                {getNewMessageBadgeLabel(unreadCount)}
-                              </span>
-                            ) : null}
-                          </div>
-                          <div
-                            className="rounded bg-white/[0.03] px-[14px] py-2.5"
-                            style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
-                          >
-                            {lastCommunication ? (
-                              <>
-                                <p className="text-xs text-[#888]">
-                                  {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
-                                </p>
-                                {lastCommunication.snippet ? (
-                                  <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
-                                ) : null}
-                              </>
-                            ) : (
-                              <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
-                            )}
-                          </div>
-                        </div>
-                        <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
-                          <DocketProgressBar docket={docket} />
-                        </div>
-                      </article>
-                    );
-                  })}
-                  {visibleDockets.length === 0 ? (
+                  {visibleGroups.map((group) =>
+                    group.dockets.length >= 2 ? (
+                      <GroupCard key={group.key} members={group.dockets} renderMember={renderActiveMember} />
+                    ) : (
+                      renderActiveMember(group.dockets[0])
+                    ),
+                  )}
+                  {visibleGroups.length === 0 ? (
                     <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
                       No dockets match these filters.
                     </div>

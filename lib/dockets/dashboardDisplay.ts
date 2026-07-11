@@ -648,3 +648,60 @@ export function getDocketTemperature(docket: DocketTemperatureInput): DocketTemp
 
   return "cold";
 }
+
+export type DocketGroupKeyInput = {
+  customer_id?: string | null;
+  customer_email?: string | null;
+};
+
+// One person, one group. Prefer the authenticated customer_id; fall back to the
+// normalized (trim + lowercase) email. A docket with neither is never grouped.
+export function getDocketGroupKey(docket: DocketGroupKeyInput): string | null {
+  if (docket.customer_id) {
+    return `id:${docket.customer_id}`;
+  }
+
+  const email = docket.customer_email?.trim().toLowerCase();
+  if (email) {
+    return `email:${email}`;
+  }
+
+  return null;
+}
+
+export type DocketGroup<TDocket> = {
+  key: string;
+  dockets: TDocket[];
+};
+
+// Group an ALREADY-ORDERED docket list by grouping key, preserving
+// first-appearance order: each group lands at the position of its first-seen
+// (most urgent / pinned-first) member, and members keep the input order. Callers
+// pass the filtered + urgency-sorted + pinned-first list so group placement and
+// within-group order follow the existing dashboard ordering for free. Dockets
+// with no grouping key become singleton groups keyed by id.
+export function groupDocketsForDisplay<TDocket extends DocketGroupKeyInput & { id: string }>(
+  dockets: TDocket[],
+): DocketGroup<TDocket>[] {
+  const groups: DocketGroup<TDocket>[] = [];
+  const indexByKey = new Map<string, number>();
+
+  for (const docket of dockets) {
+    const groupKey = getDocketGroupKey(docket);
+
+    if (groupKey === null) {
+      groups.push({ key: `single:${docket.id}`, dockets: [docket] });
+      continue;
+    }
+
+    const existing = indexByKey.get(groupKey);
+    if (existing === undefined) {
+      indexByKey.set(groupKey, groups.length);
+      groups.push({ key: groupKey, dockets: [docket] });
+    } else {
+      groups[existing].dockets.push(docket);
+    }
+  }
+
+  return groups;
+}
