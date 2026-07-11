@@ -37,6 +37,9 @@ type Docket = {
   timeline: string | null;
   additional_notes: string | null;
   research_draft: unknown | null;
+  is_flagged?: boolean | null;
+  is_archived?: boolean | null;
+  archived_at?: string | null;
 };
 
 type AuctionResearchRecord = {
@@ -876,6 +879,8 @@ export default function AgentDocketDetailPage({
   const [reminderError, setReminderError] = useState<string | null>(null);
   const [sendingAgreement, setSendingAgreement] = useState(false);
   const [agreementConfirmation, setAgreementConfirmation] = useState<string | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+  const [pinBusy, setPinBusy] = useState(false);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
   const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
@@ -1103,7 +1108,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, agreement_sent_at, agreement_signed, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft"
+          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, agreement_sent_at, agreement_signed, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft, is_flagged, is_archived, archived_at"
         )
         .eq("id", id)
         .maybeSingle();
@@ -2292,6 +2297,65 @@ export default function AgentDocketDetailPage({
     setError(null);
   }
 
+  async function patchDocketField(body: Record<string, unknown>) {
+    const response = await fetch(`/api/agent/docket/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = (await response.json()) as { success?: boolean; error?: string };
+    if (!response.ok || !result.success) {
+      throw new Error(result.error ?? "Update failed.");
+    }
+  }
+
+  async function handleToggleArchive() {
+    if (!docket) {
+      return;
+    }
+    const archiving = !docket.is_archived;
+    if (archiving) {
+      const confirmed = window.confirm(
+        "Archive this docket? It will be hidden from the main dashboard. You can find it anytime under Show Archived.",
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
+    setArchiveBusy(true);
+    setError(null);
+    try {
+      await patchDocketField({ is_archived: archiving });
+      if (archiving) {
+        router.push("/agent/dashboard");
+        return;
+      }
+      setDocket((previous) => (previous ? { ...previous, is_archived: false, archived_at: null } : previous));
+    } catch (archiveError) {
+      setError(archiveError instanceof Error ? archiveError.message : "Failed to update archive state.");
+    } finally {
+      setArchiveBusy(false);
+    }
+  }
+
+  async function handleTogglePin() {
+    if (!docket) {
+      return;
+    }
+    const nextPinned = !docket.is_flagged;
+    setPinBusy(true);
+    setError(null);
+    setDocket((previous) => (previous ? { ...previous, is_flagged: nextPinned } : previous));
+    try {
+      await patchDocketField({ is_flagged: nextPinned });
+    } catch (pinError) {
+      setDocket((previous) => (previous ? { ...previous, is_flagged: !nextPinned } : previous));
+      setError(pinError instanceof Error ? pinError.message : "Failed to update pin.");
+    } finally {
+      setPinBusy(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <SuccessToast message={successToastMessage} onDismiss={dismissSuccessToast} />
@@ -2312,13 +2376,37 @@ export default function AgentDocketDetailPage({
         ) : null}
         {!loading && docket ? (
           <>
-            <div>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <Link
                 className="inline-flex items-center rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm text-white/80 transition hover:bg-white/10 hover:text-white"
                 href="/agent/dashboard"
               >
                 ← Back to Dockets
               </Link>
+              <div className="flex items-center gap-2">
+                <button
+                  aria-pressed={Boolean(docket.is_flagged)}
+                  className={`inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-sm font-medium transition disabled:opacity-50 ${
+                    docket.is_flagged
+                      ? "border-[#E55125] bg-[#E55125]/15 text-[#E55125]"
+                      : "border-white/15 bg-white/5 text-white/80 hover:bg-white/10 hover:text-white"
+                  }`}
+                  disabled={pinBusy}
+                  onClick={handleTogglePin}
+                  type="button"
+                >
+                  <span aria-hidden="true">{docket.is_flagged ? "★" : "☆"}</span>
+                  {docket.is_flagged ? "Pinned" : "Pin"}
+                </button>
+                <button
+                  className="inline-flex items-center rounded-md border border-white/15 bg-white/5 px-3 py-1.5 text-sm font-medium text-white/80 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+                  disabled={archiveBusy}
+                  onClick={handleToggleArchive}
+                  type="button"
+                >
+                  {archiveBusy ? "Working…" : docket.is_archived ? "Unarchive" : "Archive"}
+                </button>
+              </div>
             </div>
 
             <section className="rounded-xl border border-white/12 bg-[#171717] p-5">

@@ -671,3 +671,22 @@ Traced end to end: first-time (email -> register prefilled+next -> confirm -> ca
 Verification: docket nm-gate on the branch (typecheck + build); reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+
+## 2026-07-11 - Agent dashboard triage: archive, triage chips, temperature, pin
+
+Summary: the agent dashboard (Adam's daily working view) was one long undifferentiated scroll with no archiving. Added four things, all agent-side, no schema changes (is_archived, archived_at, is_flagged already exist), and MANUAL archive only — nothing auto-archives.
+
+New file:
+- app/api/agent/docket/[id]/route.ts — dedicated agent-authed PATCH for is_archived (+ archived_at stamp) and is_flagged. The admin PATCH route restricts agents to research_draft/vehicle_description, so archive/pin need their own path. Gated with requireAdminOrAgent() -> 403 (same pattern as send-agreement), then createServerClient() (service role). Only those two fields are writable; archived_at is set server-side (now on archive, null on unarchive) — the client never picks the timestamp.
+
+Files changed:
+- lib/dockets/dashboardDisplay.ts — added getDocketTriageBucket() and getDocketTemperature() (+ types). Buckets reuse the existing getDocketUrgencyPriority so chip filtering and the within-bucket urgency sort never disagree: priority 0/1/2/4 -> Needs You (action states), 3/5 -> Working (waiting states), 6 -> Cold (unresponsive/lost/paused/cleared). Temperature is client-only from already-loaded data: Hot = customer_id set (claimed a Garage account), Warm = ever answered/asked, Cold = zero customer activity.
+- app/agent/dashboard/page.tsx — (1) triage chip row (Needs You / Working / Cold / All) with per-chip counts, composable with the existing lead-view tabs, default = Needs You; (2) temperature badge per card; (3) pin star per card (is_flagged) — pinned dockets float above everything within the current view/bucket; (4) Archive per card with a confirm dialog + a "Show Archived" toggle listing archived dockets with Unarchive. Refactored the docket fetch into fetchDockets(archived) so active and archived reuse one query + unread-enrichment. Pin is optimistic with rollback on error; archive/unarchive update local state then refresh.
+- app/agent/docket/[id]/page.tsx — Pin and Archive/Unarchive controls in the detail header (next to Back to Dockets), wired to the same agent route; archiving redirects to the dashboard, pin is optimistic with rollback. Added is_flagged/is_archived/archived_at to the docket select + type.
+
+Constraints honored: NO auto-archive anywhere; follow-up cron untouched; no schema changes; existing lead-view tabs, urgency sort, and unread counts unchanged; matched existing agent-dashboard styling (rounded-full pill badges, #E55125 accents, rounded-xl cards).
+
+Verification: docket nm-gate on the branch (typecheck + build in an isolated worktree); reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.

@@ -42,3 +42,7 @@ Checkpoint/schema gate confirms production now has `dockets.lead_source`, `lead_
 ### 2026-06-28 — Phase 2 pre-SQL portal safety rework
 
 Reviewer/QA found that selecting `agreement_sent_at` in shared customer portal context made existing /account pages 500 before Adam applied the Phase 2 column. Fixed by removing it from the shared select and fetching it only in the document vault with a missing-column fallback.
+
+### 2026-07-11 - Agent dashboard had no archiving and no triage
+
+The agent dashboard (app/agent/dashboard/page.tsx) — where Adam actually works — listed every non-archived docket in one undifferentiated urgency-sorted scroll, with no way to archive stale quote leads (admin had archiving; the agent side did not) and no fast way to see "what needs me now". Fixed on feature/agent-triage: a dedicated agent-authed PATCH route (app/api/agent/docket/[id]/route.ts) for is_archived/is_flagged, manual archive only (no auto-archive; cron untouched), a Show-archived view with Unarchive, triage chips (Needs You / Working / Cold, default Needs You) derived from the existing urgency priority, a per-card buy-signal temperature badge (Hot/Warm/Cold), and a pin toggle (is_flagged) that floats dockets to the top of the current view. No schema changes (all columns already existed). Pending isolated gate + Reviewer/QA + merge.
