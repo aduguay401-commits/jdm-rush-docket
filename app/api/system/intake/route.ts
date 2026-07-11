@@ -23,6 +23,7 @@ import {
   appendNoteToNewestDocketForEmail,
   isUnderWelcomeEmailCap,
 } from "@/lib/intake/guardrails";
+import { randomUUID } from "node:crypto";
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
 import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
@@ -223,7 +224,7 @@ export async function POST(request: Request) {
     const l1 = detectHoneypotOrTooFast(payload as Record<string, unknown>)
     if (l1.discard) {
       console.warn(`[Guardrail L1] intake silent-discard (${l1.reason})`)
-      return Response.json({ success: true })
+      return Response.json({ success: true, docketId: randomUUID() })
     }
 
     const customerEmail = toOptionalString(payload.customer_email)

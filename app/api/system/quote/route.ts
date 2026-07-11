@@ -12,6 +12,7 @@
 //   - Supabase docket insert + email_log insert      (mirrors intake)
 
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { sendEmail } from "@/lib/email";
 import {
   buildAccountRegisterUrl,
@@ -120,13 +121,6 @@ export async function POST(request: Request) {
   try {
     const body: QuotePayload = await request.json();
 
-    // ── Layer 1: honeypot + fill-time → silent discard (bot learns nothing) ──
-    const l1 = detectHoneypotOrTooFast(body as Record<string, unknown>);
-    if (l1.discard) {
-      console.warn(`[Guardrail L1] quote silent-discard (${l1.reason})`);
-      return NextResponse.json({ ok: true });
-    }
-
     // 1. Validate required fields
     const email = toOptionalString(body.email);
     if (!email || !looksLikeValidEmail(email)) {
@@ -182,6 +176,31 @@ export async function POST(request: Request) {
     // 3. Classify vehicle type (contains/startsWith matching for variants)
     const vehicleType = classifyVehicleType(model);
 
+    // 4. Live exchange rate
+    const exchange = await fetchJPYtoCAD();
+
+    // 5. EXACT landed cost
+    const breakdown = calculateImportCost({
+      vehiclePriceJPY,
+      destinationCity,
+      vehicleType,
+      dutyType,
+      exchangeRate: exchange.rate,
+    });
+
+    // ── Layer 1: with the real quote computed, a honeypot/too-fast submit gets a
+    //    REAL-SHAPED success (indistinguishable from a genuine one) but writes
+    //    NOTHING — no docket, no lead, no email, no DB. ──
+    const l1 = detectHoneypotOrTooFast(body as Record<string, unknown>);
+    if (l1.discard) {
+      console.warn(`[Guardrail L1] quote silent-discard (${l1.reason})`);
+      return NextResponse.json({
+        ok: true,
+        totalDeliveredCAD: breakdown.totalDeliveredCAD,
+        reportToken: randomUUID(),
+      });
+    }
+
     // ── Layers 2 & 3: per-IP rate limit + per-email daily docket cap ──
     const supabase = createServerClient();
     const clientIp = getIntakeClientIp(request);
@@ -201,21 +220,13 @@ export async function POST(request: Request) {
         const note = `[Repeat exact-quote submission ${new Date().toISOString()}] ${vehicleForNote} to ${rawDestination}. (Daily new-docket cap reached; logged here instead of creating another docket.)`;
         await appendNoteToNewestDocketForEmail(supabase, normalizedEmail, note);
         console.warn("[Guardrail L3] quote daily docket cap reached — note appended, no new docket");
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({
+          ok: true,
+          totalDeliveredCAD: breakdown.totalDeliveredCAD,
+          reportToken: randomUUID(),
+        });
       }
     }
-
-    // 4. Live exchange rate
-    const exchange = await fetchJPYtoCAD();
-
-    // 5. EXACT landed cost
-    const breakdown = calculateImportCost({
-      vehiclePriceJPY,
-      destinationCity,
-      vehicleType,
-      dutyType,
-      exchangeRate: exchange.rate,
-    });
 
     // ── 6. DEV_MODE: send email to admin, not real customer ──────────
     const devMode = process.env.DEV_MODE === "true";

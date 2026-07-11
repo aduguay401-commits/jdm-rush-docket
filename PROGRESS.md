@@ -733,3 +733,12 @@ SQL (Adam-run-only): supabase/migrations/013_intake_events.sql — intake_events
 Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready; Adam must run 013 before the change is fully active.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL run.
+
+### 2026-07-11 - intake-guardrails review fixes (docket) — indistinguishable discard + secret-gated IP
+
+Reviewer CHANGES_NEEDED (1 blocker + 1 security), both resolved:
+
+- BLOCKER (fingerprintable L1 discard): the silent-discard body now carries the SAME key set as a real success on both endpoints. Quote: the L1 check moved to AFTER the real breakdown is computed, so the discard returns the real totalDeliveredCAD plus a synthesized reportToken (randomUUID) — no docket, no lead, no email, no DB writes. The L3 note-append response on quote likewise returns the full success key set (real total + synthesized token; it did capture interest, so the computed quote is honest). Intake: L1 discard returns { success: true, docketId: randomUUID() }.
+- SECURITY (spoofable x-intake-client-ip): getIntakeClientIp now trusts the forwarded client IP ONLY when x-intake-proxy-secret matches process.env.INTAKE_PROXY_SECRET. A forwarded header without a valid secret (our own proxy's shared egress) => Layer 2 skipped (return null, fail-open) so proxied users are never collectively 429d. A direct caller (no forwarded header) is keyed on x-real-ip, never x-forwarded-for.
+
+New env INTAKE_PROXY_SECRET documented in .env.example (repo gitignores .env*, so .env.example is opted in via a !.env.example negation). Re-gated.

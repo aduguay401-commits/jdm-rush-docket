@@ -86,19 +86,25 @@ export function detectHoneypotOrTooFast(
 // The docket endpoints are called by the site proxy, which forwards the real
 // client IP in x-intake-client-ip. Fall back to platform headers for direct hits.
 export function getIntakeClientIp(request: Request): string | null {
-  const forwardedByProxy = toTrimmedString(request.headers.get("x-intake-client-ip"));
-  if (forwardedByProxy) {
-    return forwardedByProxy;
-  }
+  const forwardedClientIp = toTrimmedString(request.headers.get("x-intake-client-ip"));
 
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  if (forwardedFor) {
-    const firstHop = forwardedFor.split(",")[0]?.trim();
-    if (firstHop) {
-      return firstHop;
+  if (forwardedClientIp) {
+    // The forwarded header is spoofable, so trust it ONLY when the shared
+    // secret matches (both apps must set INTAKE_PROXY_SECRET).
+    const proxySecret = request.headers.get("x-intake-proxy-secret");
+    const expectedSecret = process.env.INTAKE_PROXY_SECRET;
+    if (expectedSecret && proxySecret && proxySecret === expectedSecret) {
+      return forwardedClientIp;
     }
+    // A forwarded IP without a valid secret means the direct caller is our own
+    // site proxy (a shared egress IP). Keying the per-IP limit on that would
+    // 429 every proxied user at once (forbidden), so skip Layer 2 (fail-open)
+    // until the secret is configured in both apps.
+    return null;
   }
 
+  // Direct caller (not via our proxy): key on the platform-set x-real-ip.
+  // Deliberately NOT x-forwarded-for, whose first element the client can spoof.
   return toTrimmedString(request.headers.get("x-real-ip"));
 }
 
