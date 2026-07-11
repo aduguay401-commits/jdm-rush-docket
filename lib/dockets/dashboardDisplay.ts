@@ -530,7 +530,7 @@ function getDocketUrgencyPriority({ docket, latestActivity }: DocketWithLatestAc
     return 0;
   }
 
-  if (status === "answers_received" && sourceType === "customer_answer") {
+  if ((status === "answers_received" || status === "questions_sent") && sourceType === "customer_answer") {
     return 1;
   }
 
@@ -592,4 +592,59 @@ export function sortDocketsByUrgency<TDocket extends DashboardDisplayDocket>(doc
     }))
     .sort(compareDocketsByUrgency)
     .map(({ docket }) => docket);
+}
+
+export type DocketTriageBucket = "needs_you" | "working" | "cold";
+
+// Triage buckets reuse the existing urgency priority so chip filtering and the
+// within-bucket urgency sort never disagree:
+//   0 customer_question, 1 answers_received+answer, 2 new, 4 decision_made -> Needs You
+//   3 research_in_progress, 5 questions_sent/report_sent/answers_received(await) -> Working
+//   6 unresponsive/lost/paused/cleared -> Cold
+export function getDocketTriageBucket(
+  docket: DashboardDisplayDocket,
+  latestActivity: LatestActivity | null = getLatestActivity(docket),
+): DocketTriageBucket {
+  const priority = getDocketUrgencyPriority({ docket, latestActivity });
+
+  if (priority === 6) {
+    return "cold";
+  }
+
+  if (priority === 3 || priority === 5) {
+    return "working";
+  }
+
+  return "needs_you";
+}
+
+export type DocketTemperature = "hot" | "warm" | "cold";
+
+export type DocketTemperatureInput = {
+  customer_id?: string | null;
+  marcus_questions?: Array<Pick<DashboardMarcusQuestionItem, "answer_text" | "answered_at">> | null;
+  customer_questions?: Array<Pick<DashboardCustomerQuestionItem, "question_text">> | null;
+};
+
+// Buy-signal temperature, derived entirely from data the dashboard already loads.
+//   Hot  = claimed a My Garage account (customer_id set)
+//   Warm = no account but has ever answered a question or asked one
+//   Cold = zero customer activity
+export function getDocketTemperature(docket: DocketTemperatureInput): DocketTemperature {
+  if (docket.customer_id) {
+    return "hot";
+  }
+
+  const hasCustomerAnswer = (docket.marcus_questions ?? []).some(
+    (question) => Boolean(question.answer_text?.trim()) && Boolean(question.answered_at),
+  );
+  const hasCustomerQuestion = (docket.customer_questions ?? []).some(
+    (question) => Boolean(question.question_text?.trim()),
+  );
+
+  if (hasCustomerAnswer || hasCustomerQuestion) {
+    return "warm";
+  }
+
+  return "cold";
 }

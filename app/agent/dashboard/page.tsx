@@ -5,11 +5,14 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
+  getDocketTemperature,
+  getDocketTriageBucket,
   getLatestActivity,
   getProgressBarStage,
   getStatusDisplay,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
+import type { DocketTemperature, DocketTriageBucket } from "@/lib/dockets/dashboardDisplay";
 import {
   countLeadViews,
   getLeadOriginLabel,
@@ -28,6 +31,8 @@ type Docket = {
   customer_last_name: string | null;
   customer_id: string | null;
   lead_source: string | null;
+  is_flagged: boolean | null;
+  archived_at?: string | null;
   unreadCount?: number | null;
   marcus_questions: MarcusQuestionItem[] | null;
   customer_questions: CustomerQuestionItem[] | null;
@@ -60,6 +65,8 @@ type EmailLogItem = {
   sent_at: string | null;
 };
 
+type TriageChipId = DocketTriageBucket | "all";
+
 const STATUS_LABELS: Record<string, string> = {
   new: "New",
   questions_sent: "Questions Sent",
@@ -81,6 +88,16 @@ const PROGRESS_STAGES = [
   { label: "Decision", status: "decision_made" },
   { label: "Cleared", status: "cleared" },
 ] as const;
+
+const TRIAGE_CHIPS: { id: TriageChipId; label: string }[] = [
+  { id: "needs_you", label: "Needs You" },
+  { id: "working", label: "Working" },
+  { id: "cold", label: "Cold" },
+  { id: "all", label: "All" },
+];
+
+const DOCKET_SELECT =
+  "id, created_at, status, customer_first_name, customer_last_name, customer_id, lead_source, is_flagged, archived_at, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)";
 
 const DASHBOARD_REFRESH_FLAG = "dashboard_needs_refresh";
 const DASHBOARD_SUCCESS_MESSAGE_KEY = "dashboard_success_message";
@@ -169,6 +186,50 @@ function LeadOriginBadge({ docket }: { docket: Pick<Docket, "customer_id" | "lea
   );
 }
 
+function TemperatureBadge({ temperature }: { temperature: DocketTemperature }) {
+  if (temperature === "hot") {
+    return (
+      <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border border-[#E55125]/40 bg-[#E55125]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#f47a55]">
+        🔥 Hot
+      </span>
+    );
+  }
+
+  if (temperature === "warm") {
+    return (
+      <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border border-[#fbbf24]/40 bg-[#fbbf24]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#fbbf24]">
+        Warm
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex h-6 items-center gap-1 whitespace-nowrap rounded-full border border-white/15 bg-white/5 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-white/55">
+      Cold
+    </span>
+  );
+}
+
+function PinButton({ pinned, busy, onToggle }: { pinned: boolean; busy: boolean; onToggle: () => void }) {
+  return (
+    <button
+      aria-label={pinned ? "Unpin docket" : "Pin docket"}
+      aria-pressed={pinned}
+      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border text-lg leading-none transition disabled:opacity-50 ${
+        pinned
+          ? "border-[#E55125] bg-[#E55125]/15 text-[#E55125]"
+          : "border-white/15 text-white/50 hover:border-white/30 hover:text-white"
+      }`}
+      disabled={busy}
+      onClick={onToggle}
+      title={pinned ? "Pinned — click to unpin" : "Pin to top"}
+      type="button"
+    >
+      <span aria-hidden="true">{pinned ? "★" : "☆"}</span>
+    </button>
+  );
+}
+
 function DocketProgressBar({ docket }: { docket: Docket }) {
   const progressState = getProgressBarStage(docket.status, docket);
   const { currentIndex, status } = progressState;
@@ -245,8 +306,61 @@ export default function AgentDashboardPage() {
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
   const [activeLeadView, setActiveLeadView] = useState<LeadView>("all");
+  const [activeTriage, setActiveTriage] = useState<TriageChipId>("needs_you");
   const [dashboardSuccessMessage, setDashboardSuccessMessage] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [archivedDockets, setArchivedDockets] = useState<Docket[]>([]);
+  const [archivedLoaded, setArchivedLoaded] = useState(false);
+  const [archivedLoading, setArchivedLoading] = useState(false);
+  const [pendingActionId, setPendingActionId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const fetchDockets = useCallback(
+    async (archived: boolean): Promise<Docket[]> => {
+      const { data, error: docketError } = await supabase
+        .from("dockets")
+        .select(DOCKET_SELECT)
+        .eq("is_archived", archived)
+        .order(archived ? "archived_at" : "created_at", { ascending: false });
+
+      if (docketError) {
+        throw new Error(docketError.message);
+      }
+
+      const loadedDockets = ((data as Docket[]) ?? []).map((docket) => ({ ...docket, unreadCount: 0 }));
+      const docketIds = loadedDockets.map((docket) => docket.id);
+
+      if (docketIds.length > 0) {
+        const { data: unreadRows, error: unreadError } = await supabase
+          .from("customer_questions")
+          .select("docket_id")
+          .in("docket_id", docketIds)
+          .is("read_at", null);
+
+        if (unreadError) {
+          throw new Error(unreadError.message);
+        }
+
+        const unreadCountByDocketId = new Map<string, number>();
+        for (const row of unreadRows ?? []) {
+          const docketId = typeof row.docket_id === "string" ? row.docket_id : null;
+          if (!docketId) {
+            continue;
+          }
+
+          unreadCountByDocketId.set(docketId, (unreadCountByDocketId.get(docketId) ?? 0) + 1);
+        }
+
+        for (const docket of loadedDockets) {
+          docket.unreadCount = unreadCountByDocketId.get(docket.id) ?? 0;
+        }
+      }
+
+      return loadedDockets;
+    },
+    [supabase],
+  );
 
   const loadDashboard = useCallback(async () => {
     const { data: userResponse } = await supabase.auth.getUser();
@@ -274,56 +388,31 @@ export default function AgentDashboardPage() {
       return;
     }
 
-    const { data, error: docketError } = await supabase
-      .from("dockets")
-      .select(
-        "id, created_at, status, customer_first_name, customer_last_name, customer_id, lead_source, docket_status_history(old_status, new_status, changed_at), marcus_questions(question_text, answer_text, answered_at, created_at), customer_questions(question_text, created_at), email_log(email_type, subject, body_snapshot, sent_at)"
-      )
-      .eq("is_archived", false)
-      .order("created_at", { ascending: false });
-
-    if (docketError) {
-      setError(docketError.message);
+    try {
+      const loadedDockets = await fetchDockets(false);
+      setError(null);
+      setDockets(sortDocketsByUrgency(loadedDockets));
+      setLastRefreshedAt(new Date().toISOString());
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Failed to load dockets.");
+    } finally {
       setLoading(false);
-      return;
     }
+  }, [fetchDockets, router, supabase]);
 
-    setError(null);
-    const loadedDockets = ((data as Docket[]) ?? []).map((docket) => ({ ...docket, unreadCount: 0 }));
-    const docketIds = loadedDockets.map((docket) => docket.id);
-
-    if (docketIds.length > 0) {
-      const { data: unreadRows, error: unreadError } = await supabase
-        .from("customer_questions")
-        .select("docket_id")
-        .in("docket_id", docketIds)
-        .is("read_at", null);
-
-      if (unreadError) {
-        setError(unreadError.message);
-        setLoading(false);
-        return;
-      }
-
-      const unreadCountByDocketId = new Map<string, number>();
-      for (const row of unreadRows ?? []) {
-        const docketId = typeof row.docket_id === "string" ? row.docket_id : null;
-        if (!docketId) {
-          continue;
-        }
-
-        unreadCountByDocketId.set(docketId, (unreadCountByDocketId.get(docketId) ?? 0) + 1);
-      }
-
-      for (const docket of loadedDockets) {
-        docket.unreadCount = unreadCountByDocketId.get(docket.id) ?? 0;
-      }
+  const loadArchived = useCallback(async () => {
+    setArchivedLoading(true);
+    setActionError(null);
+    try {
+      const loaded = await fetchDockets(true);
+      setArchivedDockets(sortDocketsByUrgency(loaded));
+      setArchivedLoaded(true);
+    } catch (loadError) {
+      setActionError(loadError instanceof Error ? loadError.message : "Failed to load archived dockets.");
+    } finally {
+      setArchivedLoading(false);
     }
-
-    setDockets(sortDocketsByUrgency(loadedDockets));
-    setLastRefreshedAt(new Date().toISOString());
-    setLoading(false);
-  }, [router, supabase]);
+  }, [fetchDockets]);
 
   useEffect(() => {
     if (window.sessionStorage.getItem(DASHBOARD_REFRESH_FLAG)) {
@@ -377,10 +466,111 @@ export default function AgentDashboardPage() {
 
   const leadViewCounts = useMemo(() => countLeadViews(dockets), [dockets]);
 
-  const filteredDockets = useMemo(
-    () => sortDocketsByUrgency(dockets.filter((docket) => isInLeadView(docket, activeLeadView))),
+  const leadViewDockets = useMemo(
+    () => dockets.filter((docket) => isInLeadView(docket, activeLeadView)),
     [activeLeadView, dockets],
   );
+
+  const triageCounts = useMemo(() => {
+    const counts: Record<TriageChipId, number> = {
+      all: leadViewDockets.length,
+      needs_you: 0,
+      working: 0,
+      cold: 0,
+    };
+
+    for (const docket of leadViewDockets) {
+      counts[getDocketTriageBucket(docket)] += 1;
+    }
+
+    return counts;
+  }, [leadViewDockets]);
+
+  const visibleDockets = useMemo(() => {
+    const scoped =
+      activeTriage === "all"
+        ? leadViewDockets
+        : leadViewDockets.filter((docket) => getDocketTriageBucket(docket) === activeTriage);
+    const sorted = sortDocketsByUrgency(scoped);
+    const pinned = sorted.filter((docket) => docket.is_flagged);
+    const unpinned = sorted.filter((docket) => !docket.is_flagged);
+    return [...pinned, ...unpinned];
+  }, [activeTriage, leadViewDockets]);
+
+  async function patchDocket(docketId: string, body: Record<string, unknown>) {
+    const response = await fetch(`/api/agent/docket/${docketId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    const result = (await response.json()) as { success?: boolean; error?: string };
+
+    if (!response.ok || !result.success) {
+      throw new Error(result.error ?? "Update failed.");
+    }
+  }
+
+  function handleToggleShowArchived() {
+    const next = !showArchived;
+    setShowArchived(next);
+    if (next && !archivedLoaded) {
+      void loadArchived();
+    }
+  }
+
+  async function handleArchive(docketId: string) {
+    const confirmed = window.confirm(
+      "Archive this docket? It will be hidden from your main view. You can find it anytime under Show Archived.",
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setActionError(null);
+    setPendingActionId(docketId);
+    try {
+      await patchDocket(docketId, { is_archived: true });
+      setDockets((prev) => prev.filter((docket) => docket.id !== docketId));
+      setArchivedLoaded(false);
+    } catch (archiveError) {
+      setActionError(archiveError instanceof Error ? archiveError.message : "Failed to archive docket.");
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  async function handleUnarchive(docketId: string) {
+    setActionError(null);
+    setPendingActionId(docketId);
+    try {
+      await patchDocket(docketId, { is_archived: false });
+      setArchivedDockets((prev) => prev.filter((docket) => docket.id !== docketId));
+      void loadDashboard();
+    } catch (unarchiveError) {
+      setActionError(unarchiveError instanceof Error ? unarchiveError.message : "Failed to unarchive docket.");
+    } finally {
+      setPendingActionId(null);
+    }
+  }
+
+  async function handleTogglePin(docketId: string, nextPinned: boolean) {
+    setActionError(null);
+    setPendingActionId(docketId);
+    setDockets((prev) =>
+      prev.map((docket) => (docket.id === docketId ? { ...docket, is_flagged: nextPinned } : docket)),
+    );
+    try {
+      await patchDocket(docketId, { is_flagged: nextPinned });
+    } catch (pinError) {
+      setDockets((prev) =>
+        prev.map((docket) => (docket.id === docketId ? { ...docket, is_flagged: !nextPinned } : docket)),
+      );
+      setActionError(pinError instanceof Error ? pinError.message : "Failed to update pin.");
+    } finally {
+      setPendingActionId(null);
+    }
+  }
 
   async function handleSignOut() {
     await supabase.auth.signOut();
@@ -427,122 +617,250 @@ export default function AgentDashboardPage() {
           </div>
         ) : null}
         {error ? <p className="text-red-400">{error}</p> : null}
+        {actionError ? <p className="mb-4 text-red-400">{actionError}</p> : null}
 
-        {!loading && !error && dockets.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.03] p-8 text-center text-white/70">
-            No dockets yet.
-          </div>
-        ) : null}
-
-        {!loading && !error && dockets.length > 0 ? (
+        {!loading && !error ? (
           <>
-            <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-4">
-              {LEAD_VIEWS.map((view) => {
-                const isActiveView = activeLeadView === view.id;
-                return (
-                  <button
-                    aria-pressed={isActiveView}
-                    className={`rounded-lg px-4 py-3 text-left transition ${
-                      isActiveView ? "bg-[#E55125] text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
-                    }`}
-                    key={view.id}
-                    onClick={() => setActiveLeadView(view.id)}
-                    type="button"
-                  >
-                    <span className="flex items-center justify-between gap-3">
-                      <span className="text-sm font-semibold">{view.label}</span>
-                      <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
-                        {leadViewCounts[view.id]}
-                      </span>
-                    </span>
-                    <span className="mt-1 block text-xs opacity-75">{view.description}</span>
-                  </button>
-                );
-              })}
-            </section>
-
-            <section className="pb-6">
-              <h2 className="text-2xl font-semibold text-white">
-                Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention — let&apos;s
-                get these deals moving. 🇯🇵
-              </h2>
-              {lastRefreshedAt ? (
-                <p className="mt-1 text-[13px] text-[#888]">Updated {formatRelativeTime(lastRefreshedAt)}</p>
-              ) : null}
-              <p className="mt-2 text-base text-[#888]">
-                Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
-                pull your research, and let&apos;s get these deals moving. 🇯🇵
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-white/60">
+                {showArchived
+                  ? "Archived dockets"
+                  : `${dockets.length} active docket${dockets.length === 1 ? "" : "s"}`}
               </p>
-            </section>
-            <div className="grid gap-4">
-              {filteredDockets.map((docket) => {
-                const lastCommunication = getLatestActivity(docket);
-                const statusDisplay = getStatusDisplay(docket, lastCommunication);
-                const unreadCount = statusDisplay.unreadCount;
-                const stripeColor = statusDisplay.stripeColor;
-                const customerName =
-                  `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
-                  "Unnamed Customer";
+              <button
+                aria-pressed={showArchived}
+                className={`rounded-lg border px-4 py-2 text-sm font-medium transition ${
+                  showArchived
+                    ? "border-[#E55125] bg-[#E55125]/15 text-[#f47a55]"
+                    : "border-white/20 text-white/80 hover:bg-white/10 hover:text-white"
+                }`}
+                onClick={handleToggleShowArchived}
+                type="button"
+              >
+                {showArchived ? "← Back to Active" : "Show Archived"}
+              </button>
+            </div>
 
-                return (
-                  <article
-                    className="overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg"
-                    key={docket.id}
-                  >
-                    <div className="p-5">
-                      <div className="mb-4 flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <h2 className="truncate text-xl font-semibold text-white">{customerName}</h2>
-                          <div className="mt-2 flex flex-wrap gap-2">
-                            <LeadOriginBadge docket={docket} />
+            {showArchived ? (
+              archivedLoading ? (
+                <p className="text-white/70">Loading archived dockets...</p>
+              ) : archivedDockets.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.03] p-8 text-center text-white/70">
+                  No archived dockets.
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {archivedDockets.map((docket) => {
+                    const lastCommunication = getLatestActivity(docket);
+                    const statusDisplay = getStatusDisplay(docket, lastCommunication);
+                    const customerName =
+                      `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
+                      "Unnamed Customer";
+
+                    return (
+                      <article
+                        className="overflow-hidden rounded-xl border border-white/12 bg-[#141414] p-5 opacity-90"
+                        key={docket.id}
+                      >
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <h2 className="truncate text-lg font-semibold text-white">{customerName}</h2>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <LeadOriginBadge docket={docket} />
+                              <TemperatureBadge temperature={getDocketTemperature(docket)} />
+                            </div>
+                            <p className={`mt-2 text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+                            {docket.archived_at ? (
+                              <p className="mt-1 text-xs text-white/45">
+                                Archived {formatRelativeTime(docket.archived_at)}
+                              </p>
+                            ) : null}
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-2">
+                            <button
+                              className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
+                              disabled={pendingActionId === docket.id}
+                              onClick={() => handleUnarchive(docket.id)}
+                              type="button"
+                            >
+                              {pendingActionId === docket.id ? "Working…" : "Unarchive"}
+                            </button>
+                            <Link
+                              className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                              href={`/agent/docket/${docket.id}`}
+                            >
+                              Open Docket
+                            </Link>
                           </div>
                         </div>
-                        <Link
-                          className="shrink-0 rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
-                          href={`/agent/docket/${docket.id}`}
-                        >
-                          Open Docket
-                        </Link>
-                      </div>
-                      <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
-                      <div className="mb-4 flex flex-wrap items-center gap-2">
-                        <p className={`text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
-                        {unreadCount > 0 ? (
-                          <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
-                            {getNewMessageBadgeLabel(unreadCount)}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div
-                        className="rounded bg-white/[0.03] px-[14px] py-2.5"
-                        style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
-                      >
-                        {lastCommunication ? (
-                          <>
-                            <p className="text-xs text-[#888]">
-                              {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
-                            </p>
-                            {lastCommunication.snippet ? (
-                              <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
-                            ) : null}
-                          </>
-                        ) : (
-                          <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
-                        )}
-                      </div>
-                    </div>
-                    <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
-                      <DocketProgressBar docket={docket} />
-                    </div>
-                  </article>
-                );
-              })}
-              {filteredDockets.length === 0 ? (
-                <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
-                  No dockets match this lead view.
+                      </article>
+                    );
+                  })}
                 </div>
-              ) : null}
-            </div>
+              )
+            ) : dockets.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/20 bg-white/[0.03] p-8 text-center text-white/70">
+                No dockets yet.
+              </div>
+            ) : (
+              <>
+                <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-4">
+                  {LEAD_VIEWS.map((view) => {
+                    const isActiveView = activeLeadView === view.id;
+                    return (
+                      <button
+                        aria-pressed={isActiveView}
+                        className={`rounded-lg px-4 py-3 text-left transition ${
+                          isActiveView ? "bg-[#E55125] text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
+                        }`}
+                        key={view.id}
+                        onClick={() => setActiveLeadView(view.id)}
+                        type="button"
+                      >
+                        <span className="flex items-center justify-between gap-3">
+                          <span className="text-sm font-semibold">{view.label}</span>
+                          <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
+                            {leadViewCounts[view.id]}
+                          </span>
+                        </span>
+                        <span className="mt-1 block text-xs opacity-75">{view.description}</span>
+                      </button>
+                    );
+                  })}
+                </section>
+
+                <section className="mb-6 flex flex-wrap gap-2">
+                  {TRIAGE_CHIPS.map((chip) => {
+                    const isActiveChip = activeTriage === chip.id;
+                    return (
+                      <button
+                        aria-pressed={isActiveChip}
+                        className={`inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold transition ${
+                          isActiveChip
+                            ? "border-[#E55125] bg-[#E55125] text-white"
+                            : "border-white/15 bg-[#141414] text-white/70 hover:border-white/30 hover:text-white"
+                        }`}
+                        key={chip.id}
+                        onClick={() => setActiveTriage(chip.id)}
+                        type="button"
+                      >
+                        {chip.label}
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            isActiveChip ? "bg-black/25" : "bg-white/10"
+                          }`}
+                        >
+                          {triageCounts[chip.id]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </section>
+
+                <section className="pb-6">
+                  <h2 className="text-2xl font-semibold text-white">
+                    Welcome back, {agentDisplayName}. You&apos;ve got active dockets ready for your attention —
+                    let&apos;s get these deals moving. 🇯🇵
+                  </h2>
+                  {lastRefreshedAt ? (
+                    <p className="mt-1 text-[13px] text-[#888]">Updated {formatRelativeTime(lastRefreshedAt)}</p>
+                  ) : null}
+                  <p className="mt-2 text-base text-[#888]">
+                    Each docket below represents a real buyer ready to find their perfect JDM vehicle. Review each one,
+                    pull your research, and let&apos;s get these deals moving. 🇯🇵
+                  </p>
+                </section>
+                <div className="grid gap-4">
+                  {visibleDockets.map((docket) => {
+                    const lastCommunication = getLatestActivity(docket);
+                    const statusDisplay = getStatusDisplay(docket, lastCommunication);
+                    const unreadCount = statusDisplay.unreadCount;
+                    const isPending = pendingActionId === docket.id;
+                    const isCleared = docket.status === "cleared";
+                    const stripeColor = isCleared ? "rgba(168,162,158,0.5)" : statusDisplay.stripeColor;
+                    const customerName =
+                      `${docket.customer_first_name ?? ""} ${docket.customer_last_name ?? ""}`.trim() ||
+                      "Unnamed Customer";
+
+                    return (
+                      <article
+                        className={`overflow-hidden rounded-xl border border-white/12 bg-[#171717] shadow-lg ${
+                          isCleared ? "opacity-60" : ""
+                        }`}
+                        key={docket.id}
+                      >
+                        <div className="p-5">
+                          <div className="mb-4 flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <h2 className="truncate text-xl font-semibold text-white">{customerName}</h2>
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                <LeadOriginBadge docket={docket} />
+                                <TemperatureBadge temperature={getDocketTemperature(docket)} />
+                              </div>
+                            </div>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <PinButton
+                                busy={isPending}
+                                onToggle={() => handleTogglePin(docket.id, !docket.is_flagged)}
+                                pinned={Boolean(docket.is_flagged)}
+                              />
+                              <button
+                                className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-white/70 transition hover:border-white/30 hover:text-white disabled:opacity-50"
+                                disabled={isPending}
+                                onClick={() => handleArchive(docket.id)}
+                                type="button"
+                              >
+                                Archive
+                              </button>
+                              <Link
+                                className="rounded-lg bg-[#E55125] px-4 py-2 text-sm font-medium text-white transition hover:brightness-110"
+                                href={`/agent/docket/${docket.id}`}
+                              >
+                                Open Docket
+                              </Link>
+                            </div>
+                          </div>
+                          <div className="mb-2 h-[3px] w-full rounded-[2px]" style={{ backgroundColor: stripeColor }} />
+                          <div className="mb-4 flex flex-wrap items-center gap-2">
+                            <p className={`text-sm ${statusDisplay.className}`}>{statusDisplay.text}</p>
+                            {unreadCount > 0 ? (
+                              <span className="inline-flex h-6 items-center whitespace-nowrap rounded-full border border-[#4ade80]/40 bg-[#4ade80]/15 px-2.5 text-[11px] font-semibold uppercase tracking-wide text-[#4ade80]">
+                                {getNewMessageBadgeLabel(unreadCount)}
+                              </span>
+                            ) : null}
+                          </div>
+                          <div
+                            className="rounded bg-white/[0.03] px-[14px] py-2.5"
+                            style={{ borderLeft: `2px solid ${withAlpha(stripeColor, 0.4)}` }}
+                          >
+                            {lastCommunication ? (
+                              <>
+                                <p className="text-xs text-[#888]">
+                                  {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
+                                </p>
+                                {lastCommunication.snippet ? (
+                                  <p className="mt-1 text-[13px] leading-6 text-[#ccc]">{lastCommunication.snippet}</p>
+                                ) : null}
+                              </>
+                            ) : (
+                              <p className="text-sm text-[#888]">🎌 New lead — no communication yet</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="rounded-b-xl border-t border-white/10 bg-white/[0.02] px-5 pb-5 pt-3">
+                          <DocketProgressBar docket={docket} />
+                        </div>
+                      </article>
+                    );
+                  })}
+                  {visibleDockets.length === 0 ? (
+                    <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
+                      No dockets match these filters.
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            )}
           </>
         ) : null}
       </div>
