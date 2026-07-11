@@ -29,6 +29,16 @@ import {
 import type { DutyType } from "@/lib/importCalculator";
 import { buildAnchorModelKey, CASL_SENDER_IDENTITY } from "@/lib/nurture/consent";
 import { createServerClient } from "@/lib/supabase/server";
+import {
+  INTAKE_GUARDRAILS,
+  detectHoneypotOrTooFast,
+  getIntakeClientIp,
+  isIpRateLimited,
+  normalizeEmail,
+  countRecentDocketsForEmail,
+  appendNoteToNewestDocketForEmail,
+  isUnderWelcomeEmailCap,
+} from "@/lib/intake/guardrails";
 import { getNurtureOptInUrl } from "@/lib/urls";
 
 function isNurtureOptInEnabled(): boolean {
@@ -47,6 +57,8 @@ interface QuotePayload {
   destinationCity?: string;
   email?: string;
   name?: string;
+  company_website?: string;
+  form_rendered_at?: string | number;
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────
@@ -108,6 +120,13 @@ export async function POST(request: Request) {
   try {
     const body: QuotePayload = await request.json();
 
+    // ── Layer 1: honeypot + fill-time → silent discard (bot learns nothing) ──
+    const l1 = detectHoneypotOrTooFast(body as Record<string, unknown>);
+    if (l1.discard) {
+      console.warn(`[Guardrail L1] quote silent-discard (${l1.reason})`);
+      return NextResponse.json({ ok: true });
+    }
+
     // 1. Validate required fields
     const email = toOptionalString(body.email);
     if (!email || !looksLikeValidEmail(email)) {
@@ -163,6 +182,29 @@ export async function POST(request: Request) {
     // 3. Classify vehicle type (contains/startsWith matching for variants)
     const vehicleType = classifyVehicleType(model);
 
+    // ── Layers 2 & 3: per-IP rate limit + per-email daily docket cap ──
+    const supabase = createServerClient();
+    const clientIp = getIntakeClientIp(request);
+    const normalizedEmail = normalizeEmail(email);
+
+    if (await isIpRateLimited(supabase, clientIp, "/api/system/quote", normalizedEmail)) {
+      return NextResponse.json(
+        { ok: false, error: "Too many requests — please try again shortly or email us at support@jdmrushimports.ca." },
+        { status: 429 },
+      );
+    }
+
+    if (normalizedEmail) {
+      const recentDocketCount = await countRecentDocketsForEmail(supabase, normalizedEmail);
+      if (recentDocketCount != null && recentDocketCount >= INTAKE_GUARDRAILS.EMAIL_DAILY_DOCKETS) {
+        const vehicleForNote = [body.year, make, model].filter(Boolean).join(" ") || ref || "vehicle";
+        const note = `[Repeat exact-quote submission ${new Date().toISOString()}] ${vehicleForNote} to ${rawDestination}. (Daily new-docket cap reached; logged here instead of creating another docket.)`;
+        await appendNoteToNewestDocketForEmail(supabase, normalizedEmail, note);
+        console.warn("[Guardrail L3] quote daily docket cap reached — note appended, no new docket");
+        return NextResponse.json({ ok: true });
+      }
+    }
+
     // 4. Live exchange rate
     const exchange = await fetchJPYtoCAD();
 
@@ -201,7 +243,6 @@ export async function POST(request: Request) {
     }
 
     // ── 7. Dedupe: check for existing docket (idempotent retries) ──
-    const supabase = createServerClient();
 
     if (ref && email) {
       // Reuse a docket created in the last 10 minutes for same email+ref
@@ -454,46 +495,52 @@ Ready to move forward? Reply to this email and we'll get the ball rolling.
 — Adam & the JDM Rush Team
 support@jdmrushimports.ca`;
 
-    // Send email.  If it fails, mark the docket so it's not an orphan.
-    try {
-      await sendEmail({
-        from: fromEmail,
-        to: customerRecipientEmail!,
+    // ── Layer 4: welcome-email cap — skip the send (not the docket) beyond cap ──
+    const underWelcomeCap = await isUnderWelcomeEmailCap(supabase, normalizedEmail);
+    if (!underWelcomeCap) {
+      console.warn("[Guardrail L4] quote welcome-email cap reached — email skipped for this address");
+    } else {
+      // Send email.  If it fails, mark the docket so it's not an orphan.
+      try {
+        await sendEmail({
+          from: fromEmail,
+          to: customerRecipientEmail!,
+          subject,
+          html: htmlBody,
+          text: textBody,
+        });
+      } catch {
+        console.error("[Quote] Email send failed");
+
+        await supabase
+          .from("dockets")
+          .update({
+            additional_notes: `[EMAIL FAILED] ${docketInsert.additional_notes}`,
+          })
+          .eq("id", docket.id);
+
+        return NextResponse.json(
+          {
+            ok: false,
+            error:
+              "We computed your quote but could not email it. Please try again or contact us directly.",
+          },
+          { status: 500 },
+        );
+      }
+
+      // Log the email (mirrors intake pattern)
+      const { error: emailLogError } = await supabase.from("email_log").insert({
+        docket_id: docket.id,
+        email_type: "quote_exact_estimate",
+        recipient_email: customerRecipientEmail!,
         subject,
-        html: htmlBody,
-        text: textBody,
+        body_snapshot: htmlBody,
       });
-    } catch {
-      console.error("[Quote] Email send failed");
 
-      await supabase
-        .from("dockets")
-        .update({
-          additional_notes: `[EMAIL FAILED] ${docketInsert.additional_notes}`,
-        })
-        .eq("id", docket.id);
-
-      return NextResponse.json(
-        {
-          ok: false,
-          error:
-            "We computed your quote but could not email it. Please try again or contact us directly.",
-        },
-        { status: 500 },
-      );
-    }
-
-    // Log the email (mirrors intake pattern)
-    const { error: emailLogError } = await supabase.from("email_log").insert({
-      docket_id: docket.id,
-      email_type: "quote_exact_estimate",
-      recipient_email: customerRecipientEmail!,
-      subject,
-      body_snapshot: htmlBody,
-    });
-
-    if (emailLogError) {
-      console.error("[Quote] email_log insert failed");
+      if (emailLogError) {
+        console.error("[Quote] email_log insert failed");
+      }
     }
 
     return NextResponse.json({

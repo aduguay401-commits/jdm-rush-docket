@@ -13,6 +13,16 @@ import {
 import { fetchJPYtoCAD } from '@/lib/exchangeRate'
 import { escapeHtml } from '@/lib/html'
 import { createServerClient } from '@/lib/supabase/server'
+import {
+  INTAKE_GUARDRAILS,
+  detectHoneypotOrTooFast,
+  getIntakeClientIp,
+  isIpRateLimited,
+  normalizeEmail,
+  countRecentDocketsForEmail,
+  appendNoteToNewestDocketForEmail,
+  isUnderWelcomeEmailCap,
+} from "@/lib/intake/guardrails";
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
 import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
@@ -208,6 +218,14 @@ export async function POST(request: Request) {
     const body = await parseIntakeBody(request)
     console.log('[Intake] Received payload:', JSON.stringify(body))
     const payload = extractPayload(body)
+
+    // ── Layer 1: honeypot + fill-time → silent discard (bot learns nothing) ──
+    const l1 = detectHoneypotOrTooFast(payload as Record<string, unknown>)
+    if (l1.discard) {
+      console.warn(`[Guardrail L1] intake silent-discard (${l1.reason})`)
+      return Response.json({ success: true })
+    }
+
     const customerEmail = toOptionalString(payload.customer_email)
 
     if (!customerEmail) {
@@ -219,6 +237,30 @@ export async function POST(request: Request) {
 
     const exchange = await fetchJPYtoCAD()
     const supabase = createServerClient()
+
+    // ── Layers 2 & 3: per-IP rate limit + per-email daily docket cap ──
+    const clientIp = getIntakeClientIp(request)
+    const normalizedEmail = normalizeEmail(customerEmail)
+    if (await isIpRateLimited(supabase, clientIp, '/api/system/intake', normalizedEmail)) {
+      return Response.json(
+        { success: false, error: 'Too many requests — please try again shortly or email us at support@jdmrushimports.ca.' },
+        { status: 429 },
+      )
+    }
+
+    if (normalizedEmail) {
+      const recentDocketCount = await countRecentDocketsForEmail(supabase, normalizedEmail)
+      if (recentDocketCount != null && recentDocketCount >= INTAKE_GUARDRAILS.EMAIL_DAILY_DOCKETS) {
+        const vehicleForNote =
+          toOptionalString(payload.vehicle_description) ??
+          ([toOptionalString(payload.vehicle_make), toOptionalString(payload.vehicle_model)].filter(Boolean).join(' ') || 'vehicle')
+        const note = `[Repeat Find-My-JDM submission ${new Date().toISOString()}] ${vehicleForNote}. (Daily new-docket cap reached; logged here instead of creating another docket.)`
+        const appendedId = await appendNoteToNewestDocketForEmail(supabase, normalizedEmail, note)
+        console.warn('[Guardrail L3] intake daily docket cap reached — note appended, no new docket')
+        return Response.json({ success: true, docketId: appendedId })
+      }
+    }
+
     const shouldStoreAdditionalInfo = await hasAdditionalInfoColumn(supabase)
     const rawDestinationCity = toOptionalString(payload.destination_city)
     const providedDestinationProvince = toOptionalString(payload.destination_province)
@@ -336,7 +378,10 @@ export async function POST(request: Request) {
       })
     }
 
+    // ── Layer 4: welcome-email cap — skip the customer welcome (not the docket) beyond cap ──
+    const underWelcomeCap = await isUnderWelcomeEmailCap(supabase, normalizedEmail)
     // Email 1: Customer Welcome
+    if (underWelcomeCap) {
     try {
       const subject = `I got your JDM request, ${customerFirstNameForEmail}`
       const devModeBannerHtml =
@@ -451,6 +496,9 @@ support@jdmrushimports.ca`
         error,
       })
       return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+    }
+    } else {
+      console.warn('[Guardrail L4] intake welcome-email cap reached — customer welcome skipped for this address')
     }
 
     // Email 2: Marcus Notification
