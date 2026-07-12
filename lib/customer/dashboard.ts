@@ -447,3 +447,36 @@ export async function getMessageThread(docketId: string) {
 
   return messages.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 }
+
+export type CustomerInvoice = {
+  id: string;
+  invoice_type: string;
+  label: string;
+  amount_cad: number | null;
+  status: string;
+  issued_at: string | null;
+  paid_at: string | null;
+  file_path: string | null;
+  created_at: string;
+};
+
+// Invoices for the customer's own docket. RLS enforces ownership; void invoices
+// are hidden. FAIL-OPEN: a missing docket_invoices table (migration 014 pending),
+// an RLS block, or any error resolves to an empty list — the page never 500s.
+export async function getDocketInvoicesForCustomer(docketId: string): Promise<CustomerInvoice[]> {
+  try {
+    const supabase = await createServerAuthClient();
+    const { data, error } = await supabase
+      .from("docket_invoices")
+      .select("id, invoice_type, label, amount_cad, status, issued_at, paid_at, file_path, created_at")
+      .eq("docket_id", docketId)
+      .neq("status", "void")
+      .order("created_at", { ascending: false });
+    if (error || !data) {
+      return [];
+    }
+    return data as CustomerInvoice[];
+  } catch {
+    return [];
+  }
+}

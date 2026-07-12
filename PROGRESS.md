@@ -804,3 +804,22 @@ Reviewer re-review: 4 of 5 prior fixes closed; 1 NEW blocker from the showCloseO
 - app/api/agent/move-to-delivery: the transition is now a COMPARE-AND-SET — update status to sold_in_delivery WHERE id AND status='decision_made' AND agreement_signed AND deposit_paid, then branch on affected rows. Zero rows => 409 with NO history write (wrong source status, gate not green, already sold, or concurrent loser); the docket_status_history row is written only after a confirmed 1-row update. So only decision_made can transition, cleared/lost/paused are rejected server-side, and two concurrent submits can never double-write history (closes the earlier double-submit nit in the same move).
 - Detail page: Move to Delivery button now renders only for decision_made + both gates green (canMoveToDelivery); on cleared the close-out shows a read-only completed summary (gates as done, "✅ Purchase complete", no action button, no deposit toggle); on sold_in_delivery the frozen in-delivery state stays.
 Re-gated. B and C restacked onto the new A head.
+## 2026-07-12 - chain B: docket_invoices ledger (agent + customer) [stacked on A]
+
+Invoice ledger for dockets. No prerequisite migration (fail-open). Stacked on feature/purchase-closeout (rebased onto A head 1c4592f after the A review fix).
+
+Data: supabase/migrations/014_docket_invoices.sql (Adam-run-only) — docket_invoices (id, docket_id FK cascade, invoice_type check deposit/balance/transport/other, label, amount_cad nullable, status check unpaid/paid/void default unpaid, issued_at, paid_at, file_path, timestamps), index (docket_id, created_at), RLS: service_role ALL + authenticated customer SELECT own via auth.uid->customers->dockets EXISTS (mirrors migration 009). Self-contained, idempotent.
+
+Storage/D4: lib/invoices/storage.ts uploadInvoiceDocument -> customer-documents bucket, path <docketId>/invoices/<uuid>.<ext> (UUID names), PDF/image + 15MB fail-closed validation; reuses createLicenseSignedUrl + logDocumentAccess (document_access_log). isMissingInvoicesTable() drives fail-open. lib/invoices/types.ts = client-safe vocabulary/formatters.
+
+Agent API (requireAdminOrAgent, service-role, strict whitelist):
+- GET/POST /api/agent/invoices (list by ?docketId / create multipart w/ optional file; enabled:false when table absent).
+- PATCH /api/agent/invoices/[id] (status only: unpaid/paid/void; marking a DEPOSIT invoice paid also sets dockets.deposit_paid=true and returns depositSynced; unmark never auto-clears the gate).
+- GET /api/agent/invoices/[id]/file (signed URL + access log).
+Customer: GET /api/customer/invoices/[id]/file (RLS ownership, void hidden, signed URL + access log).
+
+UI: app/agent/docket/[id]/InvoiceLedger.tsx (client component mounted in the Purchase Close-Out area; list + Add Invoice form + Mark Paid/Unpaid/Void + View PDF; quiet not-enabled state; deposit-sync hint). app/account/imports/[id]/invoices/page.tsx now renders the real list (label/amount/status/paid date/Download signed-URL) via getDocketInvoicesForCustomer (RLS-scoped, fail-open, void hidden); empty state graceful.
+
+Constraints: no quote/intake/nurture/cron changes; page never 500s if 014 unrun.
+
+Status: B implementation complete; verified with nm-gate --quick (silent per single-track state protocol — formal start_impl/code_ready emits after A closes). Migration 014 is a deliverable for Adam (bundle with chain C SQL).
