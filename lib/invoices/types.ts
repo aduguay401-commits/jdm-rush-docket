@@ -24,6 +24,7 @@ export type DocketInvoice = {
   issued_at: string | null;
   paid_at: string | null;
   file_path: string | null;
+  external_url: string | null;
   created_at: string;
   updated_at: string;
 };

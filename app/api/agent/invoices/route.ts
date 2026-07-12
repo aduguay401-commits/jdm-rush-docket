@@ -5,7 +5,7 @@ import { createServerClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
-const INVOICE_SELECT = "id, docket_id, invoice_type, label, amount_cad, status, issued_at, paid_at, file_path, created_at, updated_at";
+const INVOICE_SELECT = "id, docket_id, invoice_type, label, amount_cad, status, issued_at, paid_at, file_path, external_url, created_at, updated_at";
 
 // GET /api/agent/invoices?docketId=... — list a docket's invoice ledger (service role).
 // Fail-open: if migration 014 has not run yet, respond enabled:false (never 500).
@@ -76,6 +76,11 @@ export async function POST(request: Request) {
 
     const amountCad = toAmount(form.get("amount_cad"));
     const issuedAt = toIssuedAt(form.get("issued_at"));
+    const externalUrlRaw = (form.get("external_url") as string | null)?.trim() ?? "";
+    if (externalUrlRaw.length > 0 && !/^https?:\/\//i.test(externalUrlRaw)) {
+      return Response.json({ success: false, error: "Invoice link must start with http(s)://" }, { status: 400 });
+    }
+    const externalUrl = externalUrlRaw.length > 0 ? externalUrlRaw : null;
 
     // Optional file upload (fail-closed validation lives in uploadInvoiceDocument).
     let filePath: string | null = null;
@@ -101,6 +106,7 @@ export async function POST(request: Request) {
         amount_cad: amountCad,
         issued_at: issuedAt,
         file_path: filePath,
+        external_url: externalUrl,
       })
       .select(INVOICE_SELECT)
       .maybeSingle();

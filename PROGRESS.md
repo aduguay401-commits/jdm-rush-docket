@@ -839,3 +839,17 @@ Agent API (requireAdminOrAgent/getCurrentUserRole, service-role, strict whitelis
 UI: app/agent/docket/[id]/ShipmentPanel.tsx (mounted for sold_in_delivery): current stage + progress, forward-only advance dropdown (only later stages) + confirm + note, editable fields incl. separate customer-visible vs internal notes, stage history list. Customer app/account/imports/[id]/vehicle now renders a Delivery Tracking section: stage label + progress bar, vessel/voyage/ports/ETD/ETA, customer_visible_notes, MarineTraffic link — via getShipmentForCustomer which selects CUSTOMER-VISIBLE columns only (internal_notes never in the query; column-grant also blocks it). Graceful when no shipment / table absent.
 
 Status: C implementation complete; verified nm-gate --quick (silent per single-track protocol). Formal start_impl/code_ready + full gate after B closes. Migration 015 is a deliverable (bundle 014+015 into one Adam paste). No intake/nurture/cron/quote changes.
+
+## 2026-07-12 - Invoice external links (QuickBooks) alongside PDF uploads
+
+Adam wants QuickBooks Online invoice links ON invoices, alongside (not replacing) the optional PDF upload. Small additive change off docket main.
+
+- supabase/migrations/016_invoice_external_url.sql (Adam-run-only, running NOW before merge): ALTER TABLE docket_invoices ADD COLUMN IF NOT EXISTS external_url text. Customer-visible by design (docket_invoices already grants row SELECT to the owning customer — no RLS change). Queries stay resilient (added to selects; column present at merge).
+- Agent Add Invoice form: optional "QuickBooks / invoice link" field (type=url), validated http/https server-side like the marine URL, stored in external_url. Also editable on an existing invoice via the status/edit route: PATCH /api/agent/invoices/[id] now accepts status AND/OR external_url (strict whitelist: only those two; http/https validation; empty clears; at least one required). The status/deposit-sync path is unchanged.
+- Agent ledger (InvoiceLedger): renders a "View invoice" link when external_url is set (alongside "View PDF" when a file exists), plus a per-row inline Add link / Edit link editor (input + Save/Cancel) that PATCHes external_url.
+- Customer Invoices page: renders "View invoice" opening external_url in a new tab (target _blank, rel="noopener noreferrer") when set, alongside the Download link. external_url added to CustomerInvoice select/type.
+- PDF upload path unchanged and still optional.
+
+Verification: full docket nm-gate (typecheck + build). Reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.

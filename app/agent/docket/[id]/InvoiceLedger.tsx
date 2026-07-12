@@ -51,8 +51,12 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
   const [addAmount, setAddAmount] = useState("");
   const [addIssued, setAddIssued] = useState("");
   const [addFile, setAddFile] = useState<File | null>(null);
+  const [addExternalUrl, setAddExternalUrl] = useState("");
   const [adding, setAdding] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
+  const [linkDraft, setLinkDraft] = useState("");
+  const [linkSaving, setLinkSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -111,6 +115,30 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
     }
   }
 
+  async function handleSaveLink(invoice: DocketInvoice) {
+    setLinkSaving(true);
+    setError(null);
+    try {
+      const response = await fetch(`/api/agent/invoices/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ external_url: linkDraft.trim() }),
+      });
+      const data = (await response.json()) as { success?: boolean; invoice?: DocketInvoice; error?: string };
+      if (!response.ok || !data.success || !data.invoice) {
+        throw new Error(data.error ?? "Failed to save link.");
+      }
+      const updated = data.invoice;
+      setInvoices((prev) => prev.map((item) => (item.id === invoice.id ? updated : item)));
+      setEditingLinkId(null);
+      setLinkDraft("");
+    } catch (linkError) {
+      setError(linkError instanceof Error ? linkError.message : "Failed to save link.");
+    } finally {
+      setLinkSaving(false);
+    }
+  }
+
   async function handleAdd(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!addLabel.trim()) {
@@ -133,6 +161,9 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
       if (addFile) {
         form.set("file", addFile);
       }
+      if (addExternalUrl.trim()) {
+        form.set("external_url", addExternalUrl.trim());
+      }
       const response = await fetch("/api/agent/invoices", { method: "POST", body: form });
       const data = (await response.json()) as { success?: boolean; invoice?: DocketInvoice; error?: string };
       if (!response.ok || !data.success || !data.invoice) {
@@ -146,6 +177,7 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
       setAddAmount("");
       setAddIssued("");
       setAddFile(null);
+      setAddExternalUrl("");
     } catch (submitError) {
       setAddError(submitError instanceof Error ? submitError.message : "Failed to add invoice.");
     } finally {
@@ -237,6 +269,16 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
               type="file"
             />
           </label>
+          <label className="flex flex-col gap-1 text-xs text-white/60 sm:col-span-2">
+            QuickBooks / invoice link (optional)
+            <input
+              className="rounded-lg border border-white/15 bg-[#111] px-3 py-2 text-sm text-white"
+              onChange={(event) => setAddExternalUrl(event.target.value)}
+              placeholder="https://quickbooks.intuit.com/..."
+              type="url"
+              value={addExternalUrl}
+            />
+          </label>
           {addError ? <p className="text-sm text-red-300 sm:col-span-2">{addError}</p> : null}
           <div className="sm:col-span-2">
             <button
@@ -281,6 +323,16 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
+                    {invoice.external_url ? (
+                      <a
+                        className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
+                        href={invoice.external_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        View invoice
+                      </a>
+                    ) : null}
                     {invoice.file_path ? (
                       <a
                         className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
@@ -309,6 +361,40 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
                         >
                           Void
                         </button>
+                        {editingLinkId === invoice.id ? (
+                          <span className="inline-flex items-center gap-1">
+                            <input
+                              className="w-44 rounded-lg border border-white/15 bg-[#111] px-2 py-1 text-xs text-white"
+                              onChange={(event) => setLinkDraft(event.target.value)}
+                              placeholder="https://..."
+                              type="url"
+                              value={linkDraft}
+                            />
+                            <button
+                              className="rounded-lg border border-[#E55125] px-2 py-1 text-xs font-medium text-[#E55125] disabled:opacity-60"
+                              disabled={linkSaving}
+                              onClick={() => handleSaveLink(invoice)}
+                              type="button"
+                            >
+                              {linkSaving ? "…" : "Save"}
+                            </button>
+                            <button
+                              className="rounded-lg border border-white/15 px-2 py-1 text-xs text-white/60"
+                              onClick={() => { setEditingLinkId(null); setLinkDraft(""); }}
+                              type="button"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/60 transition hover:bg-white/10"
+                            onClick={() => { setEditingLinkId(invoice.id); setLinkDraft(invoice.external_url ?? ""); }}
+                            type="button"
+                          >
+                            {invoice.external_url ? "Edit link" : "Add link"}
+                          </button>
+                        )}
                       </>
                     ) : null}
                   </div>

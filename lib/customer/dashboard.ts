@@ -457,6 +457,7 @@ export type CustomerInvoice = {
   issued_at: string | null;
   paid_at: string | null;
   file_path: string | null;
+  external_url: string | null;
   created_at: string;
 };
 
@@ -468,7 +469,7 @@ export async function getDocketInvoicesForCustomer(docketId: string): Promise<Cu
     const supabase = await createServerAuthClient();
     const { data, error } = await supabase
       .from("docket_invoices")
-      .select("id, invoice_type, label, amount_cad, status, issued_at, paid_at, file_path, created_at")
+      .select("id, invoice_type, label, amount_cad, status, issued_at, paid_at, file_path, external_url, created_at")
       .eq("docket_id", docketId)
       .neq("status", "void")
       .order("created_at", { ascending: false });
