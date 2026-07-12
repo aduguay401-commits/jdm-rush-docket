@@ -746,3 +746,22 @@ New env INTAKE_PROXY_SECRET documented in .env.example (repo gitignores .env*, s
 ### 2026-07-11 - intake-guardrails re-review SHOULD-FIX — three-state IP trust close
 
 Reviewer re-review: everything APPROVED, blocker closed; one residual SHOULD-FIX. Previously, when INTAKE_PROXY_SECRET was set but a request carried a junk x-intake-client-ip without a valid secret, getIntakeClientIp returned null and skipped L2 — so once the secret was live a direct attacker could disable L2 for themselves by sending any forwarded IP. Closed with a three-state resolution: (1) secret env UNSET + forwarded header present => null (bootstrap fail-open, unchanged); (2) secret SET + header secret VALID => trust the forwarded IP; (3) secret SET + header secret INVALID/MISSING while a forwarded header is present => IGNORE the forwarded header and key L2 on the direct caller's x-real-ip (a direct attacker can no longer opt out), plus a loud server warning (logs header presence only, no PII/secret) since it is an attack probe or a proxy misconfig. Accepted trade documented in-code: mismatched secrets across our own two apps would key legit proxied traffic on the shared egress IP and could collectively 429 at volume — detectable via the warning, verified live at deploy. Docket-only change; site unchanged. Re-gated.
+
+## 2026-07-12 - Agent dashboard funnel split: working leads vs quote pool
+
+Adam's strategy call: the agent dashboard mixed two funnels. Exact-quote leads with no engagement are a nurture audience (already served by the live nurture engine), not working leads. The default dashboard now shows only the sales funnel; unengaged quote leads collapse into a quieter Quote Pool band with automatic behavior-based promotion. Display/classification only — no schema, endpoints, cron, or nurture changes.
+
+Classification (lib/dockets/dashboardDisplay.ts):
+- New isWorkingLead(docket): working if ANY of customer_id set, lead_source === "find_my_jdm", is_flagged, status !== "new", or hasCustomerEngagement (any answered marcus_question or any customer_question). Everything else = quote pool.
+- Factored hasCustomerEngagement out of getDocketTemperature (the Warm signal) so temperature and working-lead classification share one definition (getDocketTemperature refactored to call it — behavior identical).
+
+Dashboard (app/agent/dashboard/page.tsx):
+- DEFAULT view = working leads only. Split active dockets into workingDockets / poolDockets by isWorkingLead. Triage chips + counts, temperature badges, person-grouping, pins, Show Archived all operate on the working set exactly as before.
+- Removed the lead-view tab row entirely (All/Garage/Quote/Find) — redundant under the split; Adam asked for decluttering.
+- New QuotePoolBand below the working list: a single collapsed, visually quieter band — "Quote Pool — N leads · X became accounts · Y this month" (N = pool size; X = quote-origin non-find-my-jdm dockets with customer_id = conversions; Y = pool dockets created in the last 30 days), all client-side from loaded data. Collapsed on every load (unpersisted state). Expanded, it renders pool dockets with the SAME DocketCard + groupDocketsForDisplay grouping; pin/archive work from pool cards.
+- PROMOTION is automatic + computed: pinning/replying/status-change/account-claim flips isWorkingLead, so the docket moves into the working list on the next computation (a pin from a pool card promotes it live via the optimistic state update). No stored state, no migration.
+- Partition preserved: working + pool cover every active docket; archived stays its own view; pool expand shows everything in it — no docket is unreachable.
+
+Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.

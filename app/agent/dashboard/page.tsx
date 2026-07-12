@@ -11,16 +11,11 @@ import {
   getProgressBarStage,
   getStatusDisplay,
   groupDocketsForDisplay,
+  isWorkingLead,
   sortDocketsByUrgency,
 } from "@/lib/dockets/dashboardDisplay";
-import type { DocketTemperature, DocketTriageBucket } from "@/lib/dockets/dashboardDisplay";
-import {
-  countLeadViews,
-  getLeadOriginLabel,
-  isInLeadView,
-  LEAD_VIEWS,
-} from "@/lib/dockets/leadSource";
-import type { LeadView } from "@/lib/dockets/leadSource";
+import type { DocketGroup, DocketTemperature, DocketTriageBucket } from "@/lib/dockets/dashboardDisplay";
+import { getLeadOriginLabel } from "@/lib/dockets/leadSource";
 import { createBrowserSupabaseClient } from "@/lib/supabase/client";
 
 type Docket = {
@@ -200,10 +195,11 @@ function getGroupTemperature(members: Docket[]): DocketTemperature {
   return "cold";
 }
 
-// pinned members first, then urgency order — the same convention as the flat list.
-function orderGroupMembers(members: Docket[]) {
-  const byUrgency = sortDocketsByUrgency(members);
-  return [...byUrgency.filter((member) => member.is_flagged), ...byUrgency.filter((member) => !member.is_flagged)];
+// pinned first, then urgency order — the flat-list convention, reused for the
+// working list, the quote pool, and within a group.
+function orderDocketsPinnedFirst(list: Docket[]) {
+  const byUrgency = sortDocketsByUrgency(list);
+  return [...byUrgency.filter((docket) => docket.is_flagged), ...byUrgency.filter((docket) => !docket.is_flagged)];
 }
 
 function LeadOriginBadge({ docket }: { docket: Pick<Docket, "customer_id" | "lead_source"> }) {
@@ -451,7 +447,7 @@ function ArchivedDocketCard({
 function GroupCard({ members, renderMember }: { members: Docket[]; renderMember: (docket: Docket) => ReactNode }) {
   const [expanded, setExpanded] = useState(false);
 
-  const orderedMembers = orderGroupMembers(members);
+  const orderedMembers = orderDocketsPinnedFirst(members);
   const summaryMember = sortDocketsByUrgency(members)[0];
   const summaryActivity = getLatestActivity(summaryMember);
   const summaryStatus = getStatusDisplay(summaryMember, summaryActivity);
@@ -526,6 +522,67 @@ function GroupCard({ members, renderMember }: { members: Docket[]; renderMember:
   );
 }
 
+// The quote pool — a single, visually quieter collapsed band below the working
+// list. Collapsed on every load; expanded, it renders the pool dockets with the
+// exact same card + grouping as the working list (pin/archive still work, which
+// is how a pool docket promotes itself into the working funnel).
+function QuotePoolBand({
+  stats,
+  groups,
+  expanded,
+  onToggle,
+  renderMember,
+}: {
+  stats: { poolCount: number; conversions: number; last30: number };
+  groups: DocketGroup<Docket>[];
+  expanded: boolean;
+  onToggle: () => void;
+  renderMember: (docket: Docket) => ReactNode;
+}) {
+  return (
+    <section className="mt-8 overflow-hidden rounded-xl border border-white/10 bg-[#101010]">
+      <button
+        aria-expanded={expanded}
+        className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.02]"
+        onClick={onToggle}
+        type="button"
+      >
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-white/70">Quote Pool</h3>
+          <p className="mt-1 text-xs text-white/45">
+            {stats.poolCount} lead{stats.poolCount === 1 ? "" : "s"} · {stats.conversions} became account
+            {stats.conversions === 1 ? "" : "s"} · {stats.last30} this month
+          </p>
+          <p className="mt-1 text-[11px] text-white/30">
+            Unengaged quote leads, nurtured automatically. They promote into your working list the moment they engage.
+          </p>
+        </div>
+        <span
+          aria-hidden="true"
+          className={`shrink-0 text-lg text-white/40 transition-transform ${expanded ? "rotate-180" : ""}`}
+        >
+          v
+        </span>
+      </button>
+      {expanded ? (
+        groups.length === 0 ? (
+          <div className="border-t border-white/10 p-5 text-center text-sm text-white/45">The quote pool is empty.</div>
+        ) : (
+          <div className="grid gap-4 border-t border-white/10 bg-white/[0.01] p-4">
+            {groups.map((group) =>
+              group.dockets.length >= 2 ? (
+                <GroupCard key={group.key} members={group.dockets} renderMember={renderMember} />
+              ) : (
+                renderMember(group.dockets[0])
+              ),
+            )}
+          </div>
+        )
+      ) : null}
+    </section>
+  );
+}
+
 async function getAgentProfile(userId: string, supabase: ReturnType<typeof createBrowserSupabaseClient>) {
   const byId = await supabase
     .from("profiles")
@@ -553,8 +610,8 @@ export default function AgentDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [role, setRole] = useState<string | null>(null);
   const [agentDisplayName, setAgentDisplayName] = useState("there");
-  const [activeLeadView, setActiveLeadView] = useState<LeadView>("all");
   const [activeTriage, setActiveTriage] = useState<TriageChipId>("needs_you");
+  const [poolExpanded, setPoolExpanded] = useState(false);
   const [dashboardSuccessMessage, setDashboardSuccessMessage] = useState<string | null>(null);
   const [lastRefreshedAt, setLastRefreshedAt] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -712,40 +769,51 @@ export default function AgentDashboardPage() {
     };
   }, [loadDashboard]);
 
-  const leadViewCounts = useMemo(() => countLeadViews(dockets), [dockets]);
+  // The funnel split: working leads (the sales funnel) vs the quote pool.
+  const workingDockets = useMemo(() => dockets.filter((docket) => isWorkingLead(docket)), [dockets]);
+  const poolDockets = useMemo(() => dockets.filter((docket) => !isWorkingLead(docket)), [dockets]);
 
-  const leadViewDockets = useMemo(
-    () => dockets.filter((docket) => isInLeadView(docket, activeLeadView)),
-    [activeLeadView, dockets],
-  );
-
+  // Triage chip counts scope to WORKING leads only — the pool is a separate funnel.
   const triageCounts = useMemo(() => {
     const counts: Record<TriageChipId, number> = {
-      all: leadViewDockets.length,
+      all: workingDockets.length,
       needs_you: 0,
       working: 0,
       cold: 0,
     };
 
-    for (const docket of leadViewDockets) {
+    for (const docket of workingDockets) {
       counts[getDocketTriageBucket(docket)] += 1;
     }
 
     return counts;
-  }, [leadViewDockets]);
+  }, [workingDockets]);
 
-  const visibleDockets = useMemo(() => {
+  const visibleWorkingGroups = useMemo(() => {
     const scoped =
       activeTriage === "all"
-        ? leadViewDockets
-        : leadViewDockets.filter((docket) => getDocketTriageBucket(docket) === activeTriage);
-    const sorted = sortDocketsByUrgency(scoped);
-    const pinned = sorted.filter((docket) => docket.is_flagged);
-    const unpinned = sorted.filter((docket) => !docket.is_flagged);
-    return [...pinned, ...unpinned];
-  }, [activeTriage, leadViewDockets]);
+        ? workingDockets
+        : workingDockets.filter((docket) => getDocketTriageBucket(docket) === activeTriage);
+    return groupDocketsForDisplay(orderDocketsPinnedFirst(scoped));
+  }, [activeTriage, workingDockets]);
 
-  const visibleGroups = useMemo(() => groupDocketsForDisplay(visibleDockets), [visibleDockets]);
+  const poolGroups = useMemo(() => groupDocketsForDisplay(orderDocketsPinnedFirst(poolDockets)), [poolDockets]);
+
+  const poolStats = useMemo(() => {
+    const now = Date.now();
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    // Conversions: quote-origin (non-Find-My-JDM) dockets that claimed an account.
+    // They are working leads now, but they are the pool's success metric.
+    const conversions = dockets.filter(
+      (docket) => docket.lead_source !== "find_my_jdm" && Boolean(docket.customer_id),
+    ).length;
+    const last30 = poolDockets.filter((docket) => {
+      const created = new Date(docket.created_at).getTime();
+      return Number.isFinite(created) && now - created <= THIRTY_DAYS_MS;
+    }).length;
+    return { poolCount: poolDockets.length, conversions, last30 };
+  }, [dockets, poolDockets]);
+
   const archivedGroups = useMemo(() => groupDocketsForDisplay(archivedDockets), [archivedDockets]);
 
   async function patchDocket(docketId: string, body: Record<string, unknown>) {
@@ -935,31 +1003,6 @@ export default function AgentDashboardPage() {
               </div>
             ) : (
               <>
-                <section className="mb-5 grid gap-2 rounded-xl border border-white/10 bg-[#141414] p-1 sm:grid-cols-4">
-                  {LEAD_VIEWS.map((view) => {
-                    const isActiveView = activeLeadView === view.id;
-                    return (
-                      <button
-                        aria-pressed={isActiveView}
-                        className={`rounded-lg px-4 py-3 text-left transition ${
-                          isActiveView ? "bg-[#E55125] text-white" : "text-white/70 hover:bg-white/5 hover:text-white"
-                        }`}
-                        key={view.id}
-                        onClick={() => setActiveLeadView(view.id)}
-                        type="button"
-                      >
-                        <span className="flex items-center justify-between gap-3">
-                          <span className="text-sm font-semibold">{view.label}</span>
-                          <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs font-semibold">
-                            {leadViewCounts[view.id]}
-                          </span>
-                        </span>
-                        <span className="mt-1 block text-xs opacity-75">{view.description}</span>
-                      </button>
-                    );
-                  })}
-                </section>
-
                 <section className="mb-6 flex flex-wrap gap-2">
                   {TRIAGE_CHIPS.map((chip) => {
                     const isActiveChip = activeTriage === chip.id;
@@ -1002,19 +1045,29 @@ export default function AgentDashboardPage() {
                   </p>
                 </section>
                 <div className="grid gap-4">
-                  {visibleGroups.map((group) =>
+                  {visibleWorkingGroups.map((group) =>
                     group.dockets.length >= 2 ? (
                       <GroupCard key={group.key} members={group.dockets} renderMember={renderActiveMember} />
                     ) : (
                       renderActiveMember(group.dockets[0])
                     ),
                   )}
-                  {visibleGroups.length === 0 ? (
+                  {visibleWorkingGroups.length === 0 ? (
                     <div className="rounded-xl border border-white/10 bg-[#131313] p-6 text-center text-sm text-white/60">
-                      No dockets match these filters.
+                      No working leads match these filters.
                     </div>
                   ) : null}
                 </div>
+
+                {poolStats.poolCount > 0 ? (
+                  <QuotePoolBand
+                    expanded={poolExpanded}
+                    groups={poolGroups}
+                    onToggle={() => setPoolExpanded((previous) => !previous)}
+                    renderMember={renderActiveMember}
+                    stats={poolStats}
+                  />
+                ) : null}
               </>
             )}
           </>
