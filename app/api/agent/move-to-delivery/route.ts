@@ -91,6 +91,28 @@ export async function POST(request: Request) {
       console.error("[MoveToDelivery] status history insert failed:", historyError.message);
     }
 
+    // Create the delivery shipment (fail-open + idempotent). A missing shipments
+    // table or any error must NOT block the already-committed status transition.
+    try {
+      const { data: existingShipment, error: existingError } = await supabase
+        .from("shipments")
+        .select("id")
+        .eq("docket_id", docketId)
+        .maybeSingle<{ id: string }>();
+      if (existingError) {
+        console.warn("[MoveToDelivery] shipments unavailable — skipping auto-create:", existingError.message);
+      } else if (!existingShipment) {
+        const { error: shipmentError } = await supabase
+          .from("shipments")
+          .insert({ docket_id: docketId, current_stage: "pre-shipment" });
+        if (shipmentError && !shipmentError.message.toLowerCase().includes("duplicate")) {
+          console.warn("[MoveToDelivery] shipment auto-create failed:", shipmentError.message);
+        }
+      }
+    } catch (shipmentCreateError) {
+      console.warn("[MoveToDelivery] shipment auto-create skipped:", shipmentCreateError);
+    }
+
     return Response.json({ success: true, status: "sold_in_delivery" });
   } catch {
     return Response.json({ success: false, error: "Invalid request body" }, { status: 400 });

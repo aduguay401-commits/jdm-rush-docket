@@ -823,3 +823,19 @@ UI: app/agent/docket/[id]/InvoiceLedger.tsx (client component mounted in the Pur
 Constraints: no quote/intake/nurture/cron changes; page never 500s if 014 unrun.
 
 Status: B implementation complete; verified with nm-gate --quick (silent per single-track state protocol — formal start_impl/code_ready emits after A closes). Migration 014 is a deliverable for Adam (bundle with chain C SQL).
+
+## 2026-07-12 - chain C: delivery tracking (shipments + stage history) [stacked on B]
+
+Phase 3 (Stages 3.1 + 3.2) per the roadmap. Manual-first (D9), no automation/MarineTraffic scraping. Stacked on feature/vault-invoices (restacked onto A head 876192c after the A #2 fix). Fail-open on missing tables everywhere; no email this chain (roadmap 3.x has none).
+
+Data: supabase/migrations/015_shipments.sql (Adam-run-only, bundle with 014) — shipments (roadmap shape: vessel/voyage/BL/container/ports/ETD-ETA estimated+actual, current_stage default pre-shipment, stage_updated_at, customer_visible_notes, internal_notes, marine_traffic_url) + UNIQUE(docket_id) (one per docket, also DB-level Move-to-Delivery idempotency) + shipment_stage_history (old->new/who/when/notes). RLS: service_role ALL; customer SELECT own (mirror-009 EXISTS); admin_agent read-all (profiles id=auth.uid). COLUMN SEPARATION: RLS is row-level only, so authenticated is GRANTed SELECT on every column EXCEPT internal_notes — internal notes are unreadable by customers even via a direct query. History table = service_role only. Self-contained/idempotent/SQL-editor-safe.
+
+lib/shipments/stages.ts (client-safe 10-stage sequence pre-shipment..delivered + forward-only helpers). lib/shipments/server.ts (customer vs agent column lists, editable whitelist, isMissingShipmentsTable fail-open).
+
+Move-to-Delivery wiring (app/api/agent/move-to-delivery): after the compare-and-set status transition, ALSO auto-creates the shipment row (current_stage pre-shipment) FAIL-OPEN + idempotent (checks existing + UNIQUE index + duplicate swallow); a missing shipments table or any error is logged and never blocks the transition A already ships.
+
+Agent API (requireAdminOrAgent/getCurrentUserRole, service-role, strict whitelist): GET /api/agent/shipments?docketId (shipment + history; enabled:false when table absent); PATCH /api/agent/shipments/[id] (edit whitelisted fields only, never current_stage; marine_traffic_url http-validated); POST /api/agent/shipments/[id]/advance (FORWARD-ONLY guard via stage index + compare-and-set on current_stage so concurrent advances are safe; writes shipment_stage_history with agent email + optional customer-visible note).
+
+UI: app/agent/docket/[id]/ShipmentPanel.tsx (mounted for sold_in_delivery): current stage + progress, forward-only advance dropdown (only later stages) + confirm + note, editable fields incl. separate customer-visible vs internal notes, stage history list. Customer app/account/imports/[id]/vehicle now renders a Delivery Tracking section: stage label + progress bar, vessel/voyage/ports/ETD/ETA, customer_visible_notes, MarineTraffic link — via getShipmentForCustomer which selects CUSTOMER-VISIBLE columns only (internal_notes never in the query; column-grant also blocks it). Graceful when no shipment / table absent.
+
+Status: C implementation complete; verified nm-gate --quick (silent per single-track protocol). Formal start_impl/code_ready + full gate after B closes. Migration 015 is a deliverable (bundle 014+015 into one Adam paste). No intake/nurture/cron/quote changes.
