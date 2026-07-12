@@ -77,6 +77,7 @@ const STATUS_LABELS: Record<string, string> = {
   research_in_progress: "Research In Progress",
   report_sent: "Report Sent",
   decision_made: "Decision Made",
+  sold_in_delivery: "In Delivery",
   cleared: "Cleared",
   lost: "Lost",
   paused: "Paused",
@@ -108,6 +109,10 @@ const STATUS_LINE_CONTENT: Record<string, { text: string; className: string }> =
     text: "🏎️ Customer approved — handoff to Adam",
     className: "font-semibold text-[#4ade80]",
   },
+  sold_in_delivery: {
+    text: "🚚 Purchase complete — in delivery",
+    className: "font-semibold text-[#38bdf8]",
+  },
   cleared: {
     text: "✅ Deal cleared",
     className: "font-medium text-[#4ade80]",
@@ -133,6 +138,7 @@ const PROGRESS_STAGE_INDEX_BY_STATUS: Record<string, number> = {
   research_in_progress: 2,
   report_sent: 3,
   decision_made: 4,
+  sold_in_delivery: 5,
   cleared: 5,
 };
 
@@ -143,6 +149,7 @@ const CURRENT_STAGE_STYLES: Record<string, string> = {
   research_in_progress: "border-[#ffb197] bg-[#E55125] shadow-[0_0_12px_rgba(229,81,37,0.6)]",
   report_sent: "border-blue-200 bg-blue-400 shadow-[0_0_12px_rgba(96,165,250,0.55)]",
   decision_made: "border-[#86efac] bg-[#22c55e] shadow-[0_0_12px_rgba(34,197,94,0.55)]",
+  sold_in_delivery: "border-sky-200 bg-sky-400 shadow-[0_0_12px_rgba(56,189,248,0.6)]",
   cleared: "border-emerald-200 bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.65)]",
 };
 
@@ -155,6 +162,7 @@ const STATUS_STRIPE_COLORS: Record<string, string> = {
   research_in_progress: "#fb923c",
   report_sent: "rgba(168,162,158,0.5)",
   decision_made: "#4ade80",
+  sold_in_delivery: "#38bdf8",
   cleared: "#4ade80",
   unresponsive: "#fbbf24",
   lost: "#525252",
@@ -544,6 +552,10 @@ function getDocketUrgencyPriority({ docket, latestActivity }: DocketWithLatestAc
 
   if (status === "decision_made") {
     return 4;
+  }
+
+  if (status === "sold_in_delivery") {
+    return 5;
   }
 
   if (status === "questions_sent" || status === "report_sent" || status === "answers_received") {

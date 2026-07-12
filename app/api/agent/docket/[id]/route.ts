@@ -6,6 +6,7 @@ export const runtime = "nodejs";
 type PatchPayload = {
   is_archived?: boolean;
   is_flagged?: boolean;
+  deposit_paid?: boolean;
 };
 
 // Agent-side docket mutations. The admin PATCH route restricts agents to
@@ -31,6 +32,10 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       updates.is_flagged = payload.is_flagged;
     }
 
+    if (typeof payload.deposit_paid === "boolean") {
+      updates.deposit_paid = payload.deposit_paid;
+    }
+
     if (Object.keys(updates).length === 0) {
       return Response.json({ success: false, error: "No valid fields provided" }, { status: 400 });
     }
@@ -41,8 +46,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
       .from("dockets")
       .update(updates)
       .eq("id", id)
-      .select("id, is_archived, archived_at, is_flagged")
-      .maybeSingle<{ id: string; is_archived: boolean | null; archived_at: string | null; is_flagged: boolean | null }>();
+      .select("id, is_archived, archived_at, is_flagged, deposit_paid")
+      .maybeSingle<{ id: string; is_archived: boolean | null; archived_at: string | null; is_flagged: boolean | null; deposit_paid: boolean | null }>();
 
     if (error) {
       return Response.json({ success: false, error: error.message }, { status: 500 });

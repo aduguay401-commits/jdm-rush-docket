@@ -765,3 +765,25 @@ Dashboard (app/agent/dashboard/page.tsx):
 Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+## 2026-07-12 - Stage 2.5 Purchase Close-Out gate + sold_in_delivery status
+
+First real customer (Dennis) signed AND paid, but the roadmap's Stage 2.5 gate UI was never built. Built the two-part close-out gate and the new sold_in_delivery status, wired across every status map (agent + customer + admin) so nothing renders raw snake_case. No schema changes (agreement_signed + deposit_paid columns already exist; status is a text column). Task A of the purchase-closeout chain (B=vault invoices, C=delivery tracking not built here).
+
+Agent close-out gate (app/agent/docket/[id]/page.tsx):
+- New "Purchase Close-Out" section, visible once status is decision_made or later (isStatusAtOrAfter, with sold_in_delivery added to STATUS_ORDER after decision_made). Two indicators — Agreement signed (from agreement_signed) and Deposit paid (from deposit_paid) — each showing Done/Pending.
+- "Mark Deposit Paid" with an undo ("Unmark Deposit Paid") via the existing agent PATCH route (app/api/agent/docket/[id]/route.ts) — whitelist extended with ONLY deposit_paid (kept the strict explicit-key discipline). deposit_paid added to the detail Docket type + select.
+- "Move to Delivery" renders only when both gates are green; posts to a NEW dedicated endpoint app/api/agent/move-to-delivery/route.ts (mirrors the /api/agent/proceed pattern: requireAdminOrAgent, sets status=sold_in_delivery, inserts docket_status_history changed_by=agent) with a SERVER-SIDE re-check that both booleans are true (409 otherwise) so the transition can't be forced past the UI. Status changes stay out of the PATCH whitelist per the brief.
+
+New sold_in_delivery status added everywhere it renders:
+- lib/dockets/dashboardDisplay.ts: STATUS_LABELS ("In Delivery"), STATUS_LINE_CONTENT (distinct "🚚 Purchase complete — in delivery"), PROGRESS_STAGE_INDEX_BY_STATUS (index 5, reuses the final pipeline dot — no new visual stage, so the 6-col grid + all stage-count constants are untouched), CURRENT_STAGE_STYLES (sky), STATUS_STRIPE_COLORS (#38bdf8), and getDocketUrgencyPriority -> priority 5 = Working bucket (distinct "In delivery" line). NOT added to DIMMED_STATUS_SET or CLOSED_STATUS_PRIORITY (it is a live positive state).
+- app/agent/dashboard/page.tsx + app/admin/dashboard/AdminDashboardClient.tsx (formatStatus switch) + lib/dockets/activityFeed.ts (STATUS_LABELS): label maps updated so no raw snake_case leaks.
+- Customer side (positive wording): lib/customer/homeBaseStatusCopy.ts ("PURCHASE COMPLETE / Your JDM is on its way"), lib/customer/dashboard.ts getCardStatus (explicit "Purchase complete — moving to delivery" branch), app/report/[token]/ReportClient.tsx (recommendation gate now also passes sold_in_delivery).
+
+Follow-up cron safety (CRITICAL): app/api/cron/follow-up/route.ts now cancels/skips any sequence for a sold_in_delivery docket AND for any docket with agreement_signed=true (a committed customer is never auto-sequenced), on top of the existing archived/cleared/lost skips. agreement_signed added to the cron docket select + DocketRow type.
+
+Triage: sold_in_delivery is a working lead (status past new) and buckets as Working with the distinct "In delivery" status line; chip partition stays exact.
+
+Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA.

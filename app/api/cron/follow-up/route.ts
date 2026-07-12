@@ -24,6 +24,7 @@ type FollowUpSequenceRow = {
 type DocketRow = {
   id: string
   status: string | null
+  agreement_signed: boolean | null
   is_archived: boolean | null
   is_flagged: boolean | null
   customer_first_name: string | null
@@ -377,7 +378,7 @@ export async function POST(request: Request) {
   const { data: dockets, error: docketsError } = await supabase
     .from('dockets')
     .select(
-      'id, status, is_archived, is_flagged, customer_first_name, customer_email, report_url_token, questions_url_token, vehicle_year, vehicle_make, vehicle_model'
+      'id, status, agreement_signed, is_archived, is_flagged, customer_first_name, customer_email, report_url_token, questions_url_token, vehicle_year, vehicle_make, vehicle_model'
     )
     .in('id', docketIds)
 
@@ -404,7 +405,15 @@ export async function POST(request: Request) {
     }
 
     const docketStatus = nonEmpty(docket.status)?.toLowerCase() ?? null
-    if (docket.is_archived || docketStatus === 'cleared' || docketStatus === 'lost') {
+    // Terminal / committed states never receive automated follow-up sequences.
+    // A signed agreement (any status) also opts the docket out — they have committed.
+    if (
+      docket.is_archived ||
+      docketStatus === 'cleared' ||
+      docketStatus === 'lost' ||
+      docketStatus === 'sold_in_delivery' ||
+      docket.agreement_signed === true
+    ) {
       const { error } = await cancelSequence(supabase, sequence.id)
       if (!error) {
         processed += 1

@@ -910,7 +910,7 @@ export function ReportClient({
           ? docket.selected_private_dealer_option
           : null;
 
-    if (docket.status !== "decision_made") {
+    if (docket.status !== "decision_made" && docket.status !== "sold_in_delivery") {
       return null;
     }
 
