@@ -930,6 +930,8 @@ export default function AgentDocketDetailPage({
     currentStatus === "decision_made" || currentStatus === "sold_in_delivery" || currentStatus === "cleared";
   const bothGatesGreen = agreementSigned && depositPaid;
   const inDelivery = currentStatus === "sold_in_delivery";
+  const isCleared = currentStatus === "cleared";
+  const canMoveToDelivery = currentStatus === "decision_made" && bothGatesGreen;
   const auctionHasMeaningfulData = hasAuctionMeaningfulData({
     hammerPriceLowJpy,
     hammerPriceHighJpy,
@@ -2773,19 +2775,25 @@ export default function AgentDocketDetailPage({
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap items-center gap-3">
-                  <button
-                    className="inline-flex rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={depositBusy || inDelivery}
-                    onClick={handleToggleDepositPaid}
-                    type="button"
-                  >
-                    {depositBusy ? "Saving..." : depositPaid ? "Unmark Deposit Paid" : "Mark Deposit Paid"}
-                  </button>
+                  {currentStatus === "decision_made" ? (
+                    <button
+                      className="inline-flex rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={depositBusy}
+                      onClick={handleToggleDepositPaid}
+                      type="button"
+                    >
+                      {depositBusy ? "Saving..." : depositPaid ? "Unmark Deposit Paid" : "Mark Deposit Paid"}
+                    </button>
+                  ) : null}
                   {inDelivery ? (
                     <span className="inline-flex items-center gap-2 rounded-lg border border-[#38bdf8]/40 bg-[#38bdf8]/10 px-4 py-2 text-sm font-semibold text-[#7dd3fc]">
                       🚚 In delivery
                     </span>
-                  ) : bothGatesGreen ? (
+                  ) : isCleared ? (
+                    <span className="inline-flex items-center gap-2 rounded-lg border border-[#22c55e]/40 bg-[#22c55e]/10 px-4 py-2 text-sm font-semibold text-[#4ade80]">
+                      ✅ Purchase complete
+                    </span>
+                  ) : canMoveToDelivery ? (
                     <button
                       className="inline-flex rounded-lg bg-[#E55125] px-4 py-2 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
                       disabled={deliveryBusy}

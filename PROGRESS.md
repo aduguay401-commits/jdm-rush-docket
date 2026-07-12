@@ -797,3 +797,10 @@ Reviewer bounced chain A (full-auto discipline held). Blocker + 4 cheap should-f
 - (3) detail page: the deposit Mark/Unmark toggle is disabled once status is sold_in_delivery (gate satisfied — frozen).
 - (4) app/api/agent/move-to-delivery: an already-sold docket now returns 409 (double-submit guard) instead of a success that could race a duplicate history row.
 Re-gated.
+
+### 2026-07-12 - purchase-closeout review fix #2 (compare-and-set transition)
+
+Reviewer re-review: 4 of 5 prior fixes closed; 1 NEW blocker from the showCloseOut narrowing — a cleared docket with both gates green still rendered the active Move to Delivery button, and the endpoint had no source-status guard, so clicking (or a direct API call on any gates-green status like lost/paused) could move it to sold_in_delivery — a backwards transition with no way back. Fixed atomically:
+- app/api/agent/move-to-delivery: the transition is now a COMPARE-AND-SET — update status to sold_in_delivery WHERE id AND status='decision_made' AND agreement_signed AND deposit_paid, then branch on affected rows. Zero rows => 409 with NO history write (wrong source status, gate not green, already sold, or concurrent loser); the docket_status_history row is written only after a confirmed 1-row update. So only decision_made can transition, cleared/lost/paused are rejected server-side, and two concurrent submits can never double-write history (closes the earlier double-submit nit in the same move).
+- Detail page: Move to Delivery button now renders only for decision_made + both gates green (canMoveToDelivery); on cleared the close-out shows a read-only completed summary (gates as done, "✅ Purchase complete", no action button, no deposit toggle); on sold_in_delivery the frozen in-delivery state stays.
+Re-gated. B and C restacked onto the new A head.

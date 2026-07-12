@@ -47,36 +47,41 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
     }
 
-    // Server-side gate: both conditions must be confirmed.
-    if (!current.agreement_signed || !current.deposit_paid) {
-      return Response.json(
-        {
-          success: false,
-          error: "Both the signed agreement and the deposit must be confirmed before moving to delivery.",
-        },
-        { status: 409 },
-      );
-    }
-
-    // Double-submit guard: already in delivery — do not write a duplicate history row.
-    if (current.status === "sold_in_delivery") {
-      return Response.json({ success: false, error: "This docket is already in delivery." }, { status: 409 });
-    }
-
-    const oldStatus = current.status;
-
-    const { error: updateError } = await supabase
+    // Compare-and-set: this transition is valid ONLY from decision_made with both
+    // gates green. Folding every condition into the UPDATE WHERE makes it atomic —
+    // cleared/lost/paused (a backwards move) and already-sold are rejected server-
+    // side, and two concurrent submits can never both match (one wins, the other
+    // gets zero rows). History is written only after a confirmed 1-row update.
+    const { data: moved, error: updateError } = await supabase
       .from("dockets")
       .update({ status: "sold_in_delivery" })
-      .eq("id", docketId);
+      .eq("id", docketId)
+      .eq("status", "decision_made")
+      .eq("agreement_signed", true)
+      .eq("deposit_paid", true)
+      .select("id");
 
     if (updateError) {
       return Response.json({ success: false, error: updateError.message }, { status: 500 });
     }
 
+    if (!moved || moved.length === 0) {
+      // Nothing matched: wrong source status (only Decision Made may transition), a
+      // gate not confirmed, already in delivery, or a concurrent loser. No history.
+      return Response.json(
+        {
+          success: false,
+          error:
+            "This docket can only move to delivery from Decision Made with the signed agreement and deposit both confirmed.",
+        },
+        { status: 409 },
+      );
+    }
+
+    // Exactly one row transitioned — write the history row exactly once.
     const { error: historyError } = await supabase.from("docket_status_history").insert({
       docket_id: docketId,
-      old_status: oldStatus,
+      old_status: "decision_made",
       new_status: "sold_in_delivery",
       changed_by: "agent",
     });
