@@ -635,14 +635,7 @@ export function getDocketTemperature(docket: DocketTemperatureInput): DocketTemp
     return "hot";
   }
 
-  const hasCustomerAnswer = (docket.marcus_questions ?? []).some(
-    (question) => Boolean(question.answer_text?.trim()) && Boolean(question.answered_at),
-  );
-  const hasCustomerQuestion = (docket.customer_questions ?? []).some(
-    (question) => Boolean(question.question_text?.trim()),
-  );
-
-  if (hasCustomerAnswer || hasCustomerQuestion) {
+  if (hasCustomerEngagement(docket)) {
     return "warm";
   }
 
@@ -704,4 +697,44 @@ export function groupDocketsForDisplay<TDocket extends DocketGroupKeyInput & { i
   }
 
   return groups;
+}
+
+// Any customer-initiated engagement ever: a customer answer to a marcus question,
+// or a customer-submitted question. Same signal that makes a docket "warm".
+export function hasCustomerEngagement(docket: DocketTemperatureInput): boolean {
+  const hasCustomerAnswer = (docket.marcus_questions ?? []).some(
+    (question) => Boolean(question.answer_text?.trim()) && Boolean(question.answered_at),
+  );
+  const hasCustomerQuestion = (docket.customer_questions ?? []).some(
+    (question) => Boolean(question.question_text?.trim()),
+  );
+  return hasCustomerAnswer || hasCustomerQuestion;
+}
+
+export type WorkingLeadInput = DocketTemperatureInput & {
+  lead_source?: string | null;
+  is_flagged?: boolean | null;
+  status?: string | null;
+};
+
+// WORKING LEAD (the sales funnel) vs QUOTE POOL (the nurture audience). A docket is
+// a working lead if the customer has a My Garage account, came via Find My JDM, has
+// ever engaged, is pinned, or has moved past status "new" (an agent already worked
+// it). Everything else — quote-origin/legacy, status new, no account, no engagement,
+// unpinned — is the quote pool. Promotion is automatic: the instant a pool docket
+// gains any of these signals it is a working lead on the next computation.
+export function isWorkingLead(docket: WorkingLeadInput): boolean {
+  if (docket.customer_id) {
+    return true;
+  }
+  if (docket.lead_source === "find_my_jdm") {
+    return true;
+  }
+  if (docket.is_flagged) {
+    return true;
+  }
+  if ((docket.status ?? "new") !== "new") {
+    return true;
+  }
+  return hasCustomerEngagement(docket);
 }
