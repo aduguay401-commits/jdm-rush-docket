@@ -787,3 +787,13 @@ Triage: sold_in_delivery is a working lead (status past new) and buckets as Work
 Verification: docket nm-gate on the branch (typecheck + build). Reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+### 2026-07-12 - purchase-closeout review fix (blocker + 4 should-fixes)
+
+Reviewer bounced chain A (full-auto discipline held). Blocker + 4 cheap should-fixes, all in one commit:
+- BLOCKER: app/api/admin/dockets/[id]/customer-info/route.ts LOCKED_DESTINATION_STATUSES now includes sold_in_delivery, so destination edits stay frozen through delivery (they were briefly un-freezing after decision_made and re-freezing at cleared).
+- (1) app/api/admin/remind/[id]/route.ts: a sold_in_delivery reminder branch (kind "delivery") with delivery-appropriate copy instead of the generic reply fallback.
+- (2) detail page showCloseOut now renders only for decision_made / sold_in_delivery / cleared (not lost/paused/unresponsive, which isStatusAtOrAfter had been letting through).
+- (3) detail page: the deposit Mark/Unmark toggle is disabled once status is sold_in_delivery (gate satisfied — frozen).
+- (4) app/api/agent/move-to-delivery: an already-sold docket now returns 409 (double-submit guard) instead of a success that could race a duplicate history row.
+Re-gated.

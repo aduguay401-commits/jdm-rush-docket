@@ -10,7 +10,7 @@ import {
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 
 type ReminderCta = {
-  kind: "questions" | "report" | "purchase" | "reply";
+  kind: "questions" | "report" | "purchase" | "reply" | "delivery";
   message: string;
   buttonLabel: string | null;
   buttonUrl: string | null;
@@ -51,6 +51,16 @@ function buildReminderCta({
       message: "You are almost there! Complete your next steps to lock in your JDM import.",
       buttonLabel: "Complete Next Steps →",
       buttonUrl: getCustomerReportUrl(reportUrlToken),
+    };
+  }
+
+  if (status === "sold_in_delivery") {
+    return {
+      kind: "delivery",
+      message:
+        "Your purchase is complete and your JDM is moving into delivery. We will keep you posted at every step as it makes its way to you.",
+      buttonLabel: reportUrlToken ? "View Your Details →" : null,
+      buttonUrl: reportUrlToken ? getCustomerReportUrl(reportUrlToken) : null,
     };
   }
 

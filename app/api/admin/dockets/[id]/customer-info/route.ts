@@ -48,7 +48,7 @@ const FIELD_CONFIG: Record<EditableRequestField, FieldConfig> = {
 };
 
 const EDITABLE_FIELDS = Object.keys(FIELD_CONFIG) as EditableRequestField[];
-const LOCKED_DESTINATION_STATUSES = new Set(["research_in_progress", "report_sent", "decision_made", "cleared"]);
+const LOCKED_DESTINATION_STATUSES = new Set(["research_in_progress", "report_sent", "decision_made", "sold_in_delivery", "cleared"]);
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function hasOwn(object: object, key: string) {

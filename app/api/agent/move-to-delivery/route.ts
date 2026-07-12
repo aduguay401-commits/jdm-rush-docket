@@ -58,9 +58,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Idempotent: already in delivery.
+    // Double-submit guard: already in delivery — do not write a duplicate history row.
     if (current.status === "sold_in_delivery") {
-      return Response.json({ success: true, status: "sold_in_delivery" });
+      return Response.json({ success: false, error: "This docket is already in delivery." }, { status: 409 });
     }
 
     const oldStatus = current.status;

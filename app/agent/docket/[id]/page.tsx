@@ -926,7 +926,8 @@ export default function AgentDocketDetailPage({
   const agreementSigned = Boolean(docket?.agreement_signed);
   const canSendAgreement = Boolean(docket && chosenPath && !agreementSigned);
   const depositPaid = Boolean(docket?.deposit_paid);
-  const showCloseOut = isStatusAtOrAfter(currentStatus, "decision_made");
+  const showCloseOut =
+    currentStatus === "decision_made" || currentStatus === "sold_in_delivery" || currentStatus === "cleared";
   const bothGatesGreen = agreementSigned && depositPaid;
   const inDelivery = currentStatus === "sold_in_delivery";
   const auctionHasMeaningfulData = hasAuctionMeaningfulData({
@@ -2774,7 +2775,7 @@ export default function AgentDocketDetailPage({
                 <div className="mt-4 flex flex-wrap items-center gap-3">
                   <button
                     className="inline-flex rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
-                    disabled={depositBusy}
+                    disabled={depositBusy || inDelivery}
                     onClick={handleToggleDepositPaid}
                     type="button"
                   >
