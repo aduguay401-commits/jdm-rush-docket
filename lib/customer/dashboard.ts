@@ -480,3 +480,42 @@ export async function getDocketInvoicesForCustomer(docketId: string): Promise<Cu
     return [];
   }
 }
+
+export type CustomerShipment = {
+  current_stage: string | null;
+  stage_updated_at: string | null;
+  vessel_name: string | null;
+  voyage_number: string | null;
+  bill_of_lading: string | null;
+  container_number: string | null;
+  port_of_loading: string | null;
+  port_of_discharge: string | null;
+  estimated_departure_date: string | null;
+  estimated_arrival_date: string | null;
+  actual_departure_date: string | null;
+  actual_arrival_date: string | null;
+  customer_visible_notes: string | null;
+  marine_traffic_url: string | null;
+};
+
+// The customer's own shipment, CUSTOMER-VISIBLE columns only — internal_notes is
+// never in this SELECT (server-side column separation; migration 015 also blocks
+// it at the column-grant level). FAIL-OPEN: missing table / RLS / no row -> null.
+export async function getShipmentForCustomer(docketId: string): Promise<CustomerShipment | null> {
+  try {
+    const supabase = await createServerAuthClient();
+    const { data, error } = await supabase
+      .from("shipments")
+      .select(
+        "current_stage, stage_updated_at, vessel_name, voyage_number, bill_of_lading, container_number, port_of_loading, port_of_discharge, estimated_departure_date, estimated_arrival_date, actual_departure_date, actual_arrival_date, customer_visible_notes, marine_traffic_url",
+      )
+      .eq("docket_id", docketId)
+      .maybeSingle();
+    if (error || !data) {
+      return null;
+    }
+    return data as CustomerShipment;
+  } catch {
+    return null;
+  }
+}

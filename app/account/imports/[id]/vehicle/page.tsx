@@ -1,11 +1,14 @@
 import { AccountHeader } from "@/app/account/_components/header";
 import { EmptyState, PageShell, StatusPill } from "@/app/account/_components/garage-ui";
 import {
+  formatShortDate,
   getCustomerPortalContext,
   getDocketHref,
   getResearchData,
+  getShipmentForCustomer,
   getVehicleLabel,
 } from "@/lib/customer/dashboard";
+import { getStageLabel, getStageProgress } from "@/lib/shipments/stages";
 
 function Detail({ label, value }: { label: string; value: string | number | null | undefined }) {
   return (
@@ -31,6 +34,7 @@ export default async function VehicleInfoPage({ params }: { params: Promise<{ id
   const docket = context.selectedDocket!;
   const vehicle = getVehicleLabel(docket);
   const research = await getResearchData(docket.id);
+  const shipment = await getShipmentForCustomer(docket.id);
   const selectedOption =
     research.dealerOptions.find((option) => option.option_number === (docket.chosen_dealer_index ?? docket.selected_private_dealer_option)) ??
     research.dealerOptions[0] ??
@@ -63,6 +67,43 @@ export default async function VehicleInfoPage({ params }: { params: Promise<{ id
               Details below come from the current docket and sourced research records. Missing values are left blank rather than inferred.
             </p>
           </section>
+
+          {shipment ? (
+            <section className="border border-white/[0.08] bg-black p-5">
+              <StatusPill tone="accent">Delivery tracking</StatusPill>
+              <h3 className="mt-3 text-[18px] font-black text-white">{getStageLabel(shipment.current_stage)}</h3>
+              {shipment.stage_updated_at ? (
+                <p className="mt-1 text-[12px] text-white/40">Updated {formatShortDate(shipment.stage_updated_at)}</p>
+              ) : null}
+              <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-[#38bdf8]"
+                  style={{ width: `${Math.round(getStageProgress(shipment.current_stage) * 100)}%` }}
+                />
+              </div>
+              {shipment.customer_visible_notes ? (
+                <p className="mt-3 text-[14px] leading-relaxed text-white/70">{shipment.customer_visible_notes}</p>
+              ) : null}
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                <Detail label="Vessel" value={shipment.vessel_name} />
+                <Detail label="Voyage" value={shipment.voyage_number} />
+                <Detail label="Port of loading" value={shipment.port_of_loading} />
+                <Detail label="Port of discharge" value={shipment.port_of_discharge} />
+                <Detail label="Estimated departure" value={formatShortDate(shipment.estimated_departure_date)} />
+                <Detail label="Estimated arrival" value={formatShortDate(shipment.estimated_arrival_date)} />
+              </div>
+              {shipment.marine_traffic_url ? (
+                <a
+                  className="mt-4 inline-block border border-[#38bdf8]/40 bg-[#38bdf8]/10 px-4 py-2 text-[13px] font-bold text-[#7dd3fc] transition hover:bg-[#38bdf8]/20"
+                  href={shipment.marine_traffic_url}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Track vessel on MarineTraffic →
+                </a>
+              ) : null}
+            </section>
+          ) : null}
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Detail label="Year" value={docket.vehicle_year} />

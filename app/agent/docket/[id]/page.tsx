@@ -12,6 +12,7 @@ import SuccessToast from "@/components/SuccessToast";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
 import { InvoiceLedger } from "./InvoiceLedger";
+import { ShipmentPanel } from "./ShipmentPanel";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 import { resolveChosenPath } from "@/lib/agreements/templates";
 
@@ -2817,6 +2818,8 @@ export default function AgentDocketDetailPage({
                 onDepositSynced={() => setDocket((previous) => (previous ? { ...previous, deposit_paid: true } : previous))}
               />
             ) : null}
+
+            {inDelivery ? <ShipmentPanel docketId={id} /> : null}
 
             {shouldShowResearchSummary ? (
               <section className="space-y-6 rounded-xl border border-white/12 bg-[#171717] p-5">
