@@ -23,6 +23,7 @@ type Docket = {
   selected_path: string | null;
   agreement_sent_at?: string | null;
   agreement_signed?: boolean | null;
+  deposit_paid?: boolean | null;
   customer_first_name: string | null;
   customer_last_name: string | null;
   customer_email: string | null;
@@ -177,6 +178,7 @@ const STATUS_ORDER = [
   "research_in_progress",
   "report_sent",
   "decision_made",
+  "sold_in_delivery",
   "unresponsive",
   "paused",
   "cleared",
@@ -189,6 +191,7 @@ const STATUS_LABELS: Record<string, string> = {
   research_in_progress: "Research In Progress",
   report_sent: "Report Sent",
   decision_made: "Decision Made",
+  sold_in_delivery: "In Delivery",
   cleared: "Cleared",
   lost: "Lost",
   paused: "Paused",
@@ -881,6 +884,9 @@ export default function AgentDocketDetailPage({
   const [agreementConfirmation, setAgreementConfirmation] = useState<string | null>(null);
   const [archiveBusy, setArchiveBusy] = useState(false);
   const [pinBusy, setPinBusy] = useState(false);
+  const [depositBusy, setDepositBusy] = useState(false);
+  const [deliveryBusy, setDeliveryBusy] = useState(false);
+  const [closeOutError, setCloseOutError] = useState<string | null>(null);
   const draftHydratedRef = useRef(false);
   const lastSavedDraftRef = useRef<string | null>(null);
   const sentReportEditSnapshotRef = useRef<ResearchDraft | null>(null);
@@ -919,6 +925,13 @@ export default function AgentDocketDetailPage({
   const agreementSentAt = docket?.agreement_sent_at ?? null;
   const agreementSigned = Boolean(docket?.agreement_signed);
   const canSendAgreement = Boolean(docket && chosenPath && !agreementSigned);
+  const depositPaid = Boolean(docket?.deposit_paid);
+  const showCloseOut =
+    currentStatus === "decision_made" || currentStatus === "sold_in_delivery" || currentStatus === "cleared";
+  const bothGatesGreen = agreementSigned && depositPaid;
+  const inDelivery = currentStatus === "sold_in_delivery";
+  const isCleared = currentStatus === "cleared";
+  const canMoveToDelivery = currentStatus === "decision_made" && bothGatesGreen;
   const auctionHasMeaningfulData = hasAuctionMeaningfulData({
     hammerPriceLowJpy,
     hammerPriceHighJpy,
@@ -1108,7 +1121,7 @@ export default function AgentDocketDetailPage({
       const { data, error: docketError } = await supabase
         .from("dockets")
         .select(
-          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, agreement_sent_at, agreement_signed, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft, is_flagged, is_archived, archived_at"
+          "id, questions_url_token, report_url_token, status, chosen_path, selected_path, agreement_sent_at, agreement_signed, deposit_paid, customer_first_name, customer_last_name, customer_email, customer_phone, vehicle_year, vehicle_make, vehicle_model, vehicle_description, budget_bracket, destination_city, destination_province, timeline, additional_notes, research_draft, is_flagged, is_archived, archived_at"
         )
         .eq("id", id)
         .maybeSingle();
@@ -2356,6 +2369,47 @@ export default function AgentDocketDetailPage({
     }
   }
 
+  async function handleToggleDepositPaid() {
+    if (!docket) {
+      return;
+    }
+    const next = !Boolean(docket.deposit_paid);
+    setDepositBusy(true);
+    setCloseOutError(null);
+    try {
+      await patchDocketField({ deposit_paid: next });
+      setDocket((previous) => (previous ? { ...previous, deposit_paid: next } : previous));
+    } catch (depositError) {
+      setCloseOutError(depositError instanceof Error ? depositError.message : "Failed to update deposit status.");
+    } finally {
+      setDepositBusy(false);
+    }
+  }
+
+  async function handleMoveToDelivery() {
+    if (!docket) {
+      return;
+    }
+    setDeliveryBusy(true);
+    setCloseOutError(null);
+    try {
+      const response = await fetch("/api/agent/move-to-delivery", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ docketId: id }),
+      });
+      const result = (await response.json()) as { success?: boolean; error?: string };
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? "Failed to move to delivery.");
+      }
+      setDocket((previous) => (previous ? { ...previous, status: "sold_in_delivery" } : previous));
+    } catch (deliveryError) {
+      setCloseOutError(deliveryError instanceof Error ? deliveryError.message : "Failed to move to delivery.");
+    } finally {
+      setDeliveryBusy(false);
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[#0d0d0d] px-6 py-8 text-white">
       <SuccessToast message={successToastMessage} onDismiss={dismissSuccessToast} />
@@ -2677,6 +2731,82 @@ export default function AgentDocketDetailPage({
                     {sendingAgreement ? "Sending..." : agreementSentAt ? "Resend Agreement" : "Send Agreement"}
                   </button>
                 </div>
+              </section>
+            ) : null}
+
+            {showCloseOut ? (
+              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+                <h2 className="text-xl font-semibold">Purchase Close-Out</h2>
+                <p className="mt-1 text-sm text-white/60">Both must be confirmed before this deal can move to delivery.</p>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  <div
+                    className={`flex items-center justify-between rounded-lg border p-4 ${
+                      agreementSigned ? "border-[#22c55e]/40 bg-[#22c55e]/10" : "border-white/10 bg-black/20"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">Agreement signed</p>
+                      <p className="mt-0.5 text-xs text-white/55">
+                        {agreementSigned
+                          ? "Signed by the customer."
+                          : agreementSentAt
+                            ? "Sent; awaiting signature."
+                            : "Not sent yet."}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-semibold ${agreementSigned ? "text-[#4ade80]" : "text-white/40"}`}>
+                      {agreementSigned ? "✓ Done" : "Pending"}
+                    </span>
+                  </div>
+                  <div
+                    className={`flex items-center justify-between rounded-lg border p-4 ${
+                      depositPaid ? "border-[#22c55e]/40 bg-[#22c55e]/10" : "border-white/10 bg-black/20"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-white">Deposit paid</p>
+                      <p className="mt-0.5 text-xs text-white/55">
+                        {depositPaid ? "Payment confirmed." : "Mark once accounting confirms the deposit."}
+                      </p>
+                    </div>
+                    <span className={`text-sm font-semibold ${depositPaid ? "text-[#4ade80]" : "text-white/40"}`}>
+                      {depositPaid ? "✓ Done" : "Pending"}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  {currentStatus === "decision_made" ? (
+                    <button
+                      className="inline-flex rounded-lg border border-white/15 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={depositBusy}
+                      onClick={handleToggleDepositPaid}
+                      type="button"
+                    >
+                      {depositBusy ? "Saving..." : depositPaid ? "Unmark Deposit Paid" : "Mark Deposit Paid"}
+                    </button>
+                  ) : null}
+                  {inDelivery ? (
+                    <span className="inline-flex items-center gap-2 rounded-lg border border-[#38bdf8]/40 bg-[#38bdf8]/10 px-4 py-2 text-sm font-semibold text-[#7dd3fc]">
+                      🚚 In delivery
+                    </span>
+                  ) : isCleared ? (
+                    <span className="inline-flex items-center gap-2 rounded-lg border border-[#22c55e]/40 bg-[#22c55e]/10 px-4 py-2 text-sm font-semibold text-[#4ade80]">
+                      ✅ Purchase complete
+                    </span>
+                  ) : canMoveToDelivery ? (
+                    <button
+                      className="inline-flex rounded-lg bg-[#E55125] px-4 py-2 text-sm font-bold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deliveryBusy}
+                      onClick={handleMoveToDelivery}
+                      type="button"
+                    >
+                      {deliveryBusy ? "Moving..." : "Move to Delivery →"}
+                    </button>
+                  ) : (
+                    <span className="text-xs text-white/45">Move to Delivery unlocks once both are green.</span>
+                  )}
+                </div>
+                {closeOutError ? <p className="mt-3 text-sm text-red-300">{closeOutError}</p> : null}
               </section>
             ) : null}
 

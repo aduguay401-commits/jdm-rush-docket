@@ -70,6 +70,8 @@ function formatStatus(status: string | null | undefined) {
       return "Report Sent";
     case "decision_made":
       return "Decision Made";
+    case "sold_in_delivery":
+      return "In Delivery";
     case "cleared":
       return "Cleared";
     case "lost":

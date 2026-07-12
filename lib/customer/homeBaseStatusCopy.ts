@@ -83,6 +83,15 @@ export function getCustomerHomeBaseStatusCopy(
       showQuestionForm: false,
       tone: "active",
     },
+    sold_in_delivery: {
+      tag: "PURCHASE COMPLETE",
+      heading: "Your JDM is on its way, [Name]",
+      message:
+        "Your purchase is complete and we are now moving into delivery. We will keep you posted as your vehicle makes its way to you.",
+      showReportLink: true,
+      showQuestionForm: false,
+      tone: "active",
+    },
     cleared: {
       tag: "COMPLETE",
       heading: "Welcome to the JDM Rush family",

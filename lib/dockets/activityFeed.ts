@@ -118,6 +118,7 @@ const STATUS_LABELS: Record<string, string> = {
   research_in_progress: "Research In Progress",
   report_sent: "Report Sent",
   decision_made: "Decision Made",
+  sold_in_delivery: "In Delivery",
   cleared: "Cleared",
   lost: "Lost",
   paused: "Paused",

@@ -245,6 +245,15 @@ export function getCardStatus(docket: CustomerDocket): {
   activeSection: number;
   progressLabel: string;
 } {
+  if (docket.status === "sold_in_delivery") {
+    return {
+      statusLabel: "Purchase complete — moving to delivery",
+      statusColor: "amber",
+      activeSection: 3,
+      progressLabel: "Delivery stage",
+    };
+  }
+
   if (isShippingUnlocked(docket)) {
     return {
       statusLabel: "Purchase complete — journey pending",
