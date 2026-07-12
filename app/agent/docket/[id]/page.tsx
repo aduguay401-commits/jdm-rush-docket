@@ -11,6 +11,7 @@ import CustomerCommunicationTimeline, {
 import SuccessToast from "@/components/SuccessToast";
 import VehicleRequestEditor from "@/components/VehicleRequestEditor";
 import { createBrowserSupabaseClient, createBrowserSupabaseClientWithAuth } from "@/lib/supabase/client";
+import { InvoiceLedger } from "./InvoiceLedger";
 import { getCustomerHomeBaseUrl, getCustomerReportUrl } from "@/lib/urls";
 import { resolveChosenPath } from "@/lib/agreements/templates";
 
@@ -2808,6 +2809,13 @@ export default function AgentDocketDetailPage({
                 </div>
                 {closeOutError ? <p className="mt-3 text-sm text-red-300">{closeOutError}</p> : null}
               </section>
+            ) : null}
+
+            {showCloseOut ? (
+              <InvoiceLedger
+                docketId={id}
+                onDepositSynced={() => setDocket((previous) => (previous ? { ...previous, deposit_paid: true } : previous))}
+              />
             ) : null}
 
             {shouldShowResearchSummary ? (
