@@ -96,6 +96,16 @@ export default async function InvoicesPage({ params }: { params: Promise<{ id: s
                             Download
                           </a>
                         ) : null}
+                        {invoice.external_url ? (
+                          <a
+                            className="border border-white/15 px-3 py-1.5 text-[13px] font-medium text-white/80 transition hover:bg-white/10"
+                            href={invoice.external_url}
+                            rel="noopener noreferrer"
+                            target="_blank"
+                          >
+                            View invoice
+                          </a>
+                        ) : null}
                       </div>
                     </article>
                   );
