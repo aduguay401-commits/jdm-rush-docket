@@ -853,3 +853,21 @@ Adam wants QuickBooks Online invoice links ON invoices, alongside (not replacing
 Verification: full docket nm-gate (typecheck + build). Reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA.
+
+## 2026-07-14 - SMS visibility: sms_log + send/delivery telemetry + status webhook
+
+Closed the SMS visibility gap — SMS was fire-and-forget console.log only; now every send + async delivery outcome is recorded and surfaced like email. No SQL prerequisite (fail-open).
+
+- supabase/migrations/017_sms_log.sql (Adam-run-only, DELIVERABLE): sms_log (docket_id nullable ON DELETE SET NULL, sms_type, to_last4 only [PII-min], body, twilio_sid, status check queued/sent/delivered/undelivered/failed/send_error, error_code/message, timestamps), indexes (docket_id,created_at)+(twilio_sid). RLS: service_role ALL + admin/agent SELECT; NO customer policy (internal-only, customers never see SMS).
+- lib/sms.ts: sendSMS(to, body, { docketId, smsType }) now logs its outcome on EVERY path via a fail-open logSms (credentials-missing/empty/un-normalizable -> send_error; Twilio create -> sent/queued + twilio_sid; create throws e.g. 21408 geo -> failed + error_code/message). A statusCallback to the new webhook is registered so async carrier failures (30034-type) update the row later. Logging never throws into the caller; missing table -> console.log as before.
+- app/api/agent/send-questions/route.ts: the fire-and-forget send is now awaited inside try/catch with { docketId, smsType: 'questions_sent' } — an SMS/log hiccup never fails the questions email (primary channel). Existing !devMode + phone guard kept.
+- app/api/webhooks/twilio/sms-status/route.ts (new, PUBLIC): mandatory Twilio signature validation (Twilio.validateRequest with TWILIO_AUTH_TOKEN + exact getAppBaseUrl() URL + form params) -> 403 on invalid/unsigned. Valid -> update sms_log WHERE twilio_sid = MessageSid to the delivery status + error_code. Unknown SID = 200 no-op; always 200 so Twilio never retry-storms.
+- Dashboard visibility: sms_log loaded per docket as a SEPARATE fail-open query (not nested in the docket select, so a missing table can't break the load). getLatestActivity (dashboardDisplay) gains an 'agent_sms' source with "📱 SMS sent" / "📱 SMS FAILED — ..." and a tone:'failure' flag; the dashboard card renders a failed SMS latest-activity in red. Detail page: a new "SMS Notifications" section lists each send (type, last4, status, timestamp, error) with FAILED rows red-bordered/red-text. sms_log is NEVER exposed to the customer portal.
+
+Verification: full docket nm-gate (typecheck + build). Reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL run (017).
+
+### 2026-07-14 - sms-visibility NIT-1: normalize Twilio webhook status
+
+Reviewer APPROVED, one pre-merge nit. The webhook wrote MessageStatus raw, so Twilio's intermediate statuses (accepted/sending/scheduled/read) hit the sms_log status CHECK and were logged+skipped. Fixed: the webhook now normalizes the incoming status BEFORE the update — accepted/sending/scheduled -> 'sent'; queued/sent/delivered/undelivered/failed pass through; anything else unknown (e.g. 'read') is ignored silently (200, no write, no warning). Everything else unchanged.

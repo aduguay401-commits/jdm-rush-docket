@@ -45,6 +45,16 @@ type Docket = {
   archived_at?: string | null;
 };
 
+type SmsLogItem = {
+  id: string;
+  sms_type: string | null;
+  status: string | null;
+  to_last4: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string | null;
+};
+
 type AuctionResearchRecord = {
   hammer_price_low_jpy: number | string | null;
   hammer_price_high_jpy: number | string | null;
@@ -851,6 +861,7 @@ export default function AgentDocketDetailPage({
   const [customerAnswers, setCustomerAnswers] = useState<CustomerAnswer[]>([]);
   const [sentQuestions, setSentQuestions] = useState<SentQuestion[]>([]);
   const [customerSubmittedQuestions, setCustomerSubmittedQuestions] = useState<CustomerSubmittedQuestion[]>([]);
+  const [smsLog, setSmsLog] = useState<SmsLogItem[]>([]);
   const [reportSentAt, setReportSentAt] = useState<string | null>(null);
   const [addingQuestion, setAddingQuestion] = useState(false);
   const [queuedQuestions, setQueuedQuestions] = useState([""]);
@@ -1231,6 +1242,15 @@ export default function AgentDocketDetailPage({
       setSentQuestions((sentQuestionsData ?? []) as SentQuestion[]);
       setCustomerAnswers((answersData ?? []) as CustomerAnswer[]);
       setCustomerSubmittedQuestions((customerQuestionsData ?? []) as CustomerSubmittedQuestion[]);
+      // SMS telemetry — FAIL-OPEN: skip silently if sms_log is absent (017 unrun).
+      const { data: smsData, error: smsError } = await supabase
+        .from("sms_log")
+        .select("id, sms_type, status, to_last4, error_code, error_message, created_at")
+        .eq("docket_id", id)
+        .order("created_at", { ascending: false });
+      if (!smsError) {
+        setSmsLog((smsData ?? []) as SmsLogItem[]);
+      }
       setReportSentAt(latestReportSentAt);
       setHammerPriceLowJpy(hydratedDraft.hammerPriceLowJpy);
       setHammerPriceHighJpy(hydratedDraft.hammerPriceHighJpy);
@@ -2671,6 +2691,49 @@ export default function AgentDocketDetailPage({
                 </div>
               ) : null}
             </section>
+
+            {smsLog.length > 0 ? (
+              <section className="rounded-xl border border-white/12 bg-[#171717] p-5">
+                <h2 className="text-lg font-semibold">SMS Notifications</h2>
+                <p className="mt-1 text-sm text-white/60">Twilio send + delivery status. Failed sends are flagged.</p>
+                <div className="mt-4 space-y-2">
+                  {smsLog.map((sms) => {
+                    const failed =
+                      sms.status === "failed" || sms.status === "undelivered" || sms.status === "send_error";
+                    return (
+                      <div
+                        className={`flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3 text-sm ${
+                          failed ? "border-red-500/40 bg-red-500/10" : "border-white/10 bg-black/20"
+                        }`}
+                        key={sms.id}
+                      >
+                        <div className="min-w-0">
+                          <p className={`font-medium ${failed ? "text-red-300" : "text-white/85"}`}>
+                            {failed ? "📱 SMS FAILED" : "📱 SMS sent"}
+                            <span className="ml-2 text-xs font-normal text-white/50">
+                              {sms.sms_type ?? "sms"}
+                              {sms.to_last4 ? ` · ••••${sms.to_last4}` : ""}
+                              {` · ${sms.status ?? "sent"}`}
+                            </span>
+                          </p>
+                          {failed && (sms.error_code || sms.error_message) ? (
+                            <p className="mt-0.5 text-xs text-red-300/80">
+                              {sms.error_code ? `[${sms.error_code}] ` : ""}
+                              {sms.error_message ?? ""}
+                            </p>
+                          ) : null}
+                        </div>
+                        {sms.created_at ? (
+                          <span className="shrink-0 text-xs text-white/40">
+                            {new Date(sms.created_at).toLocaleString("en-CA", { dateStyle: "medium", timeStyle: "short" })}
+                          </span>
+                        ) : null}
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             {shouldShowSmartProceedButton ? (
               <section>

@@ -286,7 +286,12 @@ support@jdmrushimports.ca`;
       const smsMessage =
         `JDM Rush: Our export agent has a few quick questions about your ${vehicle} request. ` +
         `Answer here: ${questionsUrl}`;
-      sendSMS(customerPhone, smsMessage);
+      try {
+        await sendSMS(customerPhone, smsMessage, { docketId: docket.id, smsType: "questions_sent" });
+      } catch (smsError) {
+        // SMS is secondary to the questions email — never fail the response on it.
+        console.error("[SMS] send-questions SMS error (non-blocking):", smsError);
+      }
     }
 
     return Response.json({ success: true });
