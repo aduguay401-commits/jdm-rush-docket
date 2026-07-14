@@ -867,3 +867,7 @@ Closed the SMS visibility gap — SMS was fire-and-forget console.log only; now 
 Verification: full docket nm-gate (typecheck + build). Reported with code_ready.
 
 Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL run (017).
+
+### 2026-07-14 - sms-visibility NIT-1: normalize Twilio webhook status
+
+Reviewer APPROVED, one pre-merge nit. The webhook wrote MessageStatus raw, so Twilio's intermediate statuses (accepted/sending/scheduled/read) hit the sms_log status CHECK and were logged+skipped. Fixed: the webhook now normalizes the incoming status BEFORE the update — accepted/sending/scheduled -> 'sent'; queued/sent/delivered/undelivered/failed pass through; anything else unknown (e.g. 'read') is ignored silently (200, no write, no warning). Everything else unchanged.

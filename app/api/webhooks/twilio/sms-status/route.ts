@@ -10,6 +10,19 @@ export const runtime = "nodejs";
 // unsigned / invalid requests are rejected 403. On a valid callback we update the
 // matching sms_log row (by MessageSid) with the delivery status — this is what
 // catches async carrier failures (e.g. 30034) that never surface at send time.
+// Map Twilio message status onto the sms_log CHECK set. Twilio also sends
+// intermediate statuses (accepted/sending/scheduled) that are not stored verbatim;
+// fold them to sent. Anything unrecognized (e.g. read) returns null -> ignored.
+function normalizeStatus(raw: string): string | null {
+  if (raw === "accepted" || raw === "sending" || raw === "scheduled") {
+    return "sent";
+  }
+  if (raw === "queued" || raw === "sent" || raw === "delivered" || raw === "undelivered" || raw === "failed") {
+    return raw;
+  }
+  return null;
+}
+
 export async function POST(request: Request) {
   const authToken = process.env.TWILIO_AUTH_TOKEN;
   if (!authToken) {
@@ -39,11 +52,17 @@ export async function POST(request: Request) {
     return new Response(null, { status: 200 });
   }
 
+  const normalizedStatus = normalizeStatus(status);
+  // Unknown / unmapped intermediate status (e.g. "read") -> ignore silently: 200, no write, no warning.
+  if (!normalizedStatus) {
+    return new Response(null, { status: 200 });
+  }
+
   const errorCode = params.ErrorCode || null;
 
   try {
     const supabase = createServerClient();
-    const updates: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+    const updates: Record<string, unknown> = { status: normalizedStatus, updated_at: new Date().toISOString() };
     if (errorCode) {
       updates.error_code = errorCode;
     }
