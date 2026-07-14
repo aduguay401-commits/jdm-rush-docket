@@ -35,9 +35,26 @@ export type DashboardDisplayDocket = {
   marcus_questions?: DashboardMarcusQuestionItem[] | null;
   customer_questions?: DashboardCustomerQuestionItem[] | null;
   email_log?: DashboardEmailLogItem[] | null;
+  sms_log?: DashboardSmsLogItem[] | null;
 };
 
-export type LatestActivityType = "customer_question" | "customer_answer" | "agent_question" | "agent_email" | "system_email";
+export type LatestActivityType = "customer_question" | "customer_answer" | "agent_question" | "agent_email" | "system_email" | "agent_sms";
+
+export type DashboardSmsLogItem = {
+  sms_type: string | null;
+  status: string | null;
+  to_last4: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string | null;
+};
+
+const SMS_FAILURE_STATUSES = new Set(["failed", "undelivered", "send_error"]);
+
+function formatSmsTypeLabel(smsType: string | null | undefined): string {
+  if (smsType === "questions_sent") return "Questions SMS";
+  return smsType ? smsType.replace(/_/g, " ") : "SMS";
+}
 export type LatestActivitySender = "agent" | "customer";
 
 export type LatestActivity = {
@@ -49,6 +66,7 @@ export type LatestActivity = {
   directionLabel: string;
   source_type: LatestActivityType;
   direction: LatestActivitySender;
+  tone?: "failure";
 };
 
 export type StatusDisplay = {
@@ -335,6 +353,27 @@ export function getLatestActivity(docket: DashboardDisplayDocket): LatestActivit
         timestamp: email.sent_at,
       });
     }
+  }
+
+  for (const sms of docket.sms_log ?? []) {
+    if (!sms.created_at) {
+      continue;
+    }
+    const failed = SMS_FAILURE_STATUSES.has(sms.status ?? "");
+    const typeLabel = formatSmsTypeLabel(sms.sms_type);
+    candidates.push({
+      direction: "agent",
+      sender: "agent",
+      source_type: "agent_sms",
+      type: "agent_sms",
+      directionLabel: failed ? `📱 SMS FAILED — ${typeLabel}` : "📱 SMS sent",
+      subject: null,
+      snippet: failed
+        ? `${sms.status}${sms.error_code ? " (" + sms.error_code + ")" : ""}${sms.error_message ? ": " + sms.error_message : ""}`
+        : `${typeLabel}${sms.to_last4 ? " · ••••" + sms.to_last4 : ""} · ${sms.status ?? "sent"}`,
+      timestamp: sms.created_at,
+      ...(failed ? { tone: "failure" as const } : {}),
+    });
   }
 
   const dedupedCandidates = candidates.filter((candidate) => {

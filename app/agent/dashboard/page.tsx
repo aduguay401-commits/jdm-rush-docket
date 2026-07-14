@@ -34,6 +34,7 @@ type Docket = {
   marcus_questions: MarcusQuestionItem[] | null;
   customer_questions: CustomerQuestionItem[] | null;
   email_log: EmailLogItem[] | null;
+  sms_log?: SmsLogItem[] | null;
 };
 
 type DocketStatusHistoryItem = {
@@ -60,6 +61,16 @@ type EmailLogItem = {
   subject: string | null;
   body_snapshot: string | null;
   sent_at: string | null;
+};
+
+type SmsLogItem = {
+  docket_id?: string | null;
+  sms_type: string | null;
+  status: string | null;
+  to_last4: string | null;
+  error_code: string | null;
+  error_message: string | null;
+  created_at: string | null;
 };
 
 type TriageChipId = DocketTriageBucket | "all";
@@ -376,7 +387,9 @@ function DocketCard({
         >
           {lastCommunication ? (
             <>
-              <p className="text-xs text-[#888]">
+              <p
+                className={`text-xs ${lastCommunication.tone === "failure" ? "text-red-400" : "text-[#888]"}`}
+              >
                 {lastCommunication.directionLabel} · {formatRelativeTime(lastCommunication.timestamp)}
               </p>
               {lastCommunication.snippet ? (
@@ -660,6 +673,30 @@ export default function AgentDashboardPage() {
 
         for (const docket of loadedDockets) {
           docket.unreadCount = unreadCountByDocketId.get(docket.id) ?? 0;
+        }
+
+        // SMS telemetry — separate FAIL-OPEN query so a missing sms_log table
+        // (migration 017 unrun) never breaks the dockets load.
+        const { data: smsRows, error: smsError } = await supabase
+          .from("sms_log")
+          .select("docket_id, sms_type, status, to_last4, error_code, error_message, created_at")
+          .in("docket_id", docketIds)
+          .order("created_at", { ascending: false });
+
+        if (!smsError) {
+          const smsByDocketId = new Map<string, SmsLogItem[]>();
+          for (const row of smsRows ?? []) {
+            const smsDocketId = typeof row.docket_id === "string" ? row.docket_id : null;
+            if (!smsDocketId) {
+              continue;
+            }
+            const list = smsByDocketId.get(smsDocketId) ?? [];
+            list.push(row as SmsLogItem);
+            smsByDocketId.set(smsDocketId, list);
+          }
+          for (const docket of loadedDockets) {
+            docket.sms_log = smsByDocketId.get(docket.id) ?? [];
+          }
         }
       }
 
