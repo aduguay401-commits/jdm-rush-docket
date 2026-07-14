@@ -843,7 +843,7 @@ export default function AgentDashboardPage() {
     // Conversions: quote-origin (non-Find-My-JDM) dockets that claimed an account.
     // They are working leads now, but they are the pool's success metric.
     const conversions = dockets.filter(
-      (docket) => docket.lead_source !== "find_my_jdm" && Boolean(docket.customer_id),
+      (docket) => docket.lead_source === "exact_quote" && Boolean(docket.customer_id),
     ).length;
     const last30 = poolDockets.filter((docket) => {
       const created = new Date(docket.created_at).getTime();

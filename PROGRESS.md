@@ -871,3 +871,18 @@ Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL 
 ### 2026-07-14 - sms-visibility NIT-1: normalize Twilio webhook status
 
 Reviewer APPROVED, one pre-merge nit. The webhook wrote MessageStatus raw, so Twilio's intermediate statuses (accepted/sending/scheduled/read) hit the sms_log status CHECK and were logged+skipped. Fixed: the webhook now normalizes the incoming status BEFORE the update — accepted/sending/scheduled -> 'sent'; queued/sent/delivered/undelivered/failed pass through; anything else unknown (e.g. 'read') is ignored silently (200, no write, no warning). Everything else unchanged.
+
+## 2026-07-14 - hygiene-cleanup (docket): consolidated review nits, no behavior change
+
+Consolidated non-blocking findings from the last week's reviews. NO behavior changes beyond the listed items.
+
+1. Invoice upload orphan guard (app/api/agent/invoices/route.ts POST): validate docketId is a UUID AND the docket exists (404) BEFORE the storage upload, so an invalid/missing docketId can no longer strand an orphaned PDF (the FK insert used to fail post-upload). supabase client hoisted for the check; later duplicate declaration removed.
+2. Migration 018 (Adam-run-only DELIVERABLE, supabase/migrations/018_hygiene_rls.sql) — DEFENSE-IN-DEPTH, nothing depends on it: docket_invoices customer SELECT policy recreated with AND status <> 'void'; explicit REVOKE ALL FROM anon on shipments/shipment_stage_history/docket_invoices/intake_events/sms_log. Idempotent, SQL-editor-safe.
+3. Narrowed the missing-table detectors (isMissingInvoicesTable, isMissingShipmentsTable): now match the Postgres undefined_table code (42P01) or PostgREST schema-cache miss (PGRST205) scoped to the specific table name, or the exact relation-does-not-exist / not-in-schema-cache message for that table — so an unrelated error can no longer masquerade as fail-open.
+4. Funnel-split metric + dead code: Quote Pool conversions now counts lead_source === 'exact_quote' with customer_id (was non-find_my_jdm, which over-counted legacy). Removed the one verified-dead leadSource export (type LeadSource). VERIFIED the other leadSource exports are still referenced (admin dashboard uses countLeadViews/isInLeadView/LEAD_VIEWS/getLeadSourceLabel/LeadView; getLeadOrigin/LeadOrigin/LeadSourceDocket/MarketableLeadView are used internally) — the agent tab-row removal did not orphan them, so kept.
+5. intake_events retention: the follow-up cron (app/api/cron/follow-up) now prunes intake_events older than 7 days as a fail-open try/catch step (logs count pruned) before returning. No new cron infra, no schema change.
+6. Link-rel normalization: agent ledger View-invoice link rel is now noopener noreferrer (matches the customer side).
+
+Verification: full docket nm-gate (typecheck + build). Reported with code_ready.
+
+Status: implementation complete, pending isolated gate + Reviewer/QA + Adam SQL run (018, defense-in-depth only).

@@ -580,6 +580,25 @@ export async function POST(request: Request) {
     processed += 1
   }
 
+  // Retention: prune intake_events older than 7 days (the per-IP limiter only
+  // looks back 1 hour). Piggybacked here, FAIL-OPEN — a prune hiccup or a missing
+  // table must never fail the cron run.
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const { data: prunedRows, error: pruneError } = await supabase
+      .from('intake_events')
+      .delete()
+      .lt('created_at', sevenDaysAgo)
+      .select('id')
+    if (pruneError) {
+      console.warn('[Cron] intake_events prune skipped:', pruneError.message)
+    } else {
+      console.log(`[Cron] pruned ${prunedRows?.length ?? 0} intake_events older than 7 days`)
+    }
+  } catch (pruneError) {
+    console.warn('[Cron] intake_events prune failed (non-blocking):', pruneError)
+  }
+
   return Response.json({
     message: `Processed ${processed} follow-up sequence(s)`,
     processed,
