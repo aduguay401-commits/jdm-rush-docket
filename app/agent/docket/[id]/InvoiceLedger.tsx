@@ -327,7 +327,7 @@ export function InvoiceLedger({ docketId, onDepositSynced }: { docketId: string;
                       <a
                         className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-medium text-white/80 transition hover:bg-white/10"
                         href={invoice.external_url}
-                        rel="noreferrer"
+                        rel="noopener noreferrer"
                         target="_blank"
                       >
                         View invoice

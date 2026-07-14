@@ -1,4 +1,3 @@
-export type LeadSource = "exact_quote" | "find_my_jdm";
 export type MarketableLeadView = "garage" | "quote" | "find";
 export type LeadView = "all" | MarketableLeadView;
 export type LeadOrigin = MarketableLeadView | "legacy";

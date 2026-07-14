@@ -28,12 +28,23 @@ export const SHIPMENT_EDITABLE_FIELDS = [
 
 // A missing shipments/shipment_stage_history table (migration 015 not yet run)
 // must degrade to a quiet "not enabled" state, never a 500.
-export function isMissingShipmentsTable(error: { message?: string | null } | null | undefined): boolean {
-  const message = (error?.message ?? "").toLowerCase();
+export function isMissingShipmentsTable(
+  error: { message?: string | null; code?: string | null } | null | undefined,
+): boolean {
+  if (!error) {
+    return false;
+  }
+  const code = error.code ?? "";
+  const message = (error.message ?? "").toLowerCase();
+  // Postgres undefined_table (42P01) or PostgREST schema-cache miss (PGRST205),
+  // scoped to the shipments tables so an unrelated error can't masquerade as fail-open.
+  if ((code === "42P01" || code === "PGRST205") && message.includes("shipment")) {
+    return true;
+  }
   return (
-    message.includes("shipment") ||
-    message.includes("schema cache") ||
-    message.includes("does not exist") ||
-    message.includes("relation")
+    message.includes('relation "public.shipments" does not exist') ||
+    message.includes('relation "public.shipment_stage_history" does not exist') ||
+    message.includes("could not find the table 'public.shipments'") ||
+    message.includes("could not find the table 'public.shipment_stage_history'")
   );
 }

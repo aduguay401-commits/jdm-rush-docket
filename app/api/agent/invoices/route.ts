@@ -74,6 +74,24 @@ export async function POST(request: Request) {
       return Response.json({ success: false, error: "A label is required" }, { status: 400 });
     }
 
+    // Validate the docket exists BEFORE any storage upload, so an invalid docketId
+    // can't strand an orphaned file (its FK insert would otherwise fail post-upload).
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(docketId)) {
+      return Response.json({ success: false, error: "Invalid docketId" }, { status: 400 });
+    }
+    const supabase = createServerClient();
+    const { data: docketRow, error: docketLookupError } = await supabase
+      .from("dockets")
+      .select("id")
+      .eq("id", docketId)
+      .maybeSingle<{ id: string }>();
+    if (docketLookupError) {
+      return Response.json({ success: false, error: docketLookupError.message }, { status: 500 });
+    }
+    if (!docketRow) {
+      return Response.json({ success: false, error: "Docket not found" }, { status: 404 });
+    }
+
     const amountCad = toAmount(form.get("amount_cad"));
     const issuedAt = toIssuedAt(form.get("issued_at"));
     const externalUrlRaw = (form.get("external_url") as string | null)?.trim() ?? "";
@@ -96,7 +114,6 @@ export async function POST(request: Request) {
       }
     }
 
-    const supabase = createServerClient();
     const { data, error } = await supabase
       .from("docket_invoices")
       .insert({
