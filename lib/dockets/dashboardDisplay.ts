@@ -781,6 +781,11 @@ export function isWorkingLead(docket: WorkingLeadInput): boolean {
   if (docket.lead_source === "find_my_jdm") {
     return true;
   }
+  // Someone who talked to Rush and asked to be handed to Adam is at least as
+  // warm as a form fill — it belongs in the funnel, not the nurture pool.
+  if (docket.lead_source === "rush_whatsapp") {
+    return true;
+  }
   if (docket.is_flagged) {
     return true;
   }
