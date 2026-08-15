@@ -1,5 +1,33 @@
 # Progress
 
+## 2026-08-14 - Rush WhatsApp handoff line in quote + intake emails (crate-rig ticket #8)
+
+Summary: added the customer-facing "Questions? Chat with Rush on WhatsApp" line to the quote email and the intake confirmation email (HTML and plain-text variants), sourced from a new lib/rush.ts seam. This is the last unshipped piece of the Rush program (work-order objective 5 / follow-up 2).
+
+Files changed:
+- lib/rush.ts - single-source seam: RUSH_WHATSAPP_NUMBER, RUSH_WHATSAPP_URL, and pure renderRushWhatsAppLineHtml/Text renderers.
+- app/api/system/quote/route.ts - renders the line after the "Ready to move forward" prompt, before the sign-off (HTML + text).
+- app/api/system/intake/route.ts - renders the line after "Questions? Just reply to this email." (HTML + text).
+- lib/rush.test.ts - the repo's FIRST test suite (URL correctness, HTML anchor, plain-text line, scope guard keeping the line out of the other 16 email surfaces).
+- vitest.config.ts - minimal vitest config (the @ alias -> ./).
+- package.json / package-lock.json - test script + vitest devDep.
+- AGENTS.md - corrected stale "Email: Resend" to nodemailer (Gmail SMTP) and retired "Never run npm test".
+
+Decisions/deviations:
+- Copy is the work-order spec line verbatim under the operator override window; link colour orange #E55125 (the emails' existing link colour), not WhatsApp green.
+- Scope is quote + intake ONLY per operator decision (the ~12 other customer-facing emails are a potential follow-up ticket).
+- Zero behavior drift beyond the added line: quote math, recipients, subject lines, and existing copy all byte-identical.
+- Work landed in a clone under the crate rig (.agents/state/x-repo/jdm-rush-docket) because the primary checkout is read-only in the sandbox; zero network pushes until gate_release.
+
+Verification:
+- npm test (vitest) PASS: 5/5.
+- npm run type-check PASS.
+- npm run lint PASS (0 errors; 13 pre-existing warnings).
+- npm run build PASS (placeholder .env.local, no real secrets).
+- crate-rig dual proof: host HEAD gate_pass + clone gate_pass both recorded.
+
+Status: awaiting review/QA round 2 re-verdict; merge + deploy on gate_release.
+
 ## 2026-07-05 - Opt-in price basis polish
 
 Summary: folded Adam's copy polish into the opt-in price-basis branch after Reviewer and QA passed.

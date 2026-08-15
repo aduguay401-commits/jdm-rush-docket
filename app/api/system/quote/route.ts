@@ -15,6 +15,10 @@ import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sendEmail } from "@/lib/email";
 import {
+  renderRushWhatsAppLineHtml,
+  renderRushWhatsAppLineText,
+} from "@/lib/rush";
+import {
   buildAccountRegisterUrl,
   renderAccountUpsellEmailPanel,
   renderAccountUpsellEmailTextFooter,
@@ -359,6 +363,9 @@ export async function POST(request: Request) {
   <p style="color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 12px 0;">
     Ready to move forward? Reply to this email and we'll get the ball rolling.
   </p>
+  <p style="color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 12px 0;">
+    ${renderRushWhatsAppLineHtml()}
+  </p>
   <p style="color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 28px 0;">
     — Adam &amp; the JDM Rush Team
   </p>
@@ -502,6 +509,8 @@ ${nurtureOptInText}
 ${accountUpsellText}
 
 Ready to move forward? Reply to this email and we'll get the ball rolling.
+
+${renderRushWhatsAppLineText()}
 
 — Adam & the JDM Rush Team
 support@jdmrushimports.ca`;

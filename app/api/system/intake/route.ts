@@ -4,6 +4,10 @@
 // ALTER TABLE dockets ADD COLUMN IF NOT EXISTS additional_info JSONB;
 
 import { sendEmail } from '@/lib/email'
+import {
+  renderRushWhatsAppLineHtml,
+  renderRushWhatsAppLineText,
+} from '@/lib/rush'
 
 import {
   buildAccountRegisterUrl,
@@ -431,6 +435,9 @@ Answer these: ${customerHomeBaseUrl}
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;'>
     Questions? Just reply to this email.
   </p>
+  <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;'>
+    ${renderRushWhatsAppLineHtml()}
+  </p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 28px 0;'>
     — Adam
   </p>
@@ -456,6 +463,8 @@ I will start researching options for you. If I need more details, I will reach o
 Try the Import Calculator while you wait: https://www.jdmrushimports.ca/import-calculator
 
 Questions? Just reply to this email.
+
+${renderRushWhatsAppLineText()}
 
 — Adam
 

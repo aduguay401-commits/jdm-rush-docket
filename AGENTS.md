@@ -8,13 +8,13 @@ It automates the flow from customer form submission → export agent research �
 - Framework: Next.js App Router + TypeScript
 - Styling: Tailwind CSS
 - Database: Supabase (Postgres + Auth + Storage)
-- Email: Resend (DEV_MODE=true routes all emails to admin)
+- Email: nodemailer (Gmail SMTP, lib/email.ts) — DEV_MODE=true routes all emails to admin
 - Deployment: Vercel (auto-deploy on push to main)
 
 ## Build & Verify Commands
 - npm run build — must pass with zero errors before every push
 - npm run dev — local dev server
-- Never run npm test — no test suite exists in this project
+- npm test — vitest run (unit suite: lib/rush.test.ts; added ticket #8)
 
 ## Code Conventions
 - Use App Router patterns (app/ directory, server components by default, use client only when needed)
