@@ -245,6 +245,9 @@ export async function POST(request: Request) {
 
     // ── Layers 2 & 3: per-IP rate limit + per-email daily docket cap ──
     const clientIp = getIntakeClientIp(request)
+    // Only a caller holding INTAKE_PROXY_SECRET can get a "wa:" key past
+    // getIntakeClientIp, so this is authenticated attribution, not a claim.
+    const isRushWhatsApp = (clientIp ?? '').startsWith('wa:')
     const normalizedEmail = normalizeEmail(customerEmail)
     if (await isIpRateLimited(supabase, clientIp, '/api/system/intake', normalizedEmail)) {
       return Response.json(
@@ -312,10 +315,11 @@ export async function POST(request: Request) {
       additional_notes: additionalNotes,
       selected_path: selectedPath,
       selected_private_dealer_option: selectedPrivateDealerOption,
-      lead_source: 'find_my_jdm',
+      lead_source: isRushWhatsApp ? 'rush_whatsapp' : 'find_my_jdm',
       lead_source_set_at: new Date().toISOString(),
       lead_source_detail: {
         route: '/api/system/intake',
+        ...(isRushWhatsApp ? { channel: 'whatsapp', agent: 'rush' } : {}),
       },
       ...(shouldStoreAdditionalInfo && additionalInfo ? { additional_info: additionalInfo } : {}),
       exchange_rate_at_report: exchange.rate,

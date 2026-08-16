@@ -1,4 +1,4 @@
-export type MarketableLeadView = "garage" | "quote" | "find";
+export type MarketableLeadView = "garage" | "quote" | "find" | "rush";
 export type LeadView = "all" | MarketableLeadView;
 export type LeadOrigin = MarketableLeadView | "legacy";
 
@@ -32,6 +32,11 @@ export const LEAD_VIEWS: Array<{
     label: "Find My JDM",
     description: "Concierge origin",
   },
+  {
+    id: "rush",
+    label: "Rush",
+    description: "WhatsApp agent origin",
+  },
 ];
 
 export function getLeadOrigin(docket: LeadSourceDocket): LeadOrigin {
@@ -47,6 +52,10 @@ export function getLeadOrigin(docket: LeadSourceDocket): LeadOrigin {
     return "find";
   }
 
+  if (docket.lead_source === "rush_whatsapp") {
+    return "rush";
+  }
+
   return "legacy";
 }
 
@@ -58,6 +67,8 @@ export function getLeadOriginLabel(docket: LeadSourceDocket) {
       return "Quote Lead";
     case "find":
       return "Find My JDM";
+    case "rush":
+      return "Rush (WhatsApp)";
     default:
       return "Unclassified";
   }
@@ -69,6 +80,8 @@ export function getLeadSourceLabel(leadSource: string | null | undefined) {
       return "Exact Quote";
     case "find_my_jdm":
       return "Find My JDM";
+    case "rush_whatsapp":
+      return "Rush (WhatsApp)";
     default:
       return "Unclassified";
   }
@@ -80,6 +93,7 @@ export function countLeadViews<TDocket extends LeadSourceDocket>(dockets: TDocke
     garage: dockets.filter((docket) => getLeadOrigin(docket) === "garage").length,
     quote: dockets.filter((docket) => getLeadOrigin(docket) === "quote").length,
     find: dockets.filter((docket) => getLeadOrigin(docket) === "find").length,
+    rush: dockets.filter((docket) => getLeadOrigin(docket) === "rush").length,
   } satisfies Record<LeadView, number>;
 }
 
