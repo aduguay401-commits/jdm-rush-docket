@@ -1,3 +1,4 @@
+import { requireAdminOrAgent } from "@/lib/admin/auth";
 import { sendEmail } from '@/lib/email';
 
 import { createServerClient } from "@/lib/supabase/server";
@@ -7,6 +8,10 @@ type ProceedPayload = {
 };
 
 export async function POST(request: Request) {
+  if (!(await requireAdminOrAgent())) {
+    return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });
+  }
+
   try {
     const payload = (await request.json()) as ProceedPayload;
     const docketId = typeof payload.docketId === "string" ? payload.docketId : "";

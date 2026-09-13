@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-09-13 - Guard agent write endpoints (local implementation)
+
+- `app/api/agent/proceed/route.ts`, `app/api/agent/send-questions/route.ts`, `app/api/agent/research/[id]/route.ts`: existing requireAdminOrAgent check is first in POST; standard JSON 403 precedes parsing, parameter resolution, logging and service-role work. Business behavior otherwise unchanged.
+- `app/api/agent/auth-guards.test.ts`: real auth helper with mocked auth/profile and business I/O boundaries. Anonymous/customer/unknown/missing/null/error denial, no parsing/logging/outbound/service access, admin/agent permitted mocked docket lookup and malformed-input handling, plus successful mocked proceed writes/email.
+- Genuine red: proceed expected 403, got 400 (1 failure); after proceed guard, 1 pass. Other two routes then each failed 400 vs 403 before guards. Final green: 35 route tests + existing 5 tests, 40/40 in two files; git diff --check PASS.
+- Runs used unshare -Urn plus sanitized env preserving coder identity; no root dotenv, live DB, or outbound. Private dependencies provisioned with unchanged lockfile via offline npm ci --ignore-scripts from private copy of existing cache (527 packages), no root dependencies/cache modified. Existing Vite config-loader warning is advisory.
+- `ISSUES.md`: implementation status updated, authoritative gate still held for separately approved secret-free isolation, offline font availability and supported runtime attachment. No build, push, code_ready, or deployment claimed.
+
 ## 2026-09-13 - Product map and agent-auth source confirmation
 
 - Consolidated four scouts into `docs/product-map.md`: source-confirmed routes, trust boundaries, UX, integrations, schema/test gaps and explicit unresolved questions at 0070afe.

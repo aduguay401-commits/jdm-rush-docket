@@ -1,3 +1,4 @@
+import { requireAdminOrAgent } from "@/lib/admin/auth";
 import { sendEmail } from '@/lib/email';
 
 import {
@@ -424,6 +425,10 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  if (!(await requireAdminOrAgent())) {
+    return Response.json({ success: false, error: "Unauthorized" }, { status: 403 });
+  }
+
   logStep("handler.start");
   const { id } = await context.params;
   logStep("handler.params_resolved", { docketId: id });

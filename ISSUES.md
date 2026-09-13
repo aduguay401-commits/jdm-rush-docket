@@ -4,7 +4,7 @@
 
 ### 2026-09-13 - Three agent write APIs lack role guards; safe verification held
 
-Independent source confirmation: proceed, send-questions and research/[id] POST handlers write via service role without staff authorization at baseline 0070afe. Follow existing requireAdminOrAgent pattern and add real-helper regression tests in the next commit. Product/context questions are consolidated in `docs/product-map.md`.
+Independent source confirmation: proceed, send-questions and research/[id] POST handlers write via service role without staff authorization at baseline 0070afe. Local feature implementation now adds existing requireAdminOrAgent as the first handler operation and 35 real-helper regression tests (full suite 40/40, genuine red-before-green). Pending authoritative gate, review/QA and human merge approval; not deployed or considered closed. Product/context questions are consolidated in `docs/product-map.md`.
 
 Authoritative gate is held: its default dotenv symlinks load root secrets. Namespace dummy-fixture masking/loopback proof passed, but real-gate isolation is not yet authorized; offline Google Fonts and supported worktree runtime attachment remain verification prerequisites. No production testing or deployment claimed.
 
