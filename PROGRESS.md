@@ -1,5 +1,12 @@
 # Progress
 
+## 2026-09-13 - Product map and agent-auth source confirmation
+
+- Consolidated four scouts into `docs/product-map.md`: source-confirmed routes, trust boundaries, UX, integrations, schema/test gaps and explicit unresolved questions at 0070afe.
+- Corrected research notification recipient (admin), profiles.id lookup, CallMeBot vs Twilio, SMS call-site DEV_MODE suppression, and docket vs shipment lifecycle distinctions.
+- `ISSUES.md` records confirmed three-route security gap and held verification prerequisite. No application behavior changes in this documentation commit.
+- Verification: source inspection only; isolated worktree. Actual build gate/push held pending approved secret-free isolation; no deployed claim.
+
 ## 2026-08-14 - Rush WhatsApp handoff line in quote + intake emails (crate-rig ticket #8)
 
 Summary: added the customer-facing "Questions? Chat with Rush on WhatsApp" line to the quote email and the intake confirmation email (HTML and plain-text variants), sourced from a new lib/rush.ts seam. This is the last unshipped piece of the Rush program (work-order objective 5 / follow-up 2).

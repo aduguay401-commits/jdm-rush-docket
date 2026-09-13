@@ -2,6 +2,12 @@
 
 ## Open
 
+### 2026-09-13 - Three agent write APIs lack role guards; safe verification held
+
+Independent source confirmation: proceed, send-questions and research/[id] POST handlers write via service role without staff authorization at baseline 0070afe. Follow existing requireAdminOrAgent pattern and add real-helper regression tests in the next commit. Product/context questions are consolidated in `docs/product-map.md`.
+
+Authoritative gate is held: its default dotenv symlinks load root secrets. Namespace dummy-fixture masking/loopback proof passed, but real-gate isolation is not yet authorized; offline Google Fonts and supported worktree runtime attachment remain verification prerequisites. No production testing or deployment claimed.
+
 ### 2026-07-04 - Migration 012 must be applied before Nurture Phase 3B runtime QA/go-live
 
 Nurture Engine Phase 3B writes to `nurture_email_sends`, which is created by `supabase/migrations/012_nurture_phase3_matching.sql`. Adam is applying this migration in production Supabase. Runtime QA of /api/cron/nurture-matches and final launch should wait until migration 012 is live.
