@@ -48,6 +48,12 @@ It automates the flow from customer form submission â†’ export agent research â†
 - Agent and Admin pages require Supabase Auth login
 - Logo URL: https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png
 
+## Review Standards
+- Agent write handlers start with `requireAdminOrAgent()` and return 403 JSON before parsing bodies, logging payloads, or using service-role clients. Auth regression tests mock the Supabase auth/profile boundary, not the authorization helper.
+
+## Critical Paths
+- Anonymous POST to `/api/agent/proceed`, `/api/agent/send-questions`, and `/api/agent/research/[id]` returns 403 JSON before business database, email, or SMS operations. Use a fixture UUID; authenticated behavior is tested with mocked dependencies unless live testing is explicitly authorized.
+
 ## Git Rules
 - Always push to main branch
 - Every push must have zero build errors
