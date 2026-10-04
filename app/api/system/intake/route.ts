@@ -28,6 +28,7 @@ import {
   isUnderWelcomeEmailCap,
 } from "@/lib/intake/guardrails";
 import { randomUUID } from "node:crypto";
+import { savedLeadResponse } from '@/lib/intake/saved-lead-response';
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
 import { normalizePhoneToE164 } from '@/lib/sms'
 import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
@@ -265,7 +266,7 @@ export async function POST(request: Request) {
         const note = `[Repeat Find-My-JDM submission ${new Date().toISOString()}] ${vehicleForNote}. (Daily new-docket cap reached; logged here instead of creating another docket.)`
         const appendedId = await appendNoteToNewestDocketForEmail(supabase, normalizedEmail, note)
         console.warn('[Guardrail L3] intake daily docket cap reached — note appended, no new docket')
-        return Response.json({ success: true, docketId: appendedId })
+        return savedLeadResponse(request, appendedId)
       }
     }
 
@@ -616,7 +617,7 @@ Exchange Rate Date: ${exchange.date}`
       return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
     }
 
-    return Response.json({ success: true, docketId: docket.id })
+    return savedLeadResponse(request, docket.id)
   } catch (error) {
     console.error('[Intake] Error:', error)
     return Response.json({ success: false, error: 'Internal server error' }, { status: 500 })

@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-10-04 — Authenticated saved-lead receipt (prepared; not deployed)
+
+- Adam explicitly approved this Docket API addition for accurate Rush website WhatsApp lead tracking. Existing fake-success spam responses cannot prove persistence.
+- lib/intake/saved-lead-response.ts: saved-docket receipt header requires existing matching proxy secret plus forwarded client IP. Public JSON shape unchanged; null saved IDs have no receipt.
+- app/api/system/intake/route.ts: receipt helper used only after normal successful saved intake or successful note append to an existing saved docket. Honeypot/too-fast decoys unchanged and have no receipt. No business/database/email/message behaviour changed.
+- lib/intake/saved-lead-response.test.ts: authenticated, missing/wrong-secret, missing-IP and null-ID coverage; no external activity.
+- Website companion codex/rush-email-conversion fires secondary action 7819760523 only for a valid contact email and matching receipt. Docket must deploy first, website second, under separate approval.
+- Conservative limit: existing handler returns failure if later notification work fails even after a save; no receipt is issued. This work does not change that behaviour.
+- Verification: 55 tests pass including 9 actual intake-handler regressions (real honeypot/timing rules; mocked DB/network/notifications). Type-check and production build pass on Node22.22.2 using placeholder Supabase configuration at example.invalid, no production credentials. Turbopack required a private dependency copy in the isolated worktree. Independent review and website browser QA passed.
+- No push, merge or deployment. Production data and secrets untouched.
+
+
 ## 2026-09-13 - Guard agent write endpoints (local implementation)
 
 - `app/api/agent/proceed/route.ts`, `app/api/agent/send-questions/route.ts`, `app/api/agent/research/[id]/route.ts`: existing requireAdminOrAgent check is first in POST; standard JSON 403 precedes parsing, parameter resolution, logging and service-role work. Business behavior otherwise unchanged.

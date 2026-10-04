@@ -1,5 +1,11 @@
 # Issues
 
+## Pending release — 2026-10-04
+
+- codex/rush-saved-lead-receipt: authenticated response header for website conversion attribution, approved by Adam. Requires final verification and deployment approval. Deploy before website companion codex/rush-email-conversion.
+- Verify matching existing proxy authentication in production and genuine saved-lead attribution. Saved intakes whose notifications fail remain undercounted under the existing handler.
+
+
 ## Open
 
 ### 2026-09-13 - Three agent write APIs lack role guards; safe verification held
