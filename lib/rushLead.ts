@@ -3,8 +3,9 @@
  * (rush-relay `POST /webhook/docket-lead`), which emails the customer as
  * Rush and keeps the conversation going. See rush-relay relay/emailchan.py.
  *
- * Fire-and-forget by contract: a Rush outage must never fail an intake, so
- * every error is logged and swallowed. Signed with HMAC-SHA256 over the raw
+ * Never fails an intake: every error is logged and swallowed, with a 5 s
+ * timeout. Called BEFORE the customer confirmation so the confirmation can
+ * say whether Rush is about to email them (see rushWillEmail). Signed with HMAC-SHA256 over the raw
  * body (header `X-Rush-Signature: sha256=<hex>`); `sent_at` lets the relay
  * refuse replays. Off unless BOTH env vars are set, and always off in
  * DEV_MODE (dev intakes would email real addresses from Rush).
@@ -38,14 +39,29 @@ export function buildRushLeadBody(lead: RushLead, now: number = Date.now()): str
   return JSON.stringify({ sent_at: Math.floor(now / 1000), lead })
 }
 
+/**
+ * `status` is the relay's verdict when it answered: "accepted" means Rush
+ * will email this customer; anything else ("outside market", "repeat",
+ * "ignored: address opted out", "duplicate", …) means he won't. Callers use
+ * `rushWillEmail` to decide what the confirmation email promises.
+ */
+export type RushPostResult = {
+  result: 'sent' | 'skipped' | 'failed'
+  status?: string
+}
+
+export function rushWillEmail(r: RushPostResult): boolean {
+  return r.result === 'sent' && r.status === 'accepted'
+}
+
 export async function postLeadToRush(
   lead: RushLead,
   opts: { fetchImpl?: typeof fetch; env?: NodeJS.ProcessEnv } = {},
-): Promise<'sent' | 'skipped' | 'failed'> {
+): Promise<RushPostResult> {
   const env = opts.env ?? process.env
   const url = env.RUSH_LEAD_URL
   const secret = env.RUSH_LEAD_SECRET
-  if (!url || !secret || env.DEV_MODE === 'true' || !lead.email) return 'skipped'
+  if (!url || !secret || env.DEV_MODE === 'true' || !lead.email) return { result: 'skipped' }
   const body = buildRushLeadBody(lead)
   try {
     const res = await (opts.fetchImpl ?? fetch)(url, {
@@ -59,11 +75,12 @@ export async function postLeadToRush(
     })
     if (!res.ok) {
       console.warn('[Rush lead] relay answered', res.status, { docketId: lead.docket_id })
-      return 'failed'
+      return { result: 'failed' }
     }
-    return 'sent'
+    const json = (await res.json().catch(() => ({}))) as { status?: unknown }
+    return { result: 'sent', status: typeof json.status === 'string' ? json.status : undefined }
   } catch (error) {
     console.warn('[Rush lead] post failed', { docketId: lead.docket_id, error: String(error) })
-    return 'failed'
+    return { result: 'failed' }
   }
 }

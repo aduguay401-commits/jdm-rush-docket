@@ -30,3 +30,20 @@ export function renderRushWhatsAppLineHtml(): string {
 export function renderRushWhatsAppLineText(): string {
   return `Questions? Chat with Rush on WhatsApp: ${RUSH_WHATSAPP_URL}`;
 }
+
+/**
+ * Adam's PERSONAL WhatsApp — given to website leads (Adam's call,
+ * 2026-10-14) in the confirmation email when Rush is emailing them. The
+ * rush-relay footer carries the same number (EMAIL_OWNER_WHATSAPP).
+ */
+export const ADAM_WHATSAPP_NUMBER = '12042304683';
+export const ADAM_WHATSAPP_DISPLAY = '+1 204-230-4683';
+export const ADAM_WHATSAPP_URL = `https://wa.me/${ADAM_WHATSAPP_NUMBER}`;
+
+export function renderAdamWhatsAppLineHtml(): string {
+  return `Prefer to talk to me directly? WhatsApp me: <a href="${ADAM_WHATSAPP_URL}" style="color: #E55125; font-weight: 700; text-decoration: none;">${ADAM_WHATSAPP_DISPLAY}</a>`;
+}
+
+export function renderAdamWhatsAppLineText(): string {
+  return `Prefer to talk to me directly? WhatsApp me: ${ADAM_WHATSAPP_DISPLAY} — ${ADAM_WHATSAPP_URL}`;
+}

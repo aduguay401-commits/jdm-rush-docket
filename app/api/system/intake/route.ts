@@ -5,6 +5,8 @@
 
 import { sendEmail } from '@/lib/email'
 import {
+  renderAdamWhatsAppLineHtml,
+  renderAdamWhatsAppLineText,
   renderRushWhatsAppLineHtml,
   renderRushWhatsAppLineText,
 } from '@/lib/rush'
@@ -30,7 +32,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { savedLeadResponse } from '@/lib/intake/saved-lead-response';
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
-import { postLeadToRush } from '@/lib/rushLead'
+import { postLeadToRush, rushWillEmail } from '@/lib/rushLead'
 import { normalizePhoneToE164 } from '@/lib/sms'
 import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
 
@@ -389,6 +391,33 @@ export async function POST(request: Request) {
       })
     }
 
+    // Hand website leads to Rush (rush-relay emailchan) BEFORE the
+    // confirmation, so the confirmation can say Rush is already on it. Rush
+    // waits ~60 s and then replies inside this confirmation's thread. Only an
+    // "accepted" verdict changes the copy: outside-market, opted-out, repeat
+    // or a relay outage keep the classic confirmation. Never fails the intake.
+    const rushPost = isRushWhatsApp
+      ? ({ result: 'skipped' } as const)
+      : await postLeadToRush({
+          docket_id: docket.id,
+          email: customerEmail,
+          first_name: customerFirstName,
+          last_name: customerLastName,
+          phone: customerPhone,
+          vehicle_year: vehicleYear,
+          vehicle_make: vehicleMake,
+          vehicle_model: vehicleModel,
+          vehicle_description: vehicleDescription,
+          budget: budgetBracket,
+          destination_city: destinationCity,
+          destination_province: destinationProvince,
+          timeline,
+          additional_notes: additionalNotes,
+          additional_info: additionalInfo,
+          lead_source: 'find_my_jdm',
+        })
+    const rushEmailing = rushWillEmail(rushPost)
+
     // ── Layer 4: welcome-email cap — skip the customer welcome (not the docket) beyond cap ──
     const underWelcomeCap = await isUnderWelcomeEmailCap(supabase, normalizedEmail)
     // Email 1: Customer Welcome
@@ -399,14 +428,25 @@ export async function POST(request: Request) {
         devMode && customerOriginalEmail
           ? `<div style='margin: 0 0 20px; background: #2a130a; border: 1px solid #E55125; border-radius: 8px; padding: 12px; color: #f8d1c5; font-size: 13px;'>[DEV MODE] This email would normally go to: ${escapeHtml(customerOriginalEmail)}</div>`
           : ''
-      const answerLinkHtml = customerHomeBaseUrl
+      // When Rush is emailing them, this email is the short hand-off: Rush's
+      // reply lands in this same thread within minutes, so it must not
+      // promise a report "within a few days" or a separate questions page.
+      const introCopy = rushEmailing
+        ? 'Got it — thanks for trusting JDM Rush with your search.'
+        : 'Thanks for trusting me and the JDM Rush team with your search. I have your request and I am reviewing it with our team in Japan now.'
+      const nextCopy = rushEmailing
+        ? 'Rush, our AI car finder, is already searching Japan for you and will reply right here shortly — usually within minutes — with live matches and landed prices. Just reply to his email to keep the hunt going.'
+        : 'I will start researching options for you. If I need more details, I will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.'
+      const whatsAppLineHtml = rushEmailing ? renderAdamWhatsAppLineHtml() : renderRushWhatsAppLineHtml()
+      const whatsAppLineText = rushEmailing ? renderAdamWhatsAppLineText() : renderRushWhatsAppLineText()
+      const answerLinkHtml = customerHomeBaseUrl && !rushEmailing
         ? `<p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 20px 0;'>
     If I need more detail, I will send a few quick questions here:
     <a href='${escapeHtml(customerHomeBaseUrl)}' target='_blank' style='color: #E55125; font-weight: 700; text-decoration: none;'>Answer these</a>.
   </p>
   <p style='color: #888888; font-size: 13px; line-height: 1.6; margin: 0 0 28px 0;'>No login required for that reply page.</p>`
         : ''
-      const answerLinkText = customerHomeBaseUrl
+      const answerLinkText = customerHomeBaseUrl && !rushEmailing
         ? `If I need more detail, I will send a few quick questions here.
 
 Answer these: ${customerHomeBaseUrl}
@@ -420,7 +460,7 @@ Answer these: ${customerHomeBaseUrl}
   <img src='https://scfezjqjbzqbtfsveedl.supabase.co/storage/v1/object/public/docket-files/Assets/JDMRUSH_Imports_RGB_Colour-white_png.png' alt='JDM Rush Imports' style='height: 50px; margin-bottom: 32px; display: block;' />
   <h1 style='font-size: 24px; font-weight: 700; line-height: 1.3; margin: 0 0 16px 0;'>I got your JDM request, ${escapeHtml(customerFirstNameForEmail)}</h1>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 24px 0;'>
-    Thanks for trusting me and the JDM Rush team with your search. I have your request and I am reviewing it with our team in Japan now.
+    ${escapeHtml(introCopy)}
   </p>
   <div style='background: #1a1a1a; border-radius: 10px; padding: 20px; margin: 24px 0;'>
     <p style='font-size: 13px; color: #E55125; font-weight: 700; letter-spacing: 0.08em; margin: 0 0 12px 0;'>YOUR REQUEST SUMMARY</p>
@@ -433,7 +473,7 @@ Answer these: ${customerHomeBaseUrl}
   <hr style='border: 0; border-top: 1px solid #2a2a2a; margin: 30px 0;' />
   <p style='font-size: 18px; color: #ffffff; font-weight: 700; margin: 0 0 10px 0;'>What happens next</p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7;'>
-    I will start researching options for you. If I need more details, I will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
+    ${escapeHtml(nextCopy)}
   </p>
   <p style='font-size: 14px; line-height: 1.7; margin: 18px 0 28px 0;'>
     <a href='https://www.jdmrushimports.ca/import-calculator' style='color: #E55125; text-decoration: none;'>Try the Import Calculator while you wait →</a>
@@ -442,7 +482,7 @@ Answer these: ${customerHomeBaseUrl}
     Questions? Just reply to this email.
   </p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 16px 0;'>
-    ${renderRushWhatsAppLineHtml()}
+    ${whatsAppLineHtml}
   </p>
   <p style='color: #cccccc; font-size: 15px; line-height: 1.7; margin: 0 0 28px 0;'>
     — Adam
@@ -454,7 +494,7 @@ Answer these: ${customerHomeBaseUrl}
 </div>`
       const textBody = `${customerDevPrefix}I got your JDM request, ${customerFirstNameForEmail}
 
-Thanks for trusting me and the JDM Rush team with your search. I have your request and I am reviewing it with our team in Japan now.
+${introCopy}
 
 Your request:
 - Vehicle: ${vehicleForSummary}
@@ -464,13 +504,13 @@ Your request:
 ${answerLinkText}
 
 What happens next:
-I will start researching options for you. If I need more details, I will reach out with quick questions. Otherwise, expect your custom JDM report within a few days.
+${nextCopy}
 
 Try the Import Calculator while you wait: https://www.jdmrushimports.ca/import-calculator
 
 Questions? Just reply to this email.
 
-${renderRushWhatsAppLineText()}
+${whatsAppLineText}
 
 — Adam
 
@@ -628,30 +668,6 @@ Please review and begin follow-up.`
         error,
       })
       return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
-    }
-
-    // Hand website leads to Rush, who emails them (rush-relay emailchan).
-    // Last on purpose: the confirmation email above must exist first so Rush
-    // can answer in its thread. Never fails the intake.
-    if (!isRushWhatsApp) {
-      await postLeadToRush({
-        docket_id: docket.id,
-        email: customerEmail,
-        first_name: customerFirstName,
-        last_name: customerLastName,
-        phone: customerPhone,
-        vehicle_year: vehicleYear,
-        vehicle_make: vehicleMake,
-        vehicle_model: vehicleModel,
-        vehicle_description: vehicleDescription,
-        budget: budgetBracket,
-        destination_city: destinationCity,
-        destination_province: destinationProvince,
-        timeline,
-        additional_notes: additionalNotes,
-        additional_info: additionalInfo,
-        lead_source: 'find_my_jdm',
-      })
     }
 
     return savedLeadResponse(request, docket.id)
