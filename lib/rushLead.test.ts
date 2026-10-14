@@ -9,7 +9,7 @@ const lead: RushLead = {
   vehicle_make: 'Subaru',
   lead_source: 'find_my_jdm',
 }
-const env = { RUSH_LEAD_URL: 'https://rush.example/webhook/docket-lead', RUSH_LEAD_SECRET: 's3cret' } as NodeJS.ProcessEnv
+const env = { RUSH_LEAD_URL: 'https://rush.example/webhook/docket-lead', RUSH_LEAD_SECRET: 's3cret' } as unknown as NodeJS.ProcessEnv
 
 describe('postLeadToRush', () => {
   it('signs the exact body it sends', async () => {
@@ -26,8 +26,8 @@ describe('postLeadToRush', () => {
 
   it('is off without config, in DEV_MODE, or without an email', async () => {
     const fetchImpl = vi.fn()
-    expect(await postLeadToRush(lead, { fetchImpl, env: {} as NodeJS.ProcessEnv })).toBe('skipped')
-    expect(await postLeadToRush(lead, { fetchImpl, env: { ...env, DEV_MODE: 'true' } })).toBe('skipped')
+    expect(await postLeadToRush(lead, { fetchImpl, env: {} as unknown as NodeJS.ProcessEnv })).toBe('skipped')
+    expect(await postLeadToRush(lead, { fetchImpl, env: { ...env, DEV_MODE: 'true' } as unknown as NodeJS.ProcessEnv })).toBe('skipped')
     expect(await postLeadToRush({ ...lead, email: null }, { fetchImpl, env })).toBe('skipped')
     expect(fetchImpl).not.toHaveBeenCalled()
   })
