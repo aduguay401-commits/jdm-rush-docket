@@ -30,6 +30,7 @@ import {
 import { randomUUID } from "node:crypto";
 import { savedLeadResponse } from '@/lib/intake/saved-lead-response';
 import { sendWhatsAppNotification } from '@/lib/whatsapp'
+import { postLeadToRush } from '@/lib/rushLead'
 import { normalizePhoneToE164 } from '@/lib/sms'
 import { getAppBaseUrl, getCustomerHomeBaseUrl } from '@/lib/urls'
 
@@ -573,14 +574,26 @@ Please review and begin follow-up.`
     // Email 3: Admin Notification
     try {
       const subject = `New Docket — ${fullName || 'Unknown Customer'} / ${vehicleForSummary}`
-      const bodySnapshot = `A new intake has been received and added to Supabase.
-
-Docket ID: ${docket.id}
-Customer: ${fullName}
-Email: ${payload.customer_email}
-Vehicle: ${vehicleForSummary}
-Exchange Rate (JPY/CAD): ${exchange.rate}
-Exchange Rate Date: ${exchange.date}`
+      const infoLines = Object.entries(additionalInfo ?? {})
+        .map(([k, v]) => `${k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase())}: ${v}`)
+      const bodySnapshot = [
+        `New ${isRushWhatsApp ? 'Rush WhatsApp' : 'website'} lead${isRushWhatsApp ? '' : ' — Rush is emailing them; watch your WhatsApp feed (✉️ lines)'}.`,
+        '',
+        `Customer: ${fullName || 'N/A'}`,
+        `Email: ${payload.customer_email}`,
+        `Phone: ${customerPhone ?? 'not given'}`,
+        `Vehicle: ${vehicleForSummary}`,
+        ...(vehicleDescription ? [`Description: ${vehicleDescription}`] : []),
+        `Budget: ${budgetBracket ?? 'not given'}`,
+        `Delivery: ${[destinationCity, destinationProvince].filter(Boolean).join(', ') || 'not given'}`,
+        `Timeline: ${timeline ?? 'not given'}`,
+        ...(additionalNotes ? ['', `Notes: ${additionalNotes}`] : []),
+        ...(infoLines.length ? ['', ...infoLines] : []),
+        '',
+        `Docket: ${getAppBaseUrl()}/agent/docket/${docket.id}`,
+        `Docket ID: ${docket.id}`,
+        `Exchange Rate (JPY/CAD): ${exchange.rate} (${exchange.date})`,
+      ].join('\n')
       const sendResult = await sendEmail({
         from: fromEmail,
         to: adminEmail ?? 'adam@jdmrushimports.ca',
@@ -615,6 +628,30 @@ Exchange Rate Date: ${exchange.date}`
         error,
       })
       return Response.json({ success: false, error: 'Failed to send email' }, { status: 500 })
+    }
+
+    // Hand website leads to Rush, who emails them (rush-relay emailchan).
+    // Last on purpose: the confirmation email above must exist first so Rush
+    // can answer in its thread. Never fails the intake.
+    if (!isRushWhatsApp) {
+      await postLeadToRush({
+        docket_id: docket.id,
+        email: customerEmail,
+        first_name: customerFirstName,
+        last_name: customerLastName,
+        phone: customerPhone,
+        vehicle_year: vehicleYear,
+        vehicle_make: vehicleMake,
+        vehicle_model: vehicleModel,
+        vehicle_description: vehicleDescription,
+        budget: budgetBracket,
+        destination_city: destinationCity,
+        destination_province: destinationProvince,
+        timeline,
+        additional_notes: additionalNotes,
+        additional_info: additionalInfo,
+        lead_source: 'find_my_jdm',
+      })
     }
 
     return savedLeadResponse(request, docket.id)

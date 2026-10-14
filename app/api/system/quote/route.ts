@@ -14,6 +14,7 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sendEmail } from "@/lib/email";
+import { postLeadToRush } from "@/lib/rushLead";
 import {
   renderRushWhatsAppLineHtml,
   renderRushWhatsAppLineText,
@@ -562,6 +563,24 @@ support@jdmrushimports.ca`;
         console.error("[Quote] email_log insert failed");
       }
     }
+
+    // Hand the lead to Rush, who emails them (rush-relay emailchan). After
+    // the quote email on purpose, so Rush can reply in its thread. Never
+    // fails the request.
+    await postLeadToRush({
+      docket_id: docket.id,
+      email: customerOriginalEmail,
+      first_name: crmFirstName,
+      last_name: crmLastName,
+      vehicle_year: docketInsert.vehicle_year,
+      vehicle_make: make,
+      vehicle_model: model,
+      vehicle_description: ref ? `Listing ref ${ref}` : null,
+      destination_city: rawDestination,
+      destination_province: breakdown.province,
+      additional_notes: docketInsert.additional_notes,
+      lead_source: "exact_quote",
+    });
 
     return NextResponse.json({
       ok: true,
