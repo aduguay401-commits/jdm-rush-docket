@@ -1,4 +1,5 @@
 import { sendEmail } from '@/lib/email';
+import { DEPOSIT_NON_REFUNDABLE_CAD } from '@/lib/importCalculator';
 
 type CreateDepositInvoiceInput = {
   docketId: string;
@@ -7,7 +8,13 @@ type CreateDepositInvoiceInput = {
   vehicleDescription: string;
   chosenPath: "private_dealer" | "auction";
   chosenDealerIndex?: number | null;
+  /** The service fee for the chosen car (= the deposit), or null when no price is on file. */
+  depositCad?: number | null;
+  /** The CAD purchase price the tier was picked from. */
+  vehiclePriceCad?: number | null;
 };
+
+const cad = (n: number) => `$${n.toLocaleString("en-CA", { maximumFractionDigits: 2 })} CAD`;
 
 export async function createDepositInvoice(input: CreateDepositInvoiceInput) {
   console.log("[invoice-stub] createDepositInvoice called", {
@@ -17,7 +24,7 @@ export async function createDepositInvoice(input: CreateDepositInvoiceInput) {
     vehicleDescription: input.vehicleDescription,
     chosenPath: input.chosenPath,
     chosenDealerIndex: input.chosenDealerIndex ?? null,
-    depositTotalCad: 1500,
+    depositTotalCad: input.depositCad ?? null,
   });
   const fromEmail = process.env.FROM_EMAIL;
   const adminEmail = process.env.ADMIN_EMAIL ?? "adam@jdmrushimports.ca";
@@ -41,6 +48,10 @@ Customer Email: ${input.customerEmail ?? "Unknown"}
 Vehicle: ${input.vehicleDescription}
 Chosen Path: ${input.chosenPath}
 Chosen Dealer Index: ${input.chosenDealerIndex ?? "N/A"}
-Deposit Total: $1,500 CAD`,
+Deposit Total: ${
+      input.depositCad != null
+        ? `${cad(input.depositCad)} + tax (service fee tier for a ${cad(input.vehiclePriceCad ?? 0)} purchase price; ${cad(DEPOSIT_NON_REFUNDABLE_CAD)} non-refundable)`
+        : "no purchase price on file. Pick the tier by hand: up to $10,000 = $1,000, $10,001-$20,000 = $1,500, $20,001-$30,000 = $2,000, over $30,000 = $3,500 (+ tax)"
+    }`,
   });
 }
