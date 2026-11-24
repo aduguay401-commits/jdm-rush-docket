@@ -1,6 +1,7 @@
 import { sendEmail } from '@/lib/email';
 
 import { createDepositInvoice } from "@/lib/invoiceStub";
+import { depositForApproval } from "@/lib/depositForApproval";
 import { createServerClient } from "@/lib/supabase/server";
 
 type ApprovePayload = {
@@ -228,7 +229,9 @@ export async function POST(
         docket.vehicle_model as string | null
       ) || "vehicle";
 
+    const deposit = await depositForApproval(supabase, String(docket.id ?? ""), payload.path, payload.dealer_index);
     await createDepositInvoice({
+      ...deposit,
       docketId: String(docket.id ?? ""),
       customerName,
       customerEmail,
