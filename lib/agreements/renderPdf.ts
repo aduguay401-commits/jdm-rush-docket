@@ -95,6 +95,20 @@ export function sanitizePdfText(value: string) {
     .replace(/\*\*/g, "");
 }
 
+type Word = { text: string; bold: boolean };
+
+/** Splits a line on **bold** markers into words that remember their weight. */
+function toWords(raw: string, allBold: boolean): Word[] {
+  const words: Word[] = [];
+  raw.split("**").forEach((segment, i) => {
+    const bold = allBold || i % 2 === 1;
+    for (const text of sanitizePdfText(segment).split(/\s+/).filter(Boolean)) {
+      words.push({ text, bold });
+    }
+  });
+  return words;
+}
+
 function wrapText(text: string, font: PDFFont, size: number, maxWidth: number) {
   const words = text.split(/\s+/).filter(Boolean);
   const lines: string[] = [];
@@ -132,6 +146,67 @@ function drawTextBlock(ctx: PdfContext, raw: string, style: TextStyle) {
   }
 }
 
+type RichStyle = {
+  size: number;
+  lineHeight: number;
+  indent?: number;
+  allBold?: boolean;
+  /** Drawn in the indent on the first line only, e.g. a list bullet. */
+  marker?: string;
+};
+
+function layoutRich(ctx: PdfContext, raw: string, style: RichStyle): Word[][] {
+  const maxWidth = CONTENT_WIDTH - (style.indent ?? 0);
+  const fontOf = (w: Word) => (w.bold ? ctx.boldFont : ctx.font);
+  const space = ctx.font.widthOfTextAtSize(" ", style.size);
+
+  const lines: Word[][] = [];
+  let current: Word[] = [];
+  let width = 0;
+  for (const word of toWords(raw, style.allBold ?? false)) {
+    const w = fontOf(word).widthOfTextAtSize(word.text, style.size);
+    const needed = current.length ? width + space + w : w;
+    if (current.length && needed > maxWidth) {
+      lines.push(current);
+      current = [word];
+      width = w;
+    } else {
+      current.push(word);
+      width = needed;
+    }
+  }
+  if (current.length) lines.push(current);
+  if (!lines.length) lines.push([]);
+  return lines;
+}
+
+/** Body text with inline **bold**, wrapped word by word with a hanging indent. */
+function drawRichBlock(ctx: PdfContext, raw: string, style: RichStyle) {
+  const indent = style.indent ?? 0;
+  const fontOf = (w: Word) => (w.bold ? ctx.boldFont : ctx.font);
+  const space = ctx.font.widthOfTextAtSize(" ", style.size);
+  const lines = layoutRich(ctx, raw, style);
+
+  lines.forEach((line, i) => {
+    ensureSpace(ctx, style.lineHeight);
+    if (i === 0 && style.marker) {
+      ctx.page.drawText(style.marker, {
+        x: MARGIN_X + indent - 10,
+        y: ctx.y,
+        size: style.size,
+        font: ctx.font,
+        color: TEXT,
+      });
+    }
+    let x = MARGIN_X + indent;
+    for (const word of line) {
+      ctx.page.drawText(word.text, { x, y: ctx.y, size: style.size, font: fontOf(word), color: TEXT });
+      x += fontOf(word).widthOfTextAtSize(word.text, style.size) + space;
+    }
+    ctx.y -= style.lineHeight;
+  });
+}
+
 function drawRule(ctx: PdfContext) {
   ensureSpace(ctx, 18);
   ctx.page.drawLine({
@@ -141,6 +216,20 @@ function drawRule(ctx: PdfContext) {
     color: rgb(0.82, 0.82, 0.82),
   });
   ctx.y -= 18;
+}
+
+const BODY: RichStyle = { size: 9.5, lineHeight: 13.5 };
+const BULLET: RichStyle = { size: 9.5, lineHeight: 13.5, indent: 24, marker: "\u2022" };
+const isListLine = (line: string) => line.startsWith("- ");
+
+/** Height of a short list (and the sentence introducing it), so it is never split over a page. */
+function keepTogetherHeight(ctx: PdfContext, lines: string[], start: number) {
+  let end = start;
+  while (end < lines.length && isListLine(lines[end])) end += 1;
+  if (end - start > 6) return 0;
+  return lines
+    .slice(start, end)
+    .reduce((h, l) => h + layoutRich(ctx, l.slice(2), BULLET).length * BULLET.lineHeight! + 2, 0);
 }
 
 export async function renderAgreementPdf(markdown: string): Promise<Uint8Array> {
@@ -157,8 +246,9 @@ export async function renderAgreementPdf(markdown: string): Promise<Uint8Array> 
   };
   addPage(ctx);
 
-  for (const sourceLine of markdown.split(/\r?\n/)) {
-    const line = sourceLine.trim();
+  const lines = markdown.split(/\r?\n/).map((l) => l.trim());
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
 
     if (!line) {
       ctx.y -= 8;
@@ -172,6 +262,7 @@ export async function renderAgreementPdf(markdown: string): Promise<Uint8Array> 
 
     if (line.startsWith("### ")) {
       ctx.y -= 4;
+      ensureSpace(ctx, 15 + 2 + BODY.lineHeight * 3); // never leave a heading alone at the foot of a page
       drawTextBlock(ctx, line.slice(4), { font: boldFont, size: 11.5, color: ORANGE, lineHeight: 15 });
       ctx.y -= 2;
       continue;
@@ -190,16 +281,23 @@ export async function renderAgreementPdf(markdown: string): Promise<Uint8Array> 
       continue;
     }
 
-    if (line.startsWith("- ")) {
-      drawTextBlock(ctx, `• ${line.slice(2)}`, { font, size: 9.5, color: TEXT, lineHeight: 13.5, indent: 14 });
+    if (isListLine(line)) {
+      if (i === 0 || !isListLine(lines[i - 1])) ensureSpace(ctx, keepTogetherHeight(ctx, lines, i));
+      drawRichBlock(ctx, line.slice(2), BULLET);
+      ctx.y -= 2;
       continue;
     }
 
-    const isBoldLine = line.startsWith("**") && line.endsWith("**");
-    drawTextBlock(ctx, line, {
-      font: isBoldLine ? boldFont : font,
+    const isBoldLine = /^\*\*[^*]+\*\*$/.test(line);
+    // A sentence ending in ":" that introduces a list stays on the list's page.
+    const next = lines[i + 1] === "" ? i + 2 : i + 1;
+    if (line.endsWith(":") && isListLine(lines[next] ?? "")) {
+      const listHeight = keepTogetherHeight(ctx, lines, next);
+      if (listHeight) ensureSpace(ctx, layoutRich(ctx, line, BODY).length * BODY.lineHeight! + 8 + listHeight);
+    }
+    drawRichBlock(ctx, line, {
+      allBold: isBoldLine,
       size: isBoldLine ? 10.5 : 9.5,
-      color: TEXT,
       lineHeight: isBoldLine ? 14.5 : 13.5,
     });
   }
