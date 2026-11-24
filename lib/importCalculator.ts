@@ -257,7 +257,15 @@ function round2(value: number): number {
   return Number(value.toFixed(2));
 }
 
-function getJdmRushFee(vehicleValueCAD: number): number {
+/**
+ * The JDM Rush service fee, tiered by the vehicle's purchase price (the yen
+ * price converted to CAD). The customer pays it up front as the deposit; the
+ * final invoice lists it and credits the deposit. $500 of the deposit is
+ * non-refundable.
+ */
+export const DEPOSIT_NON_REFUNDABLE_CAD = 500;
+
+export function getJdmRushFee(vehicleValueCAD: number): number {
   if (vehicleValueCAD <= 10000) return 1000;
   if (vehicleValueCAD <= 20000) return 1500;
   if (vehicleValueCAD <= 30000) return 2000;
@@ -384,4 +392,30 @@ export function calculateCardEstimate(input: CardEstimateInput): number {
   });
 
   return round2(breakdown.totalDeliveredCAD - breakdown.transportCostCAD);
+}
+
+// ── Public calculator: every line the total is made of ──────────────────
+
+export type BreakdownLine = { key: string; label: string; amountCAD: number };
+
+/**
+ * The lines of a breakdown, in the order the customer report shows them, with
+ * the customer-facing labels. They always add up to totalDeliveredCAD (within
+ * rounding), so the public calculator never hides a cost.
+ */
+export function breakdownLines(b: FeeBreakdown, networkFeeLabel = "JPY Auction Fee"): BreakdownLine[] {
+  return [
+    { key: "vehicle", label: "Vehicle Price", amountCAD: b.vehicleValueCAD },
+    { key: "exportAgentFee", label: "Export Agent Fee", amountCAD: b.exportAgentFeeCAD },
+    { key: "shippingInsurance", label: "Shipping & Marine Insurance", amountCAD: b.shippingInsuranceCAD },
+    { key: "duty", label: "Import Duty", amountCAD: b.dutyCAD },
+    { key: "exciseTax", label: "Excise Tax", amountCAD: b.exciseTaxCAD },
+    { key: "gst", label: "GST (5%)", amountCAD: b.gstCAD },
+    { key: "terminalFee", label: "WWS Terminal Fee", amountCAD: b.wwsTerminalFeeCAD },
+    { key: "brokerageFee", label: "Brokerage Fee", amountCAD: b.brokerageFeeCAD },
+    { key: "networkFee", label: networkFeeLabel, amountCAD: b.networkFeeCAD },
+    { key: "financeAdminFee", label: "Finance & Admin Fee", amountCAD: b.financeAdminFeeCAD },
+    { key: "jdmRushFee", label: "JDM Rush Import Fee", amountCAD: b.jdmRushFeeCAD },
+    { key: "delivery", label: `Delivery to ${b.destinationLabel}`, amountCAD: b.transportCostCAD },
+  ];
 }

@@ -1,4 +1,9 @@
-import { calculateImportCost, type DestinationCity } from "@/lib/importCalculator";
+import {
+  breakdownLines,
+  calculateImportCost,
+  DEPOSIT_NON_REFUNDABLE_CAD,
+  type DestinationCity,
+} from "@/lib/importCalculator";
 import { fetchJPYtoCAD } from "@/lib/exchangeRate";
 
 // Map province codes to a default destination city for the calculator
@@ -59,5 +64,12 @@ export async function POST(request: Request) {
     gst: breakdown.gstCAD,
     totalCAD: breakdown.totalDeliveredCAD,
     province: breakdown.province,
+    // Every line of the total, labelled as on the customer report.
+    lines: breakdownLines(breakdown),
+    // The service fee is paid up front as the deposit and credited on the final invoice.
+    serviceFeeCAD: breakdown.jdmRushFeeCAD,
+    depositCAD: breakdown.jdmRushFeeCAD,
+    depositNonRefundableCAD: DEPOSIT_NON_REFUNDABLE_CAD,
+    destinationLabel: breakdown.destinationLabel,
   });
 }
